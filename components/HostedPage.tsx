@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES, DOC_ICON, Ic, LANGS, RADIUS, T, flag, fold, isMail, onColor, termsLabel } from "./HostedPreview";
 import type { Cfg, DocKey, Lang, Shape, Theme } from "./HostedPreview";
 import Scanner from "./Scanner";
+import qrcode from "qrcode-generator";
 
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
 const DEFAULTS: Cfg = {
@@ -31,6 +32,21 @@ function readConfig(search: string): Cfg {
   };
 }
 
+/* ───────────── desktop detection + QR ───────────── */
+const isDesktop = () => {
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile|Silk|Opera Mini/i.test(navigator.userAgent);
+  const touchTablet = navigator.maxTouchPoints > 1 && window.matchMedia("(pointer: coarse)").matches; // iPadOS reports a desktop UA
+  return !(mobileUA || touchTablet);
+};
+function Qr({ value }: { value: string }) {
+  const svg = useMemo(() => {
+    try { const q = qrcode(0, "M"); q.addData(value); q.make(); return q.createSvgTag({ cellSize: 6, margin: 0, scalable: true }); } catch { return ""; }
+  }, [value]);
+  if (!svg) return null;
+  // the SVG is generated locally from the URL (only <rect>/<path> modules), never from user HTML
+  return <div role="img" aria-label="QR code" className="aspect-square w-full" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
 /* ───────────── local image quality check (runs only in the browser) ───────────── */
 type Quality = { dark: boolean; bright: boolean; blur: boolean };
 async function analyze(blob: Blob): Promise<Quality> {
@@ -56,7 +72,7 @@ const QUALITY_BLUR = 30;
 const issues = (q: Quality, t: typeof T.en) => [q.dark && t.qDark, q.bright && t.qBright, q.blur && t.qBlur].filter(Boolean) as string[];
 
 type Shot = { url: string; q: Quality };
-type PStep = "welcome" | "country" | "document" | "front" | "back" | "selfie" | "review" | "done";
+type PStep = "qr" | "welcome" | "country" | "document" | "front" | "back" | "selfie" | "review" | "done";
 
 export default function HostedPage() {
   const [c, setC] = useState<Cfg>(DEFAULTS);
@@ -73,7 +89,15 @@ export default function HostedPage() {
   const [langOpen, setLangOpen] = useState(false);
   const urls = useRef<Set<string>>(new Set());
 
-  useEffect(() => { setC(readConfig(window.location.search)); setReady(true); }, []);
+  const [link, setLink] = useState("");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    setC(readConfig(window.location.search));
+    const u = new URL(window.location.href); const stay = u.searchParams.get("desktop") === "1"; u.searchParams.delete("desktop"); u.hash = "";
+    setLink(u.toString());
+    if (isDesktop() && !stay) setStep("qr");
+    setReady(true);
+  }, []);
   useEffect(() => () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); }, []);
   useEffect(() => { document.documentElement.lang = c.lang; }, [c.lang]);
 
@@ -152,7 +176,7 @@ export default function HostedPage() {
       {cam ? (
         <div className="mt-4 flex min-h-[380px] flex-1 flex-col">
           <Scanner mode={isSelfie ? "selfie" : "doc"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r}
-            tx={{ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel }} />
+            tx={{ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, found: t.scanFound }} />
         </div>
       ) : s ? (
         <div className="mt-4 flex flex-1 flex-col gap-3">
@@ -197,12 +221,26 @@ export default function HostedPage() {
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[440px] flex-col px-5 pb-5 pt-3 sm:min-h-[760px] sm:rounded-[2rem] sm:shadow-[0_24px_70px_rgba(10,22,71,.18)]" style={{ background: bg }}>
         <div role="status" className="mx-auto mb-2 rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: "#FEF3E2", color: "#B54708" }}>{t.demoBanner}</div>
 
-        {step !== "welcome" && step !== "done" && (
+        {step !== "qr" && step !== "welcome" && step !== "done" && (
           <div className="flex items-center gap-3">
             <button type="button" onClick={prev} aria-label="Back" className="grid h-9 w-9 shrink-0 place-items-center rounded-full" style={{ background: soft }}><Ic d="M15 6l-6 6 6 6" /></button>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: line }}><div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress * 100}%`, background: c.color }} /></div>
           </div>
         )}
+
+        {step === "qr" && (<>
+          <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
+            <Logo />
+            <h1 className="mt-4 font-display text-[28px] font-extrabold leading-[1.1] tracking-tight">{t.qrTitle}</h1>
+            <p className="mt-3 max-w-xs text-[15px] leading-snug" style={{ color: mut }}>{t.qrSub}</p>
+            <div className="mt-6 w-[236px] rounded-3xl bg-white p-4 shadow-[0_10px_40px_rgba(10,22,71,.16)]" style={{ border: `1px solid ${line}` }}><Qr value={link} /></div>
+            <p className="mt-4 max-w-[17rem] truncate text-xs" style={{ color: mut }} title={link}>{link.replace(/^https?:\/\//, "")}</p>
+            <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setCopied(false); } }}
+              className="mt-2 rounded-full px-4 py-2 text-sm font-semibold" style={{ color: c.color, background: tint }}>{copied ? `✓ ${t.qrCopied}` : t.qrCopy}</button>
+            <p className="mt-5 max-w-xs text-xs leading-snug" style={{ color: mut }}>{t.qrWhy}</p>
+          </div>
+          <Btn ghost onClick={() => setStep("welcome")}>{t.qrHere}</Btn><Secured />
+        </>)}
 
         {step === "welcome" && (<>
           <div className="relative mt-1 flex justify-end">

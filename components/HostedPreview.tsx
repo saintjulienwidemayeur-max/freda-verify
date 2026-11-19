@@ -26,6 +26,8 @@ type Dict = {
   takeCam: string; upload: string; retake: string; useAnyway: string; capture: string; cancel: string; camDenied: string;
   qGood: string; qDark: string; qBright: string; qBlur: string; reviewT: string; reviewS: string; submit: string;
   scanPlace: string; scanFace: string; scanHold: string; scanDark: string; scanGlare: string; scanBlur: string; scanAuto: string; scanDone: string; capNow: string;
+  scanLoading: string; scanCloser: string; scanFar: string; scanCenter: string; scanFound: string;
+  qrTitle: string; qrSub: string; qrWhy: string; qrCopy: string; qrCopied: string; qrHere: string;
   demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
 };
 
@@ -44,6 +46,8 @@ export const T: Record<Lang, Dict> = {
     takeCam: "Use camera", upload: "Upload a photo", retake: "Retake", useAnyway: "Use anyway", capture: "Capture", cancel: "Cancel", camDenied: "Camera unavailable. You can upload a photo instead.",
     qGood: "Looks good", qDark: "Too dark — find better light", qBright: "Too bright or glare", qBlur: "Blurry — hold steady", reviewT: "Review your photos", reviewS: "Make sure everything is clear and readable.", submit: "Submit",
     scanPlace: "Place the document inside the frame", scanFace: "Center your face in the oval", scanHold: "Hold steady…", scanDark: "Too dark — find better light", scanGlare: "Glare detected — tilt slightly", scanBlur: "Move closer or hold still", scanAuto: "Automatic capture", scanDone: "Captured!", capNow: "Capture now",
+    scanLoading: "Preparing the scanner…", scanCloser: "Move closer", scanFar: "Move back a little", scanCenter: "Center the document in the frame", scanFound: "Document detected",
+    qrTitle: "Continue on your phone", qrSub: "Scan this QR code with your phone camera to continue the verification.", qrWhy: "Your phone camera takes much better photos of your document and face.", qrCopy: "Copy link", qrCopied: "Link copied", qrHere: "Continue on this computer",
     demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
   },
   fr: {
@@ -60,6 +64,8 @@ export const T: Record<Lang, Dict> = {
     takeCam: "Utiliser la caméra", upload: "Téléverser une photo", retake: "Reprendre", useAnyway: "Utiliser quand même", capture: "Capturer", cancel: "Annuler", camDenied: "Caméra indisponible. Vous pouvez téléverser une photo.",
     qGood: "Image correcte", qDark: "Trop sombre — cherchez plus de lumière", qBright: "Trop clair ou reflet", qBlur: "Flou — restez stable", reviewT: "Vérifiez vos photos", reviewS: "Assurez-vous que tout est net et lisible.", submit: "Envoyer",
     scanPlace: "Placez le document dans le cadre", scanFace: "Centrez votre visage dans l'ovale", scanHold: "Ne bougez pas…", scanDark: "Trop sombre — cherchez plus de lumière", scanGlare: "Reflet détecté — inclinez légèrement", scanBlur: "Rapprochez-vous ou restez stable", scanAuto: "Capture automatique", scanDone: "Capturé !", capNow: "Capturer maintenant",
+    scanLoading: "Préparation du scanner…", scanCloser: "Rapprochez-vous", scanFar: "Reculez un peu", scanCenter: "Centrez le document dans le cadre", scanFound: "Document détecté",
+    qrTitle: "Continuez sur votre téléphone", qrSub: "Scannez ce code QR avec l'appareil photo de votre téléphone pour poursuivre la vérification.", qrWhy: "La caméra de votre téléphone prend de bien meilleures photos de votre document et de votre visage.", qrCopy: "Copier le lien", qrCopied: "Lien copié", qrHere: "Continuer sur cet ordinateur",
     demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
   },
   ht: {
@@ -76,6 +82,8 @@ export const T: Record<Lang, Dict> = {
     takeCam: "Itilize kamera", upload: "Voye yon foto", retake: "Refè", useAnyway: "Itilize l kanmenm", capture: "Pran foto", cancel: "Anile", camDenied: "Kamera pa disponib. Ou ka voye yon foto.",
     qGood: "Foto a bon", qDark: "Twò nwa — chèche plis limyè", qBright: "Twò klè oswa gen refle", qBlur: "Flou — pa bouje", reviewT: "Revize foto w yo", reviewS: "Asire w tout bagay klè epi lizib.", submit: "Voye",
     scanPlace: "Mete dokiman an andedan kadre a", scanFace: "Mete figi w nan ovòl la", scanHold: "Pa bouje…", scanDark: "Twò nwa — chèche plis limyè", scanGlare: "Gen refle — enkline l yon ti jan", scanBlur: "Pwoche oswa pa bouje", scanAuto: "Kapti otomatik", scanDone: "Kaptire!", capNow: "Pran foto kounye a",
+    scanLoading: "N ap prepare eskanè a…", scanCloser: "Pwoche", scanFar: "Rekile yon ti jan", scanCenter: "Mete dokiman an nan mitan kadre a", scanFound: "Dokiman an detekte",
+    qrTitle: "Kontinye sou telefòn ou", qrSub: "Eskane kòd QR sa a ak kamera telefòn ou pou kontinye verifikasyon an.", qrWhy: "Kamera telefòn ou pran pi bon foto dokiman w ak figi w.", qrCopy: "Kopye lyen an", qrCopied: "Lyen an kopye", qrHere: "Kontinye sou òdinatè sa a",
     demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
   },
 };

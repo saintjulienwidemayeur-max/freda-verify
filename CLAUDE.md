@@ -103,7 +103,8 @@ components/
   OverviewChart.tsx             Interactive bar chart
   Verifications.tsx             People list/filter/search/detail/approve-reject
   Media.tsx                     Selfie "video" player + ID front/back + lightbox
-  Scanner.tsx                   Camera scanner with AUTOMATIC capture (doc and selfie): exposure, glare, sharpness, stability heuristics; 3-2-1 countdown for selfie
+  Scanner.tsx                   Camera scanner with AUTOMATIC capture. Documents: OpenCV.js card-edge detection + fit/stability/exposure/sharpness, captures a perspective-corrected crop. Selfie: heuristics + 3-2-1 countdown
+  cardDetect.ts                 OpenCV.js loader (lazy, /vendor/opencv.js) + detectCard (Canny + contours + 4-corner/aspect/angle filter) + rectify (perspective warp)
   HostedPage.tsx                Real end-user flow at /verify: consent, country, document, camera/upload, local quality check, review, demo finish. Config via URL params
   HostedPreview.tsx             Mock of the end-user hosted verification page (welcome, country, document, selfie, done), driven by the white-label config
   WhiteLabel.tsx                Branding form (name, logo, colors, theme, shape, language, texts, docs, domain, redirect) + phone preview
@@ -112,6 +113,7 @@ components/
   Sections.tsx                  Landing sections (Platform, Developers, AML, services, FAQ...)
   AmlCard.tsx, ApiHub.tsx       Landing animations
 public/ faces/*.webp, hero.png, logo*.{svg,png}
+public/vendor/ opencv.js (OpenCV 4.10 via @techstark/opencv-js, Apache-2.0, ~10 MB, loaded only by /verify), opencv.LICENSE.txt
 ```
 
 Not yet existing: login / sign-up / password reset, hosted verification page for end users, Customers, Organizations, Developers, Webhooks and Analytics pages (see gap analysis, section 11).
@@ -134,7 +136,7 @@ Not yet existing: login / sign-up / password reset, hosted verification page for
 | `components/ApiKeys.tsx` | Keys are random hex generated in the browser (`crypto.getRandomValues`); not stored, not valid for any API. **Real secret keys must never be generated or shown by frontend code.** |
 | `components/Logs.tsx` | 9 hard-coded request logs. |
 | `components/Settings.tsx` | Form state in memory only. Nothing saved. |
-| `components/HostedPage.tsx` (`/verify`) | **Public page. Real UI, no backend.** The scanner opens the camera automatically on each capture step and **captures automatically** (`components/Scanner.tsx`): it analyses the frame area every 140 ms (brightness, glare, sharpness via Laplacian variance, frame-to-frame stability) and captures after ~1.3 s of good frames (selfie: ~3 s with a visible 3-2-1 countdown); a manual "Capture now" appears after 9 s and an upload fallback exists. **Limitation: this is NOT document or face detection.** Any sharp, well-lit, steady, textured scene inside the frame (even a face) triggers the capture; it only guards image quality. Real document/face detection (e.g. OpenCV/WASM or server-side) is required before the capture can be trusted. Camera (`getUserMedia`) and file input work; a local quality check (brightness, glare, blur via canvas) runs in the browser. Photos live only in memory (`blob:` URLs), are never uploaded (no network request is made), and are deleted on submit/restart. The final screen says "Demo complete — no verification was performed" and **never shows a verdict**. Branding comes from URL params (`name,color,theme,shape,lang,docs,title,subtitle,support`), validated and rendered as text; `redirect` and logo are deliberately NOT accepted from the URL (open-redirect / untrusted-image risk). Do not wire any upload to this page until the backend, consent and retention requirements (sections 5, 8, white-label requirements) are met. |
+| `components/HostedPage.tsx` (`/verify`) | **Public page. Real UI, no backend.** The scanner opens the camera automatically on each capture step and **captures automatically** (`components/Scanner.tsx`): it analyses the frame area every 140 ms (brightness, glare, sharpness via Laplacian variance, frame-to-frame stability) and captures after ~1.3 s of good frames (selfie: ~3 s with a visible 3-2-1 countdown); a manual "Capture now" appears after 9 s and an upload fallback exists. **Documents now use OpenCV.js card-edge detection** (`cardDetect.ts`): it finds a convex 4-corner shape with a card/passport-page aspect ratio (1.2–1.9) and 65–115° corners, checks fit ("Move closer / back / center"), corner stability, exposure, glare and sharpness, then captures a perspective-corrected, upright crop (~1000 px wide). Limits: it detects a card-SHAPED rectangle, not a genuine document (a credit card, a card-shaped object or a screen can pass); low contrast against the background can miss the edges; no OCR, no document-type classification, no tamper checks. If OpenCV cannot load it falls back to the basic quality heuristics (any sharp steady scene triggers capture). **The selfie still uses basic heuristics only: there is no face detection**, so a non-face scene can trigger it. Real face detection, liveness and document authenticity belong to Phases 2–3. Camera (`getUserMedia`) and file input work; a local quality check (brightness, glare, blur via canvas) runs in the browser. Photos live only in memory (`blob:` URLs), are never uploaded (no network request is made), and are deleted on submit/restart. The final screen says "Demo complete — no verification was performed" and **never shows a verdict**. Branding comes from URL params (`name,color,theme,shape,lang,docs,title,subtitle,support`), validated and rendered as text; `redirect` and logo are deliberately NOT accepted from the URL (open-redirect / untrusted-image risk). Do not wire any upload to this page until the backend, consent and retention requirements (sections 5, 8, white-label requirements) are met. |
 | `components/WhiteLabel.tsx` | Branding config lives in React state only (logo is an in-memory object URL). Custom-domain "DNS record" and its target value are examples; no domain or certificate is verified. The phone preview (`HostedPreview.tsx`) is a clickable mock of a hosted page that does not exist yet: no camera, no upload, no real country/document rules (country list is a fixed sample of 24 ISO codes, names via `Intl.DisplayNames`; Kreyòl falls back to French names). |
 | `app/dashboard/page.tsx`, `OverviewChart.tsx` | All numbers (12,480 checks, 96.4%, charts, activity) are invented. |
 | `components/FaceMatch.tsx` | Marketing animation; scores 98 % / 34 % are scripted. |
@@ -295,6 +297,7 @@ Rule: verify the license of **code, model weights and training data** separately
 
 | Component | Purpose | License note (verify before use) |
 |---|---|---|
+| OpenCV.js (`@techstark/opencv-js` 4.10, vendored in `public/vendor`) | Client-side card detection | Apache-2.0 (OpenCV >= 4.5). License file shipped as `public/vendor/opencv.LICENSE.txt`; keep it with the binary. ~10 MB (≈3.4 MB gzip), loaded lazily only on `/verify` |
 | PaddleOCR | OCR, MRZ text | Apache-2.0 (code and models) — confirm per model |
 | OpenCV | image processing | Apache-2.0 |
 | DeepFace | face verification wrapper | Wrapper is MIT, but each backend model's weights (VGG-Face, Facenet, ArcFace…) have their own terms; some are research/non-commercial. **Verify.** |
@@ -340,7 +343,7 @@ Dashboard sections requested: Overview, Verifications, Customers, Organizations,
 | Settings | UI mock ✔ |
 | Logs, Support | UI mock ✔ (extra, not in spec) |
 | White label | UI mock ✔ (`/dashboard/white-label`): brand, colors, theme, button shape, language (EN/FR/HT), texts, accepted documents, redirect URL, custom domain, hide "Powered by", live phone preview |
-| Hosted verification flow (end user) | **UI live at `/verify` in demo mode (no upload, no result)**; also a clickable preview inside White label. Still missing: session tokens, upload to storage, OCR/face/liveness, result and webhook. Previously described as: **mock only** — clickable 5-step preview inside White label (welcome with language picker and 2-step stepper, issuing-country picker with search, document type, selfie, done). The real mobile-first page (camera, uploads, session token) is not built |
+| Hosted verification flow (end user) | **UI live at `/verify` in demo mode (no upload, no result)**, automatic scanner with OpenCV.js card detection, and a desktop → QR-code hand-off (desktop detection by user agent + touch; QR encodes the current page URL — in production it must encode a one-time session link, never data); also a clickable preview inside White label. Still missing: session tokens, upload to storage, OCR/face/liveness, result and webhook. Previously described as: **mock only** — clickable 5-step preview inside White label (welcome with language picker and 2-step stepper, issuing-country picker with search, document type, selfie, done). The real mobile-first page (camera, uploads, session token) is not built |
 | Login / signup / MFA / password recovery | **missing** |
 | Landing | done visually; copy needs claim review |
 
@@ -448,6 +451,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-19 — OpenCV.js card-edge detection in the document scanner (perspective-corrected crop, "move closer/back/center" guidance), and desktop detection with a QR-code hand-off to the phone on `/verify` (`qrcode-generator`, MIT). Face detection for the selfie is still missing.
 - 2026-11-19 — Scanner page with automatic capture on `/verify` (document front/back and selfie), auto-advance and countdown. Quality heuristics only, no real document/face detection yet.
 - 2026-11-19 — Added the public hosted verification page `/verify` (demo mode): real camera/upload, local image-quality check, issuing-country and document steps, review, 3 languages, brand params from the URL. Nothing is uploaded and no verification result is produced. Country search made accent-insensitive.
 - 2026-11-19 — Redesigned the hosted verification preview (Didit-style welcome, issuing-country step with search, document cards, selfie, done; phone chrome; "Secured by Freda Verify"). No social sign-in by decision.
