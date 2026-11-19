@@ -49,6 +49,14 @@ export default function WhiteLabel() {
     docs: Object.values(c.docs).some(Boolean) ? "" : "Enable at least one document type",
   }), [c]);
   const invalid = Object.values(err).some(Boolean);
+  const pageUrl = useMemo(() => {
+    const q = new URLSearchParams({ name: c.name.trim() || "Your Company", color: c.color.replace("#", ""), theme: c.theme, shape: c.shape, lang: c.lang,
+      docs: (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]).join(",") });
+    if (c.title.trim()) q.set("title", c.title.trim());
+    if (c.subtitle.trim()) q.set("subtitle", c.subtitle.trim());
+    if (isMail(c.support)) q.set("support", c.support);
+    return `/verify?${q.toString()}`;
+  }, [c]);
 
   const onLogo = (f: File | undefined) => {
     setLogoErr(""); if (!f) return;
@@ -144,6 +152,7 @@ export default function WhiteLabel() {
         <aside className="min-[960px]:sticky min-[960px]:top-4 min-[960px]:order-first" aria-label="Live preview">
           <div className="rounded-2xl border border-[#e3eaf8] bg-white p-4">
             <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Live preview</h2><span className="font-mono text-[10px] uppercase tracking-widest text-navy/50">Hosted page</span></div>
+            <a href={pageUrl} target="_blank" rel="noopener" className="mb-4 flex items-center justify-center gap-1.5 rounded-full border border-[#d6e2ff] py-2 text-sm font-semibold text-blue hover:bg-ice">Open the live page ↗</a>
             <div className="mb-4 flex flex-wrap justify-center gap-1.5" role="tablist" aria-label="Preview step">
               {([["welcome", "Welcome"], ["country", "Country"], ["document", "Document"], ["selfie", "Selfie"], ["done", "Done"]] as [Step, string][]).map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={step === k} onClick={() => setStep(k)} className={`rounded-full px-3 py-1 text-xs ${step === k ? "bg-navy text-white" : "border border-[#d6e2ff]"}`}>{l}</button>

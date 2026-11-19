@@ -22,6 +22,10 @@ type Dict = {
   idS: string; passportS: string; licenseS: string; tips: string;
   selfieT: string; selfieS: string; selfieB: string; selfieTips: string;
   doneT: string; doneS: string; back: string; redirect: string;
+  frontT: string; frontS: string; backT: string; backS: string; pageT: string; pageS: string;
+  takeCam: string; upload: string; retake: string; useAnyway: string; capture: string; cancel: string; camDenied: string;
+  qGood: string; qDark: string; qBright: string; qBlur: string; reviewT: string; reviewS: string; submit: string;
+  demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
 };
 
 export const T: Record<Lang, Dict> = {
@@ -35,6 +39,10 @@ export const T: Record<Lang, Dict> = {
     idS: "Front and back", passportS: "Photo page", licenseS: "Front and back", tips: "Good lighting · No glare · All corners visible",
     selfieT: "Take a selfie", selfieS: "Center your face in the oval and hold still.", selfieB: "Take selfie", selfieTips: "Remove glasses · Neutral face · Good light",
     doneT: "Verification submitted", doneS: "Thank you! We are reviewing your information. You will be notified of the result shortly.", back: "Back to", redirect: "You will be redirected automatically.",
+    frontT: "Front of your document", frontS: "Place the front inside the frame.", backT: "Back of your document", backS: "Now turn it over and capture the back.", pageT: "Passport photo page", pageS: "Open the passport to the photo page.",
+    takeCam: "Use camera", upload: "Upload a photo", retake: "Retake", useAnyway: "Use anyway", capture: "Capture", cancel: "Cancel", camDenied: "Camera unavailable. You can upload a photo instead.",
+    qGood: "Looks good", qDark: "Too dark — find better light", qBright: "Too bright or glare", qBlur: "Blurry — hold steady", reviewT: "Review your photos", reviewS: "Make sure everything is clear and readable.", submit: "Submit",
+    demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
   },
   fr: {
     titleFor: "Vérification pour", sub: "Suivez ces étapes rapides pour confirmer votre identité", step: "Étape", idv: "Vérification de la pièce", facev: "Vérification du visage",
@@ -46,6 +54,10 @@ export const T: Record<Lang, Dict> = {
     idS: "Recto et verso", passportS: "Page photo", licenseS: "Recto et verso", tips: "Bon éclairage · Sans reflet · Coins visibles",
     selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale et ne bougez pas.", selfieB: "Prendre le selfie", selfieTips: "Sans lunettes · Visage neutre · Bonne lumière",
     doneT: "Vérification envoyée", doneS: "Merci ! Nous examinons vos informations. Vous serez informé du résultat sous peu.", back: "Retour à", redirect: "Vous serez redirigé automatiquement.",
+    frontT: "Recto de votre document", frontS: "Placez le recto dans le cadre.", backT: "Verso de votre document", backS: "Retournez-le et capturez le verso.", pageT: "Page photo du passeport", pageS: "Ouvrez le passeport à la page photo.",
+    takeCam: "Utiliser la caméra", upload: "Téléverser une photo", retake: "Reprendre", useAnyway: "Utiliser quand même", capture: "Capturer", cancel: "Annuler", camDenied: "Caméra indisponible. Vous pouvez téléverser une photo.",
+    qGood: "Image correcte", qDark: "Trop sombre — cherchez plus de lumière", qBright: "Trop clair ou reflet", qBlur: "Flou — restez stable", reviewT: "Vérifiez vos photos", reviewS: "Assurez-vous que tout est net et lisible.", submit: "Envoyer",
+    demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
   },
   ht: {
     titleFor: "Verifikasyon pou", sub: "Swiv etap rapid sa yo pou konfime idantite w", step: "Etap", idv: "Verifikasyon pyès", facev: "Verifikasyon vizaj",
@@ -57,25 +69,30 @@ export const T: Record<Lang, Dict> = {
     idS: "Devan ak dèyè", passportS: "Paj foto a", licenseS: "Devan ak dèyè", tips: "Bon limyè · Pa gen refle · Tout kwen yo vizib",
     selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la epi pa bouje.", selfieB: "Pran selfi a", selfieTips: "Retire linèt · Figi nòmal · Bon limyè",
     doneT: "Verifikasyon an voye", doneS: "Mèsi! N ap egzamine enfòmasyon w yo. N ap enfòme w rezilta a talè.", back: "Retounen sou", redirect: "W ap retounen otomatikman.",
+    frontT: "Devan dokiman w", frontS: "Mete devan an andedan kadre a.", backT: "Dèyè dokiman w", backS: "Kounye a vire l epi pran dèyè a.", pageT: "Paj foto paspò a", pageS: "Louvri paspò a nan paj foto a.",
+    takeCam: "Itilize kamera", upload: "Voye yon foto", retake: "Refè", useAnyway: "Itilize l kanmenm", capture: "Pran foto", cancel: "Anile", camDenied: "Kamera pa disponib. Ou ka voye yon foto.",
+    qGood: "Foto a bon", qDark: "Twò nwa — chèche plis limyè", qBright: "Twò klè oswa gen refle", qBlur: "Flou — pa bouje", reviewT: "Revize foto w yo", reviewS: "Asire w tout bagay klè epi lizib.", submit: "Voye",
+    demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
   },
 };
 
-const COUNTRIES = ["HT", "DO", "US", "CA", "FR", "BE", "CH", "GB", "ES", "DE", "BS", "JM", "TC", "PA", "MX", "CO", "BR", "CL", "AR", "SN", "CI", "CM", "NG", "GH"];
-const flag = (cc: string) => String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
-const RADIUS: Record<Shape, number> = { square: 6, rounded: 14, pill: 999 };
-const LANGS: Lang[] = ["en", "fr", "ht"];
+export const COUNTRIES = ["HT", "DO", "US", "CA", "FR", "BE", "CH", "GB", "ES", "DE", "BS", "JM", "TC", "PA", "MX", "CO", "BR", "CL", "AR", "SN", "CI", "CM", "NG", "GH"];
+export const flag = (cc: string) => String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+export const RADIUS: Record<Shape, number> = { square: 6, rounded: 14, pill: 999 };
+export const LANGS: Lang[] = ["en", "fr", "ht"];
 
 export const onColor = (hex: string) => {
   const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
   return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#0A1647" : "#FFFFFF";
 };
-const termsLabel = (l: Lang, n: string) => (l === "en" ? `${n}'s Terms and Conditions` : l === "fr" ? `Conditions d'utilisation de ${n}` : `Kondisyon itilizasyon ${n}`);
-const isMail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+export const termsLabel = (l: Lang, n: string) => (l === "en" ? `${n}'s Terms and Conditions` : l === "fr" ? `Conditions d'utilisation de ${n}` : `Kondisyon itilizasyon ${n}`);
+export const fold = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+export const isMail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-const Ic = ({ d, className = "h-4 w-4" }: { d: string; className?: string }) => (
+export const Ic = ({ d, className = "h-4 w-4" }: { d: string; className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>
 );
-const DOC_ICON: Record<DocKey, string> = {
+export const DOC_ICON: Record<DocKey, string> = {
   id: "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5zM8.5 12.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5.5 16c.5-1.600 1.600-2.400 3-2.400s2.500.8 3 2.400M14 9.5h4M14 13h4",
   passport: "M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11.5 14a3.500 3.500 0 1 0 0-7 3.500 3.500 0 0 0 0 7zM8 10.5h7M11.5 7c1 1 1.400 2.200 1.400 3.500S12.500 13 11.500 14M8.500 17.500h6",
   license: "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5zM6 9h6M6 12h4M14.500 15.500l1.500-4h1l1.500 4M15 14h2.500",
@@ -100,7 +117,7 @@ export default function HostedPreview({ c, step, go, setLang }: { c: Cfg; step: 
     try { dn = new Intl.DisplayNames([c.lang === "ht" ? "fr" : c.lang], { type: "region" }); } catch { dn = null; }
     return Object.fromEntries(COUNTRIES.map((cc) => [cc, dn?.of(cc) ?? cc])) as Record<string, string>;
   }, [c.lang]);
-  const list = COUNTRIES.filter((cc) => names[cc].toLowerCase().includes(q.trim().toLowerCase()));
+  const list = COUNTRIES.filter((cc) => fold(names[cc]).includes(fold(q)));
   const docs = (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]);
   const progress = { welcome: 0, country: 0.25, document: 0.5, selfie: 0.75, done: 1 }[step];
   const prev: Partial<Record<Step, Step>> = { country: "welcome", document: "country", selfie: "document" };
