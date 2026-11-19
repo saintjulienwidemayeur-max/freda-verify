@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Demo from "@/components/Demo";
 import { Platform, Developers, AmlScreening, Services, Industries, Workflow, Audit, Integration, Security, Faq, Contact } from "@/components/Sections";
 
 const LOGOS = ["Northwind", "lumen", "HALCYON", "Ardent", "kestrel.io", "VANTA"];
@@ -28,7 +27,7 @@ export default function Home() {
         <nav className="hidden gap-8 md:flex"><a href="#insights">Connaissances</a><a href="#solutions">Solutions</a><a href="#pricing">Tarification</a></nav>
         <div className="flex items-center gap-4">
           <Link href="/dashboard">Se connecter</Link>
-          <a href="#demo" className="rounded-full bg-blue px-5 py-2.5 font-semibold text-white hover:bg-navy">Essayez maintenant</a>
+          <a href="#contact" className="rounded-full bg-blue px-5 py-2.5 font-semibold text-white hover:bg-navy">Essayez maintenant</a>
         </div>
       </header>
 
@@ -44,7 +43,7 @@ export default function Home() {
             <p className="mx-auto mt-6 max-w-lg text-base text-navy">
               Vérifiez les personnes et les entreprises en quelques secondes. Lecture de documents, reconnaissance faciale et détection de fraude en un seul appel.
             </p>
-            <a href="#demo" className="mt-8 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy [text-shadow:none]">Start Verifying ↗</a>
+            <a href="#contact" className="mt-8 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy [text-shadow:none]">Start Verifying ↗</a>
           </div>
           {/* Arrière-plan (mobile et PC) : ancré en bas, le haut s'estompe pour garder le texte lisible */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -82,9 +81,6 @@ export default function Home() {
       <Industries />
       <Workflow />
       <Audit />
-      <section id="demo" className="py-16">
-        <Demo />
-      </section>
 
       <Integration />
       <Security />

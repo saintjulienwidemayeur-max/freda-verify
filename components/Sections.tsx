@@ -189,7 +189,7 @@ export function Platform() {
         Construisez et déployez vos parcours d&apos;identité avec une seule API. Utilisez nos modules prêts à l&apos;emploi ou composez les vôtres, de l&apos;authentification biométrique à la vérification des entreprises.
       </p>
       <div className="mt-7 flex flex-wrap justify-center gap-3">
-        <a href="#demo" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Voir la vérification ↗</a>
+        <a href="#contact" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Voir la vérification ↗</a>
         <a href="#integration" className="rounded-full border border-[#d6e2ff] px-6 py-3 text-sm">Commencer à construire</a>
       </div>
 
