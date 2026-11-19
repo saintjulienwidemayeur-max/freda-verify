@@ -15,14 +15,14 @@ function Silhouette() {
     </svg>
   );
 }
-function Photo({ p, gray }: { p: MediaPerson; gray?: boolean }) {
+function Photo({ p, gray, top }: { p: MediaPerson; gray?: boolean; top?: boolean }) {
   if (!p.face) return <Silhouette />;
   const src = gray ? `/faces/${p.face}-doc.webp` : `/faces/${p.face}-selfie.webp`;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" className="h-full w-full object-cover" />;
+  return <img src={src} alt="" className={`h-full w-full object-cover ${top ? "object-[50%_42%]" : ""}`} />;
 }
 
-export function FaceVideo({ p }: { p: MediaPerson }) {
+export function FaceVideo({ p, compact }: { p: MediaPerson; compact?: boolean }) {
   const [t, setT] = useState(0);
   const [play, setPlay] = useState(false);
   useEffect(() => {
@@ -32,9 +32,9 @@ export function FaceVideo({ p }: { p: MediaPerson }) {
   }, [play]);
   const step = [...STEPS].reverse().find((s) => t >= s[0]) ?? STEPS[0];
   return (
-    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-navy" role="group" aria-label="Selfie video">
-      <div className="absolute inset-0 transition-transform duration-700 ease-out" style={{ transform: `translateX(${step[2]}%) scale(1.15)` }}><Photo p={p} /></div>
-      <div className="pointer-events-none absolute left-1/2 top-[46%] h-[72%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-white/80" />
+    <div className={`relative w-full overflow-hidden rounded-xl bg-navy ${compact ? "aspect-[16/10]" : "aspect-[4/3]"}`} role="group" aria-label="Selfie video">
+      <div className="absolute inset-0 transition-transform duration-700 ease-out" style={{ transform: `translateX(${step[2]}%) scale(${compact ? 1.06 : 1.15})` }}><Photo p={p} top={compact} /></div>
+      <div className={`pointer-events-none absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 border-white/80 ${compact ? "top-[50%] h-[86%] w-[34%]" : "top-[46%] h-[72%] w-[46%]"}`} />
       {t > 0 && <span className="absolute left-3 top-3 rounded-full bg-navy/80 px-2.5 py-1 text-[11px] text-white">{step[1]}</span>}
       <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-navy/80 px-2 py-1 font-mono text-[10px] text-white"><span className={`h-1.5 w-1.5 rounded-full ${play ? "bg-bad" : "bg-white/50"}`} />LIVENESS</span>
       <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-navy/85 to-transparent px-3 pb-2.5 pt-8 text-white">
@@ -49,13 +49,13 @@ export function FaceVideo({ p }: { p: MediaPerson }) {
   );
 }
 
-export function IdCard({ p, side, big }: { p: MediaPerson; side: "front" | "back"; big?: boolean }) {
+export function IdCard({ p, side, big, compact }: { p: MediaPerson; side: "front" | "back"; big?: boolean; compact?: boolean }) {
   const [last, ...rest] = [...p.name.split(" ")].reverse();
   const mrz1 = `ID${p.country}<<${last.toUpperCase()}<<${rest.reverse().join("<").toUpperCase()}`.padEnd(30, "<").slice(0, 30);
   const mrz2 = `${p.docNo.replace(/[^A-Z0-9]/gi, "")}<${p.dob.replace(/-/g, "").slice(2)}`.toUpperCase().padEnd(30, "<").slice(0, 30);
   return (
     <div className="relative flex aspect-[1.586] w-full flex-col overflow-hidden rounded-xl border border-[#c9d8f5] bg-gradient-to-br from-white via-ice to-[#dbe6ff] text-navy shadow-sm"
-      style={{ fontSize: big ? 16 : 11 }} role="img" aria-label={`${p.doc} ${side}`}>
+      style={{ fontSize: big ? 16 : compact ? 7.5 : 11 }} role="img" aria-label={`${p.doc} ${side}`}>
       <div className="flex items-center justify-between bg-navy px-[1em] py-[0.5em] text-[0.72em] font-semibold uppercase tracking-widest text-white"><span>{p.doc}</span><span>{side === "front" ? "Front" : "Back"}</span></div>
       {side === "front" ? (
         <div className="flex flex-1 items-center gap-[1em] p-[1em]">
@@ -93,10 +93,10 @@ export default function Media({ p }: { p: MediaPerson }) {
   return (
     <section className="mt-5" aria-label="Captured media">
       <h3 className="font-display text-sm font-bold">Captured media</h3>
-      <div className="mt-2"><FaceVideo p={p} />{zoom("video", "Enlarge video")}</div>
-      <div className="mt-3 grid gap-3">
-        <div><IdCard p={p} side="front" />{zoom("front", "Front")}</div>
-        <div><IdCard p={p} side="back" />{zoom("back", "Back")}</div>
+      <div className="mt-2"><FaceVideo p={p} compact />{zoom("video", "Enlarge video")}</div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div><IdCard p={p} side="front" compact />{zoom("front", "Front")}</div>
+        <div><IdCard p={p} side="back" compact />{zoom("back", "Back")}</div>
       </div>
       {!p.face && <p className="mt-2 text-[11px] text-navy/45">Sample placeholder — no photo in this demo record.</p>}
       {big && (
