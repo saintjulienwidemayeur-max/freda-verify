@@ -37,12 +37,12 @@ export default function Businesses() {
 
   return (
     <>
-      <h1 className="text-3xl font-extrabold tracking-tighter">Businesses</h1>
+      <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">Businesses</h1>
       <p className="mt-1 text-sm opacity-60">KYB verifications · sample data</p>
 
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         {([["Total", DATA.length], ["Approved", count("APPROVED")], ["In review", count("REVIEW") + count("PENDING")], ["Rejected", count("REJECTED")]] as const).map(([l, v]) => (
-          <div key={l} className="rounded-2xl border border-[#d6e2ff] bg-ice p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
+          <div key={l} className="rounded-2xl border border-[#e3eaf8] bg-white p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
         ))}
       </div>
 
@@ -55,7 +55,7 @@ export default function Businesses() {
           className="ml-auto w-full rounded-full border border-[#d6e2ff] bg-transparent px-4 py-1.5 text-sm md:w-64" />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#d6e2ff]">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#e3eaf8] bg-white">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[#d6e2ff] font-mono text-xs">
             <tr>{["Business", "Country", "Source", "UBOs", "Risk", "Status", "Score", "Date"].map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr>
@@ -77,7 +77,7 @@ export default function Businesses() {
       </div>
 
       {sel && (
-        <div className="mt-6 rounded-2xl border border-[#d6e2ff] p-4" role="region" aria-label="Business details">
+        <div className="mt-6 rounded-2xl border border-[#e3eaf8] bg-white p-4" role="region" aria-label="Business details">
           <div className="flex items-start justify-between">
             <div><div className="text-lg font-bold">{sel.name}</div><div className="text-xs opacity-60">{sel.country} · {sel.reg}</div></div>
             <button onClick={() => setOpen(null)} className="font-mono text-xs underline">Close</button>
