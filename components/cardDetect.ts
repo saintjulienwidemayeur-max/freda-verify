@@ -81,7 +81,9 @@ export function detectCard(cv: any, canvas: HTMLCanvasElement): Quad | null {
 }
 
 /** Perspective-corrects the detected card from a full-resolution frame into a flat, upright crop. */
-export function rectify(cv: any, frame: HTMLCanvasElement, q: Quad, outW = 1000): HTMLCanvasElement {
+export function rectify(cv: any, frame: HTMLCanvasElement, q0: Quad, outW = 1000): HTMLCanvasElement {
+  // always output a LANDSCAPE crop: if the card is held vertically, start from the next corner (rotates the crop by 90°)
+  const q: Quad = q0.ratio >= 1 ? q0 : { ...q0, pts: [q0.pts[1], q0.pts[2], q0.pts[3], q0.pts[0]], ratio: 1 / q0.ratio };
   const w = frame.width, h = frame.height, outH = Math.round(outW / q.ratio);
   const src = cv.imread(frame), dst = new cv.Mat();
   // pull the corners 1.2 % towards the centre so the dilated contour margin (background) is cropped out
@@ -96,3 +98,8 @@ export function rectify(cv: any, frame: HTMLCanvasElement, q: Quad, outW = 1000)
   } finally { src.delete(); dst.delete(); sp.delete(); dp.delete(); M.delete(); }
   return out;
 }
+
+export type DocKind = "id" | "passport" | "license";
+/** Accepted width/height range per document: passport data page ≈ 1.42 (125×88 mm), ID-1 card ≈ 1.586 (85.6×54 mm). */
+export const aspectRange = (kind: DocKind): [number, number] => (kind === "passport" ? [1.3, 1.56] : [1.45, 1.75]);
+export const aspectOk = (kind: DocKind, ratio: number) => { const r = Math.max(ratio, 1 / ratio), [lo, hi] = aspectRange(kind); return r >= lo && r <= hi; };

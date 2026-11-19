@@ -4,10 +4,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "prebuild": "node scripts/copy-vendor.mjs",
+    "predev": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.2.3",
+    "@techstark/opencv-js": "4.10.0-release.1",
     "framer-motion": "^12.43.0",
     "next": "^15.0.0",
     "qrcode-generator": "^1.5.2",

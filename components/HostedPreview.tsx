@@ -30,6 +30,8 @@ type Dict = {
   qrTitle: string; qrSub: string; qrWhy: string; qrCopy: string; qrCopied: string; qrHere: string;
   faceLoading: string; faceNone: string; faceMulti: string; faceSmall: string; faceBig: string; faceCenter: string; faceFront: string;
   turnL: string; turnR: string; turnWrong: string; turnOk: string; turnAgain: string; dirL: string; dirR: string; stepFace: string; stepTurn: string;
+  scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string;
+  blinkNow: string; stepAction: string; tipMore: string;
   demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
 };
 
@@ -52,6 +54,9 @@ export const T: Record<Lang, Dict> = {
     qrTitle: "Continue on your phone", qrSub: "Scan this QR code with your phone camera to continue the verification.", qrWhy: "Your phone camera takes much better photos of your document and face.", qrCopy: "Copy link", qrCopied: "Link copied", qrHere: "Continue on this computer",
     faceLoading: "Preparing face detection…", faceNone: "No face detected — center your face in the oval", faceMulti: "Only one person in the frame, please", faceSmall: "Move a little closer", faceBig: "Move back a little", faceCenter: "Center your face in the oval", faceFront: "Look straight at the camera",
     turnL: "Slowly turn your head to the LEFT", turnR: "Slowly turn your head to the RIGHT", turnWrong: "Other way — turn to your", turnOk: "Perfect!", turnAgain: "Let's try again", dirL: "LEFT", dirR: "RIGHT", stepFace: "Face", stepTurn: "Turn",
+    scanFail: "The scanner could not be loaded. Check your connection and try again.", retry: "Try again", showPassport: "Show the passport photo page (the page with your photo)", showId: "Show your ID card inside the frame",
+    docRej: "Document not recognised", rejShape: "This does not look like the right document. Show it flat, fully inside the frame.", rejFace: "We cannot see the photo on the document. Make sure it is visible and well lit.", rejMrz: "The two lines of characters at the bottom of the passport page are not visible.", rejUnavail: "We cannot check this document right now. Please try again.",
+    blinkNow: "Now blink your eyes slowly", stepAction: "Action", tipMore: "Turn a little more",
     demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
   },
   fr: {
@@ -72,6 +77,9 @@ export const T: Record<Lang, Dict> = {
     qrTitle: "Continuez sur votre téléphone", qrSub: "Scannez ce code QR avec l'appareil photo de votre téléphone pour poursuivre la vérification.", qrWhy: "La caméra de votre téléphone prend de bien meilleures photos de votre document et de votre visage.", qrCopy: "Copier le lien", qrCopied: "Lien copié", qrHere: "Continuer sur cet ordinateur",
     faceLoading: "Préparation de la détection du visage…", faceNone: "Aucun visage détecté — centrez votre visage dans l'ovale", faceMulti: "Une seule personne dans le cadre, s'il vous plaît", faceSmall: "Rapprochez-vous un peu", faceBig: "Reculez un peu", faceCenter: "Centrez votre visage dans l'ovale", faceFront: "Regardez droit devant vous",
     turnL: "Tournez lentement la tête vers la GAUCHE", turnR: "Tournez lentement la tête vers la DROITE", turnWrong: "Dans l'autre sens — tournez vers votre", turnOk: "Parfait !", turnAgain: "Réessayons", dirL: "GAUCHE", dirR: "DROITE", stepFace: "Visage", stepTurn: "Tourner",
+    scanFail: "Le scanner n'a pas pu être chargé. Vérifiez votre connexion et réessayez.", retry: "Réessayer", showPassport: "Montrez la page photo du passeport (la page avec votre photo)", showId: "Montrez votre carte d'identité dans le cadre",
+    docRej: "Document non reconnu", rejShape: "Ce n'est pas le bon document. Présentez-le à plat, entièrement dans le cadre.", rejFace: "Nous ne voyons pas la photo du document. Assurez-vous qu'elle est visible et bien éclairée.", rejMrz: "Les deux lignes de caractères en bas de la page du passeport ne sont pas visibles.", rejUnavail: "Nous ne pouvons pas vérifier ce document pour le moment. Veuillez réessayer.",
+    blinkNow: "Maintenant, clignez lentement des yeux", stepAction: "Action", tipMore: "Tournez un peu plus",
     demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
   },
   ht: {
@@ -92,6 +100,9 @@ export const T: Record<Lang, Dict> = {
     qrTitle: "Kontinye sou telefòn ou", qrSub: "Eskane kòd QR sa a ak kamera telefòn ou pou kontinye verifikasyon an.", qrWhy: "Kamera telefòn ou pran pi bon foto dokiman w ak figi w.", qrCopy: "Kopye lyen an", qrCopied: "Lyen an kopye", qrHere: "Kontinye sou òdinatè sa a",
     faceLoading: "N ap prepare deteksyon figi a…", faceNone: "Pa gen figi detekte — mete figi w nan ovòl la", faceMulti: "Yon sèl moun nan kadre a, tanpri", faceSmall: "Pwoche yon ti jan", faceBig: "Rekile yon ti jan", faceCenter: "Mete figi w nan mitan ovòl la", faceFront: "Gade dirèk kamera a",
     turnL: "Vire tèt ou dousman sou bò GOCH", turnR: "Vire tèt ou dousman sou bò DWAT", turnWrong: "Lòt bò — vire sou bò", turnOk: "Pafè!", turnAgain: "Ann eseye ankò", dirL: "GOCH", dirR: "DWAT", stepFace: "Figi", stepTurn: "Vire",
+    scanFail: "Pa t kapab chaje eskanè a. Verifye koneksyon w epi eseye ankò.", retry: "Eseye ankò", showPassport: "Montre paj foto paspò a (paj ki gen foto w la)", showId: "Montre kat idantite w andedan kadre a",
+    docRej: "Pa rekonèt dokiman an", rejShape: "Sa pa sanble ak bon dokiman an. Montre l plat, tout antye andedan kadre a.", rejFace: "Nou pa wè foto a sou dokiman an. Asire w li vizib epi byen klere.", rejMrz: "De liy karaktè ki anba paj paspò a pa vizib.", rejUnavail: "Nou pa ka verifye dokiman sa a kounye a. Tanpri eseye ankò.",
+    blinkNow: "Kounye a bat je w dousman", stepAction: "Aksyon", tipMore: "Vire yon ti jan plis",
     demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
   },
 };

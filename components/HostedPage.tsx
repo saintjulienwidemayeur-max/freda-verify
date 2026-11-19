@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES, DOC_ICON, Ic, LANGS, RADIUS, T, flag, fold, isMail, onColor, termsLabel } from "./HostedPreview";
 import type { Cfg, DocKey, Lang, Shape, Theme } from "./HostedPreview";
 import Scanner from "./Scanner";
+import { loadCv } from "./cardDetect";
+import { loadFace } from "./faceDetect";
+import { needsFace, validateFile, type Reject } from "./docValidate";
 import FaceScanner from "./FaceScanner";
 import qrcode from "qrcode-generator";
 
@@ -73,7 +76,7 @@ const QUALITY_BLUR = 30;
 const issues = (q: Quality, t: typeof T.en) => [q.dark && t.qDark, q.bright && t.qBright, q.blur && t.qBlur].filter(Boolean) as string[];
 
 type Shot = { url: string; q: Quality };
-type PStep = "qr" | "welcome" | "country" | "document" | "front" | "back" | "selfie" | "review" | "done";
+type PStep = "qr" | "welcome" | "country" | "document" | "front" | "back" | "selfie" | "done";
 
 export default function HostedPage() {
   const [c, setC] = useState<Cfg>(DEFAULTS);
@@ -91,14 +94,21 @@ export default function HostedPage() {
   const urls = useRef<Set<string>>(new Set());
 
   const [link, setLink] = useState("");
+  const [debug, setDebug] = useState(false);
+  const [blinkOn, setBlinkOn] = useState(false);
+  const [upErr, setUpErr] = useState<Reject | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     setC(readConfig(window.location.search));
+    setDebug(new URLSearchParams(window.location.search).get("debug") === "1");
+    setBlinkOn(new URLSearchParams(window.location.search).get("blink") === "1");
     const u = new URL(window.location.href); const stay = u.searchParams.get("desktop") === "1"; u.searchParams.delete("desktop"); u.hash = "";
     setLink(u.toString());
     if (isDesktop() && !stay) setStep("qr");
     setReady(true);
   }, []);
+  // start loading the heavy engines as soon as the user reaches the document step, so the scanners open instantly
+  useEffect(() => { if (step === "document" || step === "front" || step === "back") { loadCv().catch(() => {}); loadFace().catch(() => {}); } }, [step]);
   useEffect(() => () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); }, []);
   useEffect(() => { document.documentElement.lang = c.lang; }, [c.lang]);
 
@@ -110,6 +120,7 @@ export default function HostedPage() {
   const name = c.name;
 
   const scanTx = useMemo(() => ({ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, found: t.scanFound,
+    scanFail: t.scanFail, retry: t.retry, showPassport: t.showPassport, showId: t.showId, docRej: t.docRej, rejShape: t.rejShape, rejFace: t.rejFace, rejMrz: t.rejMrz, rejUnavail: t.rejUnavail, blinkNow: t.blinkNow, stepAction: t.stepAction, tipMore: t.tipMore,
     faceLoading: t.faceLoading, faceNone: t.faceNone, faceMulti: t.faceMulti, faceSmall: t.faceSmall, faceBig: t.faceBig, faceCenter: t.faceCenter, faceFront: t.faceFront, turnL: t.turnL, turnR: t.turnR, turnWrong: t.turnWrong, turnOk: t.turnOk, turnAgain: t.turnAgain, dirL: t.dirL, dirR: t.dirR, stepFace: t.stepFace, stepTurn: t.stepTurn }), [t]);
   const names = useMemo(() => {
     let dn: Intl.DisplayNames | null = null;
@@ -118,9 +129,7 @@ export default function HostedPage() {
   }, [c.lang]);
   const list = COUNTRIES.filter((cc) => fold(names[cc]).includes(fold(q)));
   const docs = (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]);
-  const sides = kind === "passport" ? (["front", "selfie"] as const) : (["front", "back", "selfie"] as const);
-
-  const order: PStep[] = kind === "passport" ? ["country", "document", "front", "selfie", "review"] : ["country", "document", "front", "back", "selfie", "review"];
+  const order: PStep[] = kind === "passport" ? ["country", "document", "front", "selfie"] : ["country", "document", "front", "back", "selfie"];
   const idx = order.indexOf(step);
   const progress = step === "welcome" ? 0 : step === "done" ? 1 : (idx + 1) / (order.length + 1);
   const prev = () => { if (step === "country") setStep("welcome"); else if (idx > 0) setStep(order[idx - 1]); setCam(false); };
@@ -135,12 +144,12 @@ export default function HostedPage() {
   const drop = (key: "front" | "back" | "selfie") => setShots((s) => { if (s[key]) { URL.revokeObjectURL(s[key]!.url); urls.current.delete(s[key]!.url); } const n = { ...s }; delete n[key]; return n; });
   const wipe = () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); setShots({}); };
   // open the scanner automatically on each capture step; auto-advance after a fresh good capture
-  useEffect(() => { setCam((step === "front" || step === "back" || step === "selfie") && !shots[step]); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setUpErr(null); setCam((step === "front" || step === "back" || step === "selfie") && !shots[step]); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (step !== "front" && step !== "back" && step !== "selfie") return;
     const s = shots[step];
     if (!s || fresh.current !== s.url || issues(s.q, T[c.lang]).length > 0) return;
-    const tm = setTimeout(() => { fresh.current = null; setStep(step === "selfie" ? "review" : order[order.indexOf(step) + 1]); }, 1300);
+    const tm = setTimeout(() => { fresh.current = null; if (step === "selfie") finish(); else setStep(order[order.indexOf(step) + 1]); }, step === "selfie" ? 250 : 1300);
     return () => clearTimeout(tm);
   }); // eslint-disable-line react-hooks/exhaustive-deps
   const finish = () => { wipe(); setStep("done"); };
@@ -165,13 +174,24 @@ export default function HostedPage() {
       : <ul className="space-y-1 text-sm font-medium text-[#F79009]" role="alert">{list.map((x) => <li key={x} className="flex items-center gap-1.5"><Ic d="M12 9v4M12 17h.01M10.300 3.900L1.800 18a2 2 0 0 0 1.700 3h17a2 2 0 0 0 1.700-3L13.700 3.900a2 2 0 0 0-3.400 0z" className="h-4 w-4" />{x}</li>)}</ul>;
   };
 
+  // an uploaded photo goes through the SAME strict checks as the live scanner; it is stored as the flattened, validated crop
+  const uploadDoc = async (key: "front" | "back", file: File) => {
+    setBusy(true); setUpErr(null);
+    try {
+      const [{ cv }, f] = await Promise.all([loadCv(), needsFace(kind ?? "id", key) ? loadFace() : Promise.resolve(null)]);
+      const v = await validateFile(cv, f ? f.lm : null, kind ?? "id", key, file);
+      if (!v.ok) { setUpErr(v.reject); setBusy(false); return; }
+      await setShot(key, v.blob);
+    } catch { setUpErr("unavailable"); setBusy(false); }
+  };
+
   /* capture screen for front / back / selfie */
   const capture = (key: "front" | "back" | "selfie") => {
     const isSelfie = key === "selfie";
     const title = isSelfie ? t.selfieT : kind === "passport" ? t.pageT : key === "front" ? t.frontT : t.backT;
     const sub = isSelfie ? t.selfieS : kind === "passport" ? t.pageS : key === "front" ? t.frontS : t.backS;
     const s = shots[key];
-    const next = () => setStep(isSelfie ? "review" : order[idx + 1]);
+    const next = () => { if (isSelfie) finish(); else setStep(order[idx + 1]); };
     const bad = s ? issues(s.q, t).length > 0 : false;
     return (<>
       <h2 className="mt-4 font-display text-2xl font-extrabold leading-tight tracking-tight">{title}</h2>
@@ -179,8 +199,8 @@ export default function HostedPage() {
       {cam ? (
         <div className="mt-4 flex min-h-[380px] flex-1 flex-col">
           {isSelfie
-            ? <FaceScanner onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} />
-            : <Scanner mode="doc" onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} />}
+            ? <FaceScanner onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} blink={blinkOn} />
+            : <Scanner kind={kind ?? "id"} side={key === "back" ? "back" : "front"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} />}
         </div>
       ) : s ? (
         <div className="mt-4 flex flex-1 flex-col gap-3">
@@ -207,10 +227,15 @@ export default function HostedPage() {
             <Btn onClick={() => setCam(true)} disabled={busy}>{t.takeCam}</Btn>
             {!isSelfie && (
               <label className="block w-full cursor-pointer py-3.5 text-center text-[15px] font-semibold" style={{ border: `1px solid ${line}`, borderRadius: r }}>
-                {t.upload}
-                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only"
-                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f && f.size < 15 * 1024 * 1024) void setShot(key, f); }} />
+                {busy ? "…" : t.upload}
+                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" disabled={busy}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f && f.size < 15 * 1024 * 1024) void uploadDoc(key as "front" | "back", f); }} />
               </label>
+            )}
+            {upErr && !isSelfie && (
+              <div className="rounded-2xl px-4 py-3 text-sm font-medium text-white" style={{ background: "#B42318" }} role="alert">
+                <b className="block">{t.docRej}</b>{upErr === "shape" ? t.rejShape : upErr === "face" ? t.rejFace : upErr === "mrz" ? t.rejMrz : t.rejUnavail}
+              </div>
             )}
           </div>
         </div>
@@ -316,21 +341,6 @@ export default function HostedPage() {
         </>)}
 
         {(step === "front" || step === "back" || step === "selfie") && capture(step)}
-
-        {step === "review" && (<>
-          <h2 className="mt-4 font-display text-2xl font-extrabold leading-tight tracking-tight">{t.reviewT}</h2>
-          <p className="mt-1 text-[15px]" style={{ color: mut }}>{t.reviewS}</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {sides.map((k) => { const s = shots[k]; const label = k === "selfie" ? t.lblSelfie : kind === "passport" ? t.lblPage : k === "front" ? t.lblFront : t.lblBack; return (
-              <div key={k}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                {s && <img src={s.url} alt={label} className="aspect-[4/3] w-full rounded-xl object-cover" style={{ background: soft }} />}
-                <div className="mt-1.5 flex items-center justify-between text-xs"><span className="font-semibold">{label}</span>
-                  <button type="button" onClick={() => { fresh.current = null; drop(k); setStep(k); setCam(true); }} className="font-semibold" style={{ color: c.color }}>{t.retake}</button></div>
-              </div>); })}
-          </div>
-          <div className="mt-auto space-y-3 pt-6"><Btn onClick={finish} disabled={sides.some((k) => !shots[k])}>{t.submit}</Btn></div><Secured />
-        </>)}
 
         {step === "done" && (<>
           <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">

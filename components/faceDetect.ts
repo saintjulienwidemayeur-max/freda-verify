@@ -10,6 +10,8 @@ export type FaceInfo = {
   ratio?: number;
   /** head yaw in degrees from the facial transformation matrix (same sign convention as `ratio`) */
   yawDeg?: number;
+  /** eye-blink scores 0..1 (left, right) from the blendshape model */
+  blink?: [number, number];
 };
 
 let p: Promise<{ lm: FaceLandmarker; delegate: string }> | null = null;
@@ -21,7 +23,7 @@ export function loadFace() {
     const make = (delegate: "GPU" | "CPU") =>
       FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: "/vendor/mediapipe/face_landmarker.task", delegate },
-        runningMode: "VIDEO", numFaces: 2, outputFaceBlendshapes: false, outputFacialTransformationMatrixes: true,
+        runningMode: "VIDEO", numFaces: 2, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
       });
     try { return { lm: await make("GPU"), delegate: "GPU" }; } catch { return { lm: await make("CPU"), delegate: "CPU" }; }
   })();
@@ -30,7 +32,7 @@ export function loadFace() {
 }
 
 let lastTs = 0;
-export function detectFace(lm: FaceLandmarker, video: HTMLVideoElement): FaceInfo {
+export function detectFace(lm: FaceLandmarker, video: HTMLVideoElement | HTMLCanvasElement): FaceInfo {
   const ts = Math.max(performance.now(), lastTs + 1); lastTs = ts; // timestamps must strictly increase
   const r = lm.detectForVideo(video, ts);
   const faces = r.faceLandmarks;
@@ -44,5 +46,8 @@ export function detectFace(lm: FaceLandmarker, video: HTMLVideoElement): FaceInf
   let yawDeg: number | undefined;
   const m = r.facialTransformationMatrixes?.[0]?.data;
   if (m && m.length === 16) yawDeg = (Math.atan2(m[8], m[10]) * 180) / Math.PI; // rotation about the vertical axis (sign verified by test, see CLAUDE.md)
-  return { count: faces.length, box: { x0, y0, x1, y1 }, ratio, yawDeg };
+  const cats = r.faceBlendshapes?.[0]?.categories;
+  const sc = (n: string) => cats?.find((c) => c.categoryName === n)?.score ?? 0;
+  const blink: [number, number] | undefined = cats?.length ? [sc("eyeBlinkLeft"), sc("eyeBlinkRight")] : undefined;
+  return { count: faces.length, box: { x0, y0, x1, y1 }, ratio, yawDeg, blink };
 }

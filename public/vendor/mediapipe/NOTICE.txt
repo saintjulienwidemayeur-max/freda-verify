@@ -1,6 +1,8 @@
-Third-party components in this folder
--------------------------------------
+Third-party components used by the hosted verification page
+-----------------------------------------------------------
 - wasm/vision_wasm_internal.{js,wasm}: MediaPipe Tasks Vision 1.2.3 runtime (npm package @mediapipe/tasks-vision), Apache License 2.0.
-- face_landmarker.task: MediaPipe Face Landmarker model bundle (float16, v1) downloaded from Google's mediapipe-models storage.
-  License of the model weights/data must be confirmed from the official model card before commercial production use (see CLAUDE.md, section 9).
+  These two files are copied from node_modules at build time by scripts/copy-vendor.mjs (they are not stored in git).
+- face_landmarker.task: MediaPipe Face Landmarker model bundle (float16, v1): face_detector (BlazeFace short range), face_landmarks_detector (Face Mesh V2) and face_blendshapes (Blendshape V2).
+  The official model cards (downloaded 2026-11-19 from https://storage.googleapis.com/mediapipe-assets/) state: "LICENSED UNDER Apache License, Version 2.0".
+  Model cards: "Model Card MediaPipe Face Mesh V2.pdf", "MediaPipe BlazeFace Model Card (Short Range).pdf", "Model Card Blendshape V2.pdf".
 Apache License 2.0 text: LICENSE-Apache-2.0.txt
