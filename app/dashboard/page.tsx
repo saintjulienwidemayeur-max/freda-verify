@@ -1,4 +1,4 @@
-import Link from "next/link";
+import DashShell from "@/components/DashShell";
 
 type Status = "APPROVED" | "REJECTED" | "PENDING";
 const ROWS: [string, string, string, Status, number][] = [
@@ -14,18 +14,10 @@ const BADGE: Record<Status, string> = {
   PENDING: "border border-dashed border-black",
 };
 const BARS = [42, 58, 51, 74, 66, 88, 79];
-const NAV = ["Overview", "Verifications", "API Keys", "Logs", "Settings"];
 
 export default function Dashboard() {
   return (
-    <div className="grid min-h-screen md:grid-cols-[200px_1fr]">
-      <aside className="border-b border-black p-5 md:border-b-0 md:border-r">
-        <Link href="/" className="font-bold tracking-tight">FREDA VERIFY</Link>
-        <nav className="mt-6 flex gap-4 text-sm md:flex-col md:gap-2">
-          {NAV.map((n, i) => <a key={n} href="#" className={i === 0 ? "font-bold underline" : "opacity-70"}>{n}</a>)}
-        </nav>
-      </aside>
-      <main className="min-w-0 p-6">
+    <DashShell active="Overview">
         <h1 className="text-3xl font-extrabold tracking-tighter">Overview</h1>
         <div className="mt-5 grid grid-cols-2 gap-px border border-black bg-black md:grid-cols-4">
           {[["12,480", "Total checks"], ["96.4%", "Success rate"], ["1.2s", "Avg response"], ["37", "Active requests"]].map(([v, l]) => (
@@ -52,7 +44,6 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
-      </main>
-    </div>
+    </DashShell>
   );
 }
