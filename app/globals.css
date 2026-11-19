@@ -10,3 +10,6 @@ h1, h2, h3, h4 { font-family: var(--h), var(--f), system-ui, sans-serif; letter-
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 @keyframes scan-line { 0% { top: 6%; } 50% { top: 92%; } 100% { top: 6%; } }
+@keyframes nudge-left { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
+@keyframes nudge-right { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(22px); } }
+@keyframes chev { 0% { opacity: .15; } 50% { opacity: 1; } 100% { opacity: .15; } }

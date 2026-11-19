@@ -28,6 +28,8 @@ type Dict = {
   scanPlace: string; scanFace: string; scanHold: string; scanDark: string; scanGlare: string; scanBlur: string; scanAuto: string; scanDone: string; capNow: string;
   scanLoading: string; scanCloser: string; scanFar: string; scanCenter: string; scanFound: string;
   qrTitle: string; qrSub: string; qrWhy: string; qrCopy: string; qrCopied: string; qrHere: string;
+  faceLoading: string; faceNone: string; faceMulti: string; faceSmall: string; faceBig: string; faceCenter: string; faceFront: string;
+  turnL: string; turnR: string; turnWrong: string; turnOk: string; turnAgain: string; dirL: string; dirR: string; stepFace: string; stepTurn: string;
   demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
 };
 
@@ -40,7 +42,7 @@ export const T: Record<Lang, Dict> = {
     docT: "Choose your document", docS: "Select the document you want to use.", issued: "Issued in", change: "Change",
     id: "National ID card", passport: "Passport", license: "Driver's license",
     idS: "Front and back", passportS: "Photo page", licenseS: "Front and back", tips: "Good lighting · No glare · All corners visible",
-    selfieT: "Take a selfie", selfieS: "Center your face in the oval and hold still.", selfieB: "Take selfie", selfieTips: "Remove glasses · Neutral face · Good light",
+    selfieT: "Take a selfie", selfieS: "Center your face in the oval. We will then ask you to turn your head left or right.", selfieB: "Take selfie", selfieTips: "Remove glasses · Neutral face · Good light",
     doneT: "Verification submitted", doneS: "Thank you! We are reviewing your information. You will be notified of the result shortly.", back: "Back to", redirect: "You will be redirected automatically.",
     frontT: "Front of your document", frontS: "Place the front inside the frame.", backT: "Back of your document", backS: "Now turn it over and capture the back.", pageT: "Passport photo page", pageS: "Open the passport to the photo page.",
     takeCam: "Use camera", upload: "Upload a photo", retake: "Retake", useAnyway: "Use anyway", capture: "Capture", cancel: "Cancel", camDenied: "Camera unavailable. You can upload a photo instead.",
@@ -48,6 +50,8 @@ export const T: Record<Lang, Dict> = {
     scanPlace: "Place the document inside the frame", scanFace: "Center your face in the oval", scanHold: "Hold steady…", scanDark: "Too dark — find better light", scanGlare: "Glare detected — tilt slightly", scanBlur: "Move closer or hold still", scanAuto: "Automatic capture", scanDone: "Captured!", capNow: "Capture now",
     scanLoading: "Preparing the scanner…", scanCloser: "Move closer", scanFar: "Move back a little", scanCenter: "Center the document in the frame", scanFound: "Document detected",
     qrTitle: "Continue on your phone", qrSub: "Scan this QR code with your phone camera to continue the verification.", qrWhy: "Your phone camera takes much better photos of your document and face.", qrCopy: "Copy link", qrCopied: "Link copied", qrHere: "Continue on this computer",
+    faceLoading: "Preparing face detection…", faceNone: "No face detected — center your face in the oval", faceMulti: "Only one person in the frame, please", faceSmall: "Move a little closer", faceBig: "Move back a little", faceCenter: "Center your face in the oval", faceFront: "Look straight at the camera",
+    turnL: "Slowly turn your head to the LEFT", turnR: "Slowly turn your head to the RIGHT", turnWrong: "Other way — turn to your", turnOk: "Perfect!", turnAgain: "Let's try again", dirL: "LEFT", dirR: "RIGHT", stepFace: "Face", stepTurn: "Turn",
     demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
   },
   fr: {
@@ -58,7 +62,7 @@ export const T: Record<Lang, Dict> = {
     docT: "Choisissez votre document", docS: "Sélectionnez le document que vous souhaitez utiliser.", issued: "Émis en", change: "Modifier",
     id: "Carte d'identité nationale", passport: "Passeport", license: "Permis de conduire",
     idS: "Recto et verso", passportS: "Page photo", licenseS: "Recto et verso", tips: "Bon éclairage · Sans reflet · Coins visibles",
-    selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale et ne bougez pas.", selfieB: "Prendre le selfie", selfieTips: "Sans lunettes · Visage neutre · Bonne lumière",
+    selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale. Nous vous demanderons ensuite de tourner la tête à gauche ou à droite.", selfieB: "Prendre le selfie", selfieTips: "Sans lunettes · Visage neutre · Bonne lumière",
     doneT: "Vérification envoyée", doneS: "Merci ! Nous examinons vos informations. Vous serez informé du résultat sous peu.", back: "Retour à", redirect: "Vous serez redirigé automatiquement.",
     frontT: "Recto de votre document", frontS: "Placez le recto dans le cadre.", backT: "Verso de votre document", backS: "Retournez-le et capturez le verso.", pageT: "Page photo du passeport", pageS: "Ouvrez le passeport à la page photo.",
     takeCam: "Utiliser la caméra", upload: "Téléverser une photo", retake: "Reprendre", useAnyway: "Utiliser quand même", capture: "Capturer", cancel: "Annuler", camDenied: "Caméra indisponible. Vous pouvez téléverser une photo.",
@@ -66,6 +70,8 @@ export const T: Record<Lang, Dict> = {
     scanPlace: "Placez le document dans le cadre", scanFace: "Centrez votre visage dans l'ovale", scanHold: "Ne bougez pas…", scanDark: "Trop sombre — cherchez plus de lumière", scanGlare: "Reflet détecté — inclinez légèrement", scanBlur: "Rapprochez-vous ou restez stable", scanAuto: "Capture automatique", scanDone: "Capturé !", capNow: "Capturer maintenant",
     scanLoading: "Préparation du scanner…", scanCloser: "Rapprochez-vous", scanFar: "Reculez un peu", scanCenter: "Centrez le document dans le cadre", scanFound: "Document détecté",
     qrTitle: "Continuez sur votre téléphone", qrSub: "Scannez ce code QR avec l'appareil photo de votre téléphone pour poursuivre la vérification.", qrWhy: "La caméra de votre téléphone prend de bien meilleures photos de votre document et de votre visage.", qrCopy: "Copier le lien", qrCopied: "Lien copié", qrHere: "Continuer sur cet ordinateur",
+    faceLoading: "Préparation de la détection du visage…", faceNone: "Aucun visage détecté — centrez votre visage dans l'ovale", faceMulti: "Une seule personne dans le cadre, s'il vous plaît", faceSmall: "Rapprochez-vous un peu", faceBig: "Reculez un peu", faceCenter: "Centrez votre visage dans l'ovale", faceFront: "Regardez droit devant vous",
+    turnL: "Tournez lentement la tête vers la GAUCHE", turnR: "Tournez lentement la tête vers la DROITE", turnWrong: "Dans l'autre sens — tournez vers votre", turnOk: "Parfait !", turnAgain: "Réessayons", dirL: "GAUCHE", dirR: "DROITE", stepFace: "Visage", stepTurn: "Tourner",
     demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
   },
   ht: {
@@ -76,7 +82,7 @@ export const T: Record<Lang, Dict> = {
     docT: "Chwazi dokiman w", docS: "Chwazi dokiman ou vle itilize a.", issued: "Bay nan", change: "Chanje",
     id: "Kat idantite nasyonal", passport: "Paspò", license: "Pèmi kondwi",
     idS: "Devan ak dèyè", passportS: "Paj foto a", licenseS: "Devan ak dèyè", tips: "Bon limyè · Pa gen refle · Tout kwen yo vizib",
-    selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la epi pa bouje.", selfieB: "Pran selfi a", selfieTips: "Retire linèt · Figi nòmal · Bon limyè",
+    selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la. Apre nou pral mande w vire tèt ou goch oswa dwat.", selfieB: "Pran selfi a", selfieTips: "Retire linèt · Figi nòmal · Bon limyè",
     doneT: "Verifikasyon an voye", doneS: "Mèsi! N ap egzamine enfòmasyon w yo. N ap enfòme w rezilta a talè.", back: "Retounen sou", redirect: "W ap retounen otomatikman.",
     frontT: "Devan dokiman w", frontS: "Mete devan an andedan kadre a.", backT: "Dèyè dokiman w", backS: "Kounye a vire l epi pran dèyè a.", pageT: "Paj foto paspò a", pageS: "Louvri paspò a nan paj foto a.",
     takeCam: "Itilize kamera", upload: "Voye yon foto", retake: "Refè", useAnyway: "Itilize l kanmenm", capture: "Pran foto", cancel: "Anile", camDenied: "Kamera pa disponib. Ou ka voye yon foto.",
@@ -84,6 +90,8 @@ export const T: Record<Lang, Dict> = {
     scanPlace: "Mete dokiman an andedan kadre a", scanFace: "Mete figi w nan ovòl la", scanHold: "Pa bouje…", scanDark: "Twò nwa — chèche plis limyè", scanGlare: "Gen refle — enkline l yon ti jan", scanBlur: "Pwoche oswa pa bouje", scanAuto: "Kapti otomatik", scanDone: "Kaptire!", capNow: "Pran foto kounye a",
     scanLoading: "N ap prepare eskanè a…", scanCloser: "Pwoche", scanFar: "Rekile yon ti jan", scanCenter: "Mete dokiman an nan mitan kadre a", scanFound: "Dokiman an detekte",
     qrTitle: "Kontinye sou telefòn ou", qrSub: "Eskane kòd QR sa a ak kamera telefòn ou pou kontinye verifikasyon an.", qrWhy: "Kamera telefòn ou pran pi bon foto dokiman w ak figi w.", qrCopy: "Kopye lyen an", qrCopied: "Lyen an kopye", qrHere: "Kontinye sou òdinatè sa a",
+    faceLoading: "N ap prepare deteksyon figi a…", faceNone: "Pa gen figi detekte — mete figi w nan ovòl la", faceMulti: "Yon sèl moun nan kadre a, tanpri", faceSmall: "Pwoche yon ti jan", faceBig: "Rekile yon ti jan", faceCenter: "Mete figi w nan mitan ovòl la", faceFront: "Gade dirèk kamera a",
+    turnL: "Vire tèt ou dousman sou bò GOCH", turnR: "Vire tèt ou dousman sou bò DWAT", turnWrong: "Lòt bò — vire sou bò", turnOk: "Pafè!", turnAgain: "Ann eseye ankò", dirL: "GOCH", dirR: "DWAT", stepFace: "Figi", stepTurn: "Vire",
     demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
   },
 };

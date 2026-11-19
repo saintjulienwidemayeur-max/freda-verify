@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES, DOC_ICON, Ic, LANGS, RADIUS, T, flag, fold, isMail, onColor, termsLabel } from "./HostedPreview";
 import type { Cfg, DocKey, Lang, Shape, Theme } from "./HostedPreview";
 import Scanner from "./Scanner";
+import FaceScanner from "./FaceScanner";
 import qrcode from "qrcode-generator";
 
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
@@ -108,6 +109,8 @@ export default function HostedPage() {
   const soft = dark ? "rgba(255,255,255,.07)" : "#F5F7FC", tint = `${c.color}1A`;
   const name = c.name;
 
+  const scanTx = useMemo(() => ({ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, found: t.scanFound,
+    faceLoading: t.faceLoading, faceNone: t.faceNone, faceMulti: t.faceMulti, faceSmall: t.faceSmall, faceBig: t.faceBig, faceCenter: t.faceCenter, faceFront: t.faceFront, turnL: t.turnL, turnR: t.turnR, turnWrong: t.turnWrong, turnOk: t.turnOk, turnAgain: t.turnAgain, dirL: t.dirL, dirR: t.dirR, stepFace: t.stepFace, stepTurn: t.stepTurn }), [t]);
   const names = useMemo(() => {
     let dn: Intl.DisplayNames | null = null;
     try { dn = new Intl.DisplayNames([c.lang === "ht" ? "fr" : c.lang], { type: "region" }); } catch { dn = null; }
@@ -175,8 +178,9 @@ export default function HostedPage() {
       <p className="mt-1 text-[15px]" style={{ color: mut }}>{sub}</p>
       {cam ? (
         <div className="mt-4 flex min-h-[380px] flex-1 flex-col">
-          <Scanner mode={isSelfie ? "selfie" : "doc"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r}
-            tx={{ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, found: t.scanFound }} />
+          {isSelfie
+            ? <FaceScanner onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} />
+            : <Scanner mode="doc" onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} />}
         </div>
       ) : s ? (
         <div className="mt-4 flex flex-1 flex-col gap-3">

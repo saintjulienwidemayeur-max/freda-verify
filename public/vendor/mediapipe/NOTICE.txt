@@ -1,0 +1,6 @@
+Third-party components in this folder
+-------------------------------------
+- wasm/vision_wasm_internal.{js,wasm}: MediaPipe Tasks Vision 1.2.3 runtime (npm package @mediapipe/tasks-vision), Apache License 2.0.
+- face_landmarker.task: MediaPipe Face Landmarker model bundle (float16, v1) downloaded from Google's mediapipe-models storage.
+  License of the model weights/data must be confirmed from the official model card before commercial production use (see CLAUDE.md, section 9).
+Apache License 2.0 text: LICENSE-Apache-2.0.txt
