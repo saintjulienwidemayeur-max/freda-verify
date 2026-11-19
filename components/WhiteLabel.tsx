@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import HostedPreview, { T, type Cfg, type DocKey, type Step } from "./HostedPreview";
 
 const DEFAULT: Cfg = {
-  name: "Your Company", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
+  name: "", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
   title: "", subtitle: "", docs: { id: true, passport: true, license: false }, domain: "", redirect: "", support: "", hidePowered: false,
 };
 const PRESETS = ["#1E4FE0", "#0A1647", "#12B76A", "#7A3FF2", "#E5484D", "#F79009"];
@@ -50,8 +50,9 @@ export default function WhiteLabel() {
   }), [c]);
   const invalid = Object.values(err).some(Boolean);
   const pageUrl = useMemo(() => {
-    const q = new URLSearchParams({ name: c.name.trim() || "Your Company", color: c.color.replace("#", ""), theme: c.theme, shape: c.shape, lang: c.lang,
+    const q = new URLSearchParams({ color: c.color.replace("#", ""), theme: c.theme, shape: c.shape, lang: c.lang,
       docs: (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]).join(",") });
+    if (c.name.trim()) q.set("name", c.name.trim());
     if (c.title.trim()) q.set("title", c.title.trim());
     if (c.subtitle.trim()) q.set("subtitle", c.subtitle.trim());
     if (isMail(c.support)) q.set("support", c.support);
@@ -76,12 +77,13 @@ export default function WhiteLabel() {
       <div className="mt-6 grid items-start gap-6 min-[960px]:grid-cols-[322px_1fr]">
         <form onSubmit={(e) => { e.preventDefault(); if (!invalid) setSaved(true); }} className="min-w-0 space-y-4">
           <Card title="Brand" sub="Shown at the top of the verification page.">
-            <label className="block text-sm font-medium">Brand name<input value={c.name} maxLength={40} onChange={(e) => set("name", e.target.value)} className={input} /></label>
+            <label className="block text-sm font-medium">Brand name<input value={c.name} maxLength={40} onChange={(e) => set("name", e.target.value)} placeholder="Freda Verify (default)" className={input} />
+              <span className="mt-1 block text-xs font-normal text-navy/50">Leave empty to use the Freda Verify name and logo.</span></label>
             <div className="text-sm font-medium">Logo
               <div className="mt-1.5 flex flex-wrap items-center gap-3">
                 <span className="grid h-14 w-28 place-items-center overflow-hidden rounded-xl border border-[#d6e2ff] bg-[#F6F8FC]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {c.logo ? <img src={c.logo} alt="Logo preview" className="max-h-12 max-w-24 object-contain" /> : <span className="text-xs font-normal text-navy/40">No logo</span>}
+                  {c.logo ? <img src={c.logo} alt="Logo preview" className="max-h-12 max-w-24 object-contain" /> : c.name.trim() ? <span className="text-xs font-normal text-navy/40">No logo</span> : <img src="/logo-mark.svg" alt="Freda Verify default logo" className="h-10 w-10" />}
                 </span>
                 <label className="cursor-pointer rounded-full border border-[#d6e2ff] px-4 py-2 text-sm font-normal hover:bg-ice">Upload logo
                   <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="sr-only" onChange={(e) => onLogo(e.target.files?.[0])} /></label>
@@ -110,7 +112,7 @@ export default function WhiteLabel() {
 
           <Card title="Content" sub="Language and the welcome message. Leave blank to use the default text.">
             <div className="text-sm font-medium">Language<div className="mt-1.5"><Seg label="Language" value={c.lang} set={(v) => set("lang", v)} opts={[["en", "English"], ["fr", "Français"], ["ht", "Kreyòl"]]} /></div></div>
-            <label className="block text-sm font-medium">Welcome title<input value={c.title} maxLength={60} onChange={(e) => set("title", e.target.value)} placeholder={`${T[c.lang].titleFor} ${c.name.trim() || "Your Company"}`} className={input} /></label>
+            <label className="block text-sm font-medium">Welcome title<input value={c.title} maxLength={60} onChange={(e) => set("title", e.target.value)} placeholder={`${T[c.lang].titleFor} ${c.name.trim() || "Freda Verify"}`} className={input} /></label>
             <label className="block text-sm font-medium">Welcome message<textarea value={c.subtitle} maxLength={140} rows={2} onChange={(e) => set("subtitle", e.target.value)} placeholder={T[c.lang].sub} className={input} /></label>
             <label className="block text-sm font-medium">Support email shown to your customers<input type="email" value={c.support} onChange={(e) => set("support", e.target.value)} placeholder="support@yourcompany.com" className={input} />
               {err.support && <span role="alert" className="mt-1 block text-xs font-normal text-[#B42318]">{err.support}</span>}</label>

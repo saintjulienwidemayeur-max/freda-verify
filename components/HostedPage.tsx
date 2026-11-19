@@ -11,7 +11,7 @@ import qrcode from "qrcode-generator";
 
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
 const DEFAULTS: Cfg = {
-  name: "Your Company", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
+  name: "", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
   title: "", subtitle: "", docs: { id: true, passport: true, license: false }, domain: "", redirect: "", support: "", hidePowered: false,
 };
 const clean = (v: string | null, max: number) => (v ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, max);
@@ -26,7 +26,7 @@ function readConfig(search: string): Cfg {
   const support = clean(q.get("support"), 80);
   return {
     ...DEFAULTS,
-    name: clean(q.get("name"), 40) || DEFAULTS.name,
+    name: clean(q.get("name"), 40),
     color: /^#?[0-9a-fA-F]{6}$/.test(color) ? `#${color.replace("#", "").toUpperCase()}` : DEFAULTS.color,
     theme: (theme === "dark" ? "dark" : "light") as Theme,
     shape: (["square", "rounded", "pill"].includes(shape ?? "") ? shape : "rounded") as Shape,
@@ -117,7 +117,8 @@ export default function HostedPage() {
   const bg = dark ? "#0A1647" : "#FFFFFF", tx = dark ? "#FFFFFF" : "#0A1647";
   const mut = dark ? "rgba(255,255,255,.65)" : "rgba(10,22,71,.58)", line = dark ? "rgba(255,255,255,.16)" : "#E6ECF7";
   const soft = dark ? "rgba(255,255,255,.07)" : "#F5F7FC", tint = `${c.color}1A`;
-  const name = c.name;
+  const custom = c.name.trim().length > 0;
+  const name = c.name.trim() || "Freda Verify"; // default brand when the client has not filled the white label
 
   const scanTx = useMemo(() => ({ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, found: t.scanFound,
     scanFail: t.scanFail, retry: t.retry, showPassport: t.showPassport, showId: t.showId, docRej: t.docRej, rejShape: t.rejShape, rejFace: t.rejFace, rejMrz: t.rejMrz, rejUnavail: t.rejUnavail, blinkNow: t.blinkNow, stepAction: t.stepAction, tipMore: t.tipMore,
@@ -159,7 +160,10 @@ export default function HostedPage() {
     <button type="button" onClick={onClick} disabled={disabled} className="w-full py-3.5 text-[15px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-40"
       style={ghost ? { border: `1px solid ${line}`, borderRadius: r } : { background: c.color, color: fg, borderRadius: r }}>{children}</button>
   );
-  const Logo = () => c.logo ? null : <span className="grid h-11 w-11 place-items-center rounded-xl text-lg font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>;
+  const Logo = () => custom
+    ? <span className="grid h-11 w-11 place-items-center rounded-xl text-lg font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>
+    // eslint-disable-next-line @next/next/no-img-element
+    : <img src="/logo-mark.svg" alt="Freda Verify" className="h-12 w-12" />;
   const Secured = () => (
     <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px]" style={{ color: mut }}>
       {t.secured}

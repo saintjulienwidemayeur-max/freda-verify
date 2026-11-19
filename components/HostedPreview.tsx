@@ -140,7 +140,8 @@ export default function HostedPreview({ c, step, go, setLang }: { c: Cfg; step: 
   const mut = dark ? "rgba(255,255,255,.62)" : "rgba(10,22,71,.55)", line = dark ? "rgba(255,255,255,.14)" : "#E6ECF7";
   const soft = dark ? "rgba(255,255,255,.06)" : "#F5F7FC";
   const tint = `${c.color}1A`;
-  const name = c.name.trim() || "Your Company";
+  const custom = c.name.trim().length > 0;
+  const name = c.name.trim() || "Freda Verify"; // default brand when the client has not filled the white label
   const card = Math.min(r, 16);
 
   const names = useMemo(() => {
@@ -160,7 +161,10 @@ export default function HostedPreview({ c, step, go, setLang }: { c: Cfg; step: 
   const Logo = ({ size = 34 }: { size?: number }) => c.logo
     // eslint-disable-next-line @next/next/no-img-element
     ? <img src={c.logo} alt="" style={{ height: size, maxWidth: 150 }} className="object-contain" />
-    : <span className="grid place-items-center rounded-xl font-bold" style={{ width: size, height: size, background: c.color, color: fg, fontSize: size * 0.42 }}>{name[0]?.toUpperCase()}</span>;
+    : !custom
+      // eslint-disable-next-line @next/next/no-img-element
+      ? <img src="/logo-mark.svg" alt="Freda Verify" style={{ height: size, width: size }} />
+      : <span className="grid place-items-center rounded-xl font-bold" style={{ width: size, height: size, background: c.color, color: fg, fontSize: size * 0.42 }}>{name[0]?.toUpperCase()}</span>;
   const Secured = () => c.hidePowered ? null : (
     <div className="mt-2 flex items-center justify-center gap-1.5 text-[9px]" style={{ color: mut }}>
       {t.secured}
