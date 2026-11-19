@@ -10,7 +10,7 @@ const SOON = ["API Keys", "Logs", "Settings"];
 export default function DashShell({ active, children }: { active: string; children: ReactNode }) {
   return (
     <div className="grid min-h-screen md:grid-cols-[200px_1fr]">
-      <aside className="border-b border-navy/80 p-5 md:border-b-0 md:border-r">
+      <aside className="border-b border-[#d6e2ff] p-5 md:border-b-0 md:border-r">
         <Link href="/" className="flex items-center gap-2 font-display font-extrabold tracking-tight">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-mark.svg" alt="" className="h-7 w-7" />Freda <span className="text-electric">Verify</span>

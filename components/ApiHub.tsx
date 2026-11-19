@@ -75,7 +75,7 @@ export default function ApiHub() {
       </svg>
 
       <div className="absolute left-1/2 top-1/2 h-[25%] w-[25%] -translate-x-1/2 -translate-y-1/2">
-        <motion.div variants={hubV} className="grid h-full w-full place-items-center rounded-full border border-navy/80 bg-white shadow-[0_10px_50px_rgba(30,79,224,.22)]">
+        <motion.div variants={hubV} className="grid h-full w-full place-items-center rounded-full border border-[#d6e2ff] bg-white shadow-[0_10px_50px_rgba(30,79,224,.22)]">
           <span className="text-center font-mono text-[7px] font-semibold leading-snug tracking-[0.14em] sm:text-[10px]">
             FREDA VERIFY<br />API
           </span>
@@ -91,7 +91,7 @@ export default function ApiHub() {
               <motion.div
                 animate={{ scale: on ? 1.12 : 1, backgroundColor: on ? "#1E4FE0" : "#fff", color: on ? "#fff" : "#0A1647" }}
                 transition={{ duration: 0.35 }}
-                className="grid h-full w-full place-items-center rounded-full border border-navy/80 shadow-md"
+                className="grid h-full w-full place-items-center rounded-full border border-[#d6e2ff] shadow-md"
               >
                 <Svg>{n.icon}</Svg>
               </motion.div>

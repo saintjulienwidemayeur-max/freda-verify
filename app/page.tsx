@@ -69,11 +69,11 @@ export default function Home() {
       <Platform />
       <Developers />
       <AmlScreening />
-      <section id="solutions" className="border-t border-navy/80 py-16">
+      <section id="solutions" className="py-16">
         <h2 className="max-w-xl text-4xl font-extrabold tracking-tighter">One platform for every identity decision.</h2>
-        <div className="mt-10 grid gap-px border border-navy/80 bg-navy md:grid-cols-4">
+        <div className="mt-10 grid gap-4 md:grid-cols-4">
           {FEATURES.map(([t, d]) => (
-            <div key={t} className="bg-ice p-6"><h3 className="font-bold">{t}</h3><p className="mt-2 text-sm">{d}</p></div>
+            <div key={t} className="rounded-2xl border border-[#d6e2ff] bg-ice p-6"><h3 className="font-bold">{t}</h3><p className="mt-2 text-sm">{d}</p></div>
           ))}
         </div>
       </section>
@@ -82,26 +82,24 @@ export default function Home() {
       <Industries />
       <Workflow />
       <Audit />
-      <section id="demo" className="border-t border-navy/80 py-16">
-        <h2 className="mb-2 text-4xl font-extrabold tracking-tighter">See a check run.</h2>
-        <p className="mb-8 text-sm">Simulated data. No account needed.</p>
+      <section id="demo" className="py-16">
         <Demo />
       </section>
 
       <Integration />
       <Security />
-      <section id="pricing" className="border-t border-navy/80 py-16">
+      <section id="pricing" className="py-16">
         <h2 className="text-4xl font-extrabold tracking-tighter">Pricing</h2>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {PLANS.map(([n, p, d]) => (
-            <div key={n} className="rounded-2xl border border-navy/80 p-6"><div className="font-bold">{n}</div><div className="my-2 text-4xl font-extrabold">{p}</div><div className="text-sm">{d}</div></div>
+            <div key={n} className="rounded-2xl border border-[#d6e2ff] p-6"><div className="font-bold">{n}</div><div className="my-2 text-4xl font-extrabold">{p}</div><div className="text-sm">{d}</div></div>
           ))}
         </div>
       </section>
 
       <Faq />
       <Contact />
-      <footer id="insights" className="flex flex-wrap justify-between gap-3 border-t border-navy/80 py-8 text-sm">
+      <footer id="insights" className="flex flex-wrap justify-between gap-3 border-t border-[#d6e2ff] py-8 text-sm">
         <span>© 2026 Freda Verify</span><span>Docs · Status · Privacy</span>
       </footer>
       </div>

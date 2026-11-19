@@ -19,20 +19,20 @@ export default function Dashboard() {
   return (
     <DashShell active="Overview">
         <h1 className="text-3xl font-extrabold tracking-tighter">Overview</h1>
-        <div className="mt-5 grid grid-cols-2 gap-px border border-navy/80 bg-navy md:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[["12,480", "Total checks"], ["96.4%", "Success rate"], ["1.2s", "Avg response"], ["37", "Active requests"]].map(([v, l]) => (
-            <div key={l} className="bg-ice p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
+            <div key={l} className="rounded-2xl border border-[#d6e2ff] bg-ice p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
           ))}
         </div>
-        <div className="mt-6 border border-navy/80 p-4">
+        <div className="mt-6 rounded-2xl border border-[#d6e2ff] p-4">
           <div className="mb-3 text-sm font-bold">Checks per day (last 7 days)</div>
           <div className="flex h-32 items-end gap-2" role="img" aria-label="Bar chart of checks per day">
             {BARS.map((h, i) => <div key={i} className="flex-1 bg-blue" style={{ height: `${h}%` }} />)}
           </div>
         </div>
-        <div className="mt-6 overflow-x-auto border border-navy/80">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-[#d6e2ff]">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-navy/80 font-mono text-xs"><tr>{["Name", "Type", "Document", "Status", "Match"].map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead>
+            <thead className="border-b border-[#d6e2ff] font-mono text-xs"><tr>{["Name", "Type", "Document", "Status", "Match"].map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {ROWS.map(([n, t, d, s, m]) => (
                 <tr key={n} className="border-b border-blue/15 last:border-0">

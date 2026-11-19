@@ -40,24 +40,24 @@ export default function Businesses() {
       <h1 className="text-3xl font-extrabold tracking-tighter">Businesses</h1>
       <p className="mt-1 text-sm opacity-60">KYB verifications · sample data</p>
 
-      <div className="mt-5 grid grid-cols-2 gap-px border border-navy/80 bg-navy md:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         {([["Total", DATA.length], ["Approved", count("APPROVED")], ["In review", count("REVIEW") + count("PENDING")], ["Rejected", count("REJECTED")]] as const).map(([l, v]) => (
-          <div key={l} className="bg-ice p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
+          <div key={l} className="rounded-2xl border border-[#d6e2ff] bg-ice p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
         ))}
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         {FILTERS.map((x) => (
           <button key={x} onClick={() => setF(x)} aria-pressed={f === x}
-            className={`rounded-full border border-navy/80 px-3 py-1 font-mono text-xs ${f === x ? "bg-navy text-white" : ""}`}>{x}</button>
+            className={`rounded-full border border-[#d6e2ff] px-3 py-1 font-mono text-xs ${f === x ? "bg-navy text-white" : ""}`}>{x}</button>
         ))}
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search business…" aria-label="Search business"
-          className="ml-auto w-full border border-navy/80 bg-transparent px-3 py-1.5 text-sm md:w-64" />
+          className="ml-auto w-full rounded-full border border-[#d6e2ff] bg-transparent px-4 py-1.5 text-sm md:w-64" />
       </div>
 
-      <div className="mt-4 overflow-x-auto border border-navy/80">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#d6e2ff]">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-navy/80 font-mono text-xs">
+          <thead className="border-b border-[#d6e2ff] font-mono text-xs">
             <tr>{["Business", "Country", "Source", "UBOs", "Risk", "Status", "Score", "Date"].map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr>
           </thead>
           <tbody>
@@ -77,7 +77,7 @@ export default function Businesses() {
       </div>
 
       {sel && (
-        <div className="mt-6 border border-navy/80 p-4" role="region" aria-label="Business details">
+        <div className="mt-6 rounded-2xl border border-[#d6e2ff] p-4" role="region" aria-label="Business details">
           <div className="flex items-start justify-between">
             <div><div className="text-lg font-bold">{sel.name}</div><div className="text-xs opacity-60">{sel.country} · {sel.reg}</div></div>
             <button onClick={() => setOpen(null)} className="font-mono text-xs underline">Close</button>
