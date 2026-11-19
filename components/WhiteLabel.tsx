@@ -155,7 +155,7 @@ export default function WhiteLabel() {
       <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">White label</h1>
       <p className="mt-1 text-sm text-navy/60">Make the verification page look like your own brand before you send it to your customers.</p>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[340px_1fr]">
         <form onSubmit={(e) => { e.preventDefault(); if (!invalid) setSaved(true); }} className="min-w-0 space-y-4">
           <Card title="Brand" sub="Shown at the top of the verification page.">
             <label className="block text-sm font-medium">Brand name<input value={c.name} maxLength={40} onChange={(e) => set("name", e.target.value)} className={input} /></label>
@@ -231,7 +231,7 @@ export default function WhiteLabel() {
           <p className="text-xs text-navy/50">Demo: settings live in this browser tab only and are not stored yet.</p>
         </form>
 
-        <aside className="xl:sticky xl:top-4" aria-label="Live preview">
+        <aside className="xl:sticky xl:top-4 xl:order-first" aria-label="Live preview">
           <div className="rounded-2xl border border-[#e3eaf8] bg-white p-5">
             <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Live preview</h2><span className="font-mono text-[10px] uppercase tracking-widest text-navy/50">Hosted page</span></div>
             <div className="mb-4 flex flex-wrap justify-center gap-1.5" role="tablist" aria-label="Preview step">
