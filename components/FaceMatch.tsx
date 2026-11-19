@@ -6,44 +6,32 @@ const BLUE = "#1E4FE0";
 const RED = "#D92D20";
 const GREEN = "#12B76A";
 
-type Scenario = { selfie: "same" | "other"; score: number; match: boolean };
+type Photo = "man-doc" | "man-selfie" | "woman-selfie";
+type Scenario = { selfie: Photo; score: number; match: boolean };
 const SCENARIOS: Scenario[] = [
-  { selfie: "same", score: 98, match: true },
-  { selfie: "other", score: 34, match: false },
+  { selfie: "man-selfie", score: 98, match: true },
+  { selfie: "woman-selfie", score: 34, match: false },
 ];
+// Landmarks (left eye, right eye, nose, mouth) as fractions of each cropped photo
+const LM: Record<Photo, [number, number][]> = {
+  "man-doc": [[0.375, 0.38], [0.625, 0.38], [0.496, 0.496], [0.496, 0.592]],
+  "man-selfie": [[0.355, 0.38], [0.645, 0.38], [0.496, 0.515], [0.496, 0.625]],
+  "woman-selfie": [[0.355, 0.38], [0.645, 0.382], [0.493, 0.532], [0.493, 0.618]],
+};
 const CHECKS = ["Qualité d'image", "Un seul visage", "Aucune occlusion"];
 
-// Card geometry (SVG viewBox 400 x 190)
+// Card geometry (SVG viewBox 400 x 165)
 const DOC = { x: 70, y: 8 };
 const SELF = { x: 230, y: 8 };
 const CW = 100;
 const PH = { dx: 8, dy: 8, w: 84, h: 100 };
-const face = (c: { x: number; y: number }) => ({ cx: c.x + PH.dx + PH.w / 2, cy: c.y + PH.dy + 46 });
-const LANDMARKS: [number, number][] = [[-8, -5], [8, -5], [0, 5], [0, 14]];
+const pt = (c: { x: number; y: number }, [fx, fy]: [number, number]) => ({ x: c.x + PH.dx + fx * PH.w, y: c.y + PH.dy + fy * PH.h });
 
-function Person({ x, y, variant, doc }: { x: number; y: number; variant: "man" | "woman"; doc?: boolean }) {
-  const { cx, cy } = face({ x, y });
-  const skin = doc ? "#C9CDD6" : variant === "man" ? "#B9A595" : "#D2B8A6";
-  const hair = doc ? "#3B4252" : "#1C1F2A";
-  const shirt = doc ? "#5B6478" : "#0A1647";
-  const px = x + PH.dx, py = y + PH.dy;
+function Photo({ x, y, src, id }: { x: number; y: number; src: Photo; id: string }) {
   return (
     <g>
-      <clipPath id={`clip-${x}`}><rect x={px} y={py} width={PH.w} height={PH.h} rx="6" /></clipPath>
-      <g clipPath={`url(#clip-${x})`}>
-        <rect x={px} y={py} width={PH.w} height={PH.h} fill={doc ? "#E7EAF0" : "#DDE6F6"} />
-        {variant === "woman" && <path d={`M${cx - 24} ${cy - 6} Q${cx - 26} ${cy + 40} ${cx - 30} ${cy + 52} L${cx + 30} ${cy + 52} Q${cx + 26} ${cy + 40} ${cx + 24} ${cy - 6} Z`} fill={hair} />}
-        <path d={`M${cx - 38} ${py + PH.h} Q${cx - 34} ${cy + 30} ${cx} ${cy + 28} Q${cx + 34} ${cy + 30} ${cx + 38} ${py + PH.h} Z`} fill={shirt} />
-        <rect x={cx - 7} y={cy + 16} width="14" height="14" fill={skin} />
-        <ellipse cx={cx} cy={cy} rx="18" ry="23" fill={skin} />
-        {variant === "man"
-          ? <path d={`M${cx - 18} ${cy - 6} Q${cx - 20} ${cy - 26} ${cx} ${cy - 26} Q${cx + 20} ${cy - 26} ${cx + 18} ${cy - 6} Q${cx + 12} ${cy - 18} ${cx} ${cy - 18} Q${cx - 12} ${cy - 18} ${cx - 18} ${cy - 6} Z`} fill={hair} />
-          : <path d={`M${cx - 20} ${cy + 2} Q${cx - 24} ${cy - 28} ${cx} ${cy - 27} Q${cx + 24} ${cy - 28} ${cx + 20} ${cy + 2} Q${cx + 14} ${cy - 16} ${cx + 2} ${cy - 18} Q${cx - 12} ${cy - 12} ${cx - 20} ${cy + 2} Z`} fill={hair} />}
-        <g fill={hair} opacity=".75">
-          <ellipse cx={cx - 7} cy={cy - 4} rx="2.2" ry="1.4" /><ellipse cx={cx + 7} cy={cy - 4} rx="2.2" ry="1.4" />
-        </g>
-        <path d={`M${cx - 4} ${cy + 13} Q${cx} ${cy + 15} ${cx + 4} ${cy + 13}`} stroke={hair} strokeWidth="1" fill="none" opacity=".6" />
-      </g>
+      <clipPath id={id}><rect x={x + PH.dx} y={y + PH.dy} width={PH.w} height={PH.h} rx="6" /></clipPath>
+      <image href={`/faces/${src}.webp`} x={x + PH.dx} y={y + PH.dy} width={PH.w} height={PH.h} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${id})`} />
     </g>
   );
 }
@@ -86,7 +74,9 @@ export default function FaceMatch() {
     return () => { t.forEach(clearTimeout); stop?.(); };
   }, [i, inView, reduce, sc.score]);
 
-  const d = face(DOC), s = face(SELF);
+  const dl = LM["man-doc"].map((l) => pt(DOC, l));
+  const sl = LM[sc.selfie].map((l) => pt(SELF, l));
+  const by0 = DOC.y + PH.dy + PH.h * 0.84 - 7;
   const color = sc.match ? BLUE : RED;
   const checksOn = phase >= 3 ? CHECKS.length : 0;
 
@@ -97,18 +87,18 @@ export default function FaceMatch() {
           <svg viewBox="55 0 290 165" className="mx-auto w-full max-w-lg" role="img"
             aria-label={`Comparaison faciale : similarité ${sc.score} %, ${sc.match ? "correspondance approuvée" : "aucune correspondance, refusé"}`}>
             <Card {...DOC} doc /><Card {...SELF} />
-            <Person {...DOC} variant="man" doc />
-            <Person {...SELF} variant={sc.selfie === "same" ? "man" : "woman"} />
-            <ellipse cx={s.cx} cy={s.cy + 2} rx="26" ry="34" fill="none" stroke="#fff" strokeWidth="1.2" opacity=".9" />
+            <Photo {...DOC} src="man-doc" id="clip-doc" />
+            <Photo {...SELF} src={sc.selfie} id="clip-self" />
+            <ellipse cx={SELF.x + PH.dx + PH.w / 2} cy={SELF.y + PH.dy + PH.h * 0.46} rx="27" ry="37" fill="none" stroke="#fff" strokeWidth="1.2" opacity=".9" />
 
-            {LANDMARKS.map(([lx, ly], k) => (
-              <motion.line key={`l${k}`} x1={d.cx + lx} y1={d.cy + ly} x2={s.cx + lx} y2={s.cy + ly}
+            {dl.map((_, k) => (
+              <motion.line key={`l${k}`} x1={dl[k].x} y1={dl[k].y} x2={sl[k].x} y2={sl[k].y}
                 stroke={color} strokeWidth=".8" strokeDasharray={sc.match ? undefined : "3 2"}
                 initial={{ pathLength: 0, opacity: 0 }} animate={phase >= 2 ? { pathLength: 1, opacity: .75 } : { pathLength: 0, opacity: 0 }}
                 transition={{ duration: 0.6, delay: k * 0.08 }} />
             ))}
-            {LANDMARKS.flatMap(([lx, ly], k) => [d, s].map((c, j) => (
-              <motion.circle key={`p${k}${j}`} cx={c.cx + lx} cy={c.cy + ly} r="2.1" fill={color} stroke="#fff" strokeWidth=".9"
+            {dl.flatMap((_, k) => [dl[k], sl[k]].map((c, j) => (
+              <motion.circle key={`p${k}${j}`} cx={c.x} cy={c.y} r="2.1" fill={color} stroke="#fff" strokeWidth=".9"
                 initial={{ scale: 0 }} animate={{ scale: phase >= 1 ? 1 : 0 }}
                 transition={{ type: "spring", stiffness: 400, damping: 18, delay: k * 0.06 + j * 0.1 }}
                 style={{ transformBox: "fill-box", transformOrigin: "center" }} />
@@ -118,7 +108,7 @@ export default function FaceMatch() {
               {phase >= 4 && (
                 <motion.g initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
                   {(() => {
-                    const w = sc.match ? 132 : 160, bx = 200 - w / 2, by = d.cy - 14, cy0 = by + 7.5, ix = bx + 9;
+                    const w = sc.match ? 132 : 160, bx = 200 - w / 2, by = by0, cy0 = by + 7.5, ix = bx + 9;
                     return (<>
                       <rect x={bx} y={by} width={w} height="15" rx="7.5" fill={sc.match ? "#E7F7EF" : "#FDECEA"} stroke={sc.match ? "#b7e8cf" : "#f6c7c2"} />
                       <circle cx={ix} cy={cy0} r="3.6" fill={sc.match ? GREEN : RED} />
