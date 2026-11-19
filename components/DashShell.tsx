@@ -18,9 +18,9 @@ const MAIN: [keyof typeof ICONS, string, string | null][] = [
   ["overview", "Overview", "/dashboard"],
   ["business", "Businesses", "/dashboard/businesses"],
   ["key", "API Keys", "/dashboard/api-keys"],
-  ["logs", "Logs", null],
+  ["logs", "Logs", "/dashboard/logs"],
 ];
-const SETTING: [keyof typeof ICONS, string][] = [["settings", "Settings"], ["help", "Support & Help"]];
+const SETTING: [keyof typeof ICONS, string, string][] = [["settings", "Settings", "/dashboard/settings"], ["help", "Support & Help", "/dashboard/support"]];
 
 export default function DashShell({ active, children }: { active: string; children: ReactNode }) {
   const [mini, setMini] = useState(false);
@@ -58,10 +58,11 @@ export default function DashShell({ active, children }: { active: string; childr
               ),
             )}
           </div>
-          <p className={`mt-4 hidden px-3 pb-1 pt-3 font-mono text-[10px] uppercase tracking-widest text-navy/50 md:block ${mini ? "md:invisible" : ""}`}>Setting</p>
-          <div className="hidden flex-col gap-1 md:flex">
-            {SETTING.map(([ic, n]) => (
-              <span key={n} title={`${n} — coming soon`} className={`${item} cursor-not-allowed border border-transparent text-navy/35`}>{ICONS[ic]}{label(n)}</span>
+          <p className={`mt-4 px-3 pb-1 pt-3 font-mono text-[10px] uppercase tracking-widest text-navy/50 ${mini ? "md:invisible" : ""}`}>Setting</p>
+          <div className="flex flex-wrap gap-1 md:flex-col">
+            {SETTING.map(([ic, n, href]) => (
+              <Link key={n} href={href} title={n} aria-current={n === active ? "page" : undefined}
+                className={`${item} ${n === active ? "border border-[#d6e2ff] bg-ice font-semibold text-blue" : "border border-transparent text-navy/80 hover:bg-ice"}`}>{ICONS[ic]}{label(n)}</Link>
             ))}
           </div>
         </nav>
@@ -76,7 +77,7 @@ export default function DashShell({ active, children }: { active: string; childr
 
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-between border-b border-[#e3eaf8] bg-white px-6 py-4 text-sm">
-          <div className="flex items-center gap-2"><span className="text-navy/45">Main menu</span><span className="text-navy/30">/</span><span className="flex items-center gap-1.5 font-medium">{ICONS[(MAIN.find((m) => m[1] === active) ?? MAIN[0])[0]]}{active}</span></div>
+          <div className="flex items-center gap-2"><span className="text-navy/45">Main menu</span><span className="text-navy/30">/</span><span className="flex items-center gap-1.5 font-medium">{ICONS[([...MAIN, ...SETTING].find((m) => m[1] === active) ?? MAIN[0])[0]]}{active}</span></div>
           <span className="rounded-full border border-[#d6e2ff] bg-ice px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-blue">Sample data</span>
         </header>
         <main className="p-6">{children}</main>
