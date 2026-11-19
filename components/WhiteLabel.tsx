@@ -1,0 +1,248 @@
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+type Lang = "fr" | "en" | "ht";
+type Theme = "light" | "dark";
+type Shape = "square" | "rounded" | "pill";
+type DocKey = "id" | "passport" | "license";
+type Step = "welcome" | "document" | "selfie" | "done";
+
+type Cfg = {
+  name: string; logo: string | null; color: string; theme: Theme; shape: Shape; lang: Lang;
+  title: string; subtitle: string; docs: Record<DocKey, boolean>; domain: string; redirect: string;
+  support: string; hidePowered: boolean;
+};
+
+const DEFAULT: Cfg = {
+  name: "Your Company", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
+  title: "", subtitle: "", docs: { id: true, passport: true, license: false }, domain: "", redirect: "", support: "", hidePowered: false,
+};
+const PRESETS = ["#1E4FE0", "#0A1647", "#12B76A", "#7A3FF2", "#E5484D", "#F79009"];
+const RADIUS: Record<Shape, number> = { square: 6, rounded: 14, pill: 999 };
+
+const T: Record<Lang, Record<string, string>> = {
+  en: { title: "Verify your identity", sub: "It takes about two minutes. You will need an ID document and your camera.", start: "Start verification", s1: "Scan your document", s2: "Take a selfie", s3: "Get your result", consent: "By continuing you agree to the processing of your identity data.", choose: "Choose your document", id: "National ID card", passport: "Passport", license: "Driver's license", capture: "Capture document", selfieT: "Take a selfie", selfieS: "Center your face in the oval and hold still.", selfieB: "Take selfie", doneT: "Thank you!", doneS: "We received your information. You will be notified of the result shortly.", back: "Back to", powered: "Powered by Freda Verify", step: "Step", help: "Need help?" },
+  fr: { title: "Vérifiez votre identité", sub: "Cela prend environ deux minutes. Munissez-vous d'une pièce d'identité et de votre caméra.", start: "Commencer la vérification", s1: "Scannez votre document", s2: "Prenez un selfie", s3: "Recevez votre résultat", consent: "En continuant, vous acceptez le traitement de vos données d'identité.", choose: "Choisissez votre document", id: "Carte d'identité nationale", passport: "Passeport", license: "Permis de conduire", capture: "Capturer le document", selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale et ne bougez pas.", selfieB: "Prendre le selfie", doneT: "Merci !", doneS: "Nous avons reçu vos informations. Vous serez informé du résultat sous peu.", back: "Retour à", powered: "Propulsé par Freda Verify", step: "Étape", help: "Besoin d'aide ?" },
+  ht: { title: "Verifye idantite ou", sub: "Sa pran apeprè de minit. Ou bezwen yon pyès idantite ak kamera w.", start: "Kòmanse verifikasyon", s1: "Eskane dokiman w", s2: "Pran yon selfi", s3: "Resevwa rezilta w", consent: "Lè w kontinye, ou aksepte trètman done idantite w.", choose: "Chwazi dokiman w", id: "Kat idantite nasyonal", passport: "Paspò", license: "Pèmi kondwi", capture: "Pran foto dokiman an", selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la epi pa bouje.", selfieB: "Pran selfi a", doneT: "Mèsi !", doneS: "Nou resevwa enfòmasyon w yo. N ap enfòme w rezilta a talè.", back: "Retounen sou", powered: "Pwopilse pa Freda Verify", step: "Etap", help: "Bezwen èd?" },
+};
+
+const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
+const onColor = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#0A1647" : "#FFFFFF";
+};
+const isHost = (v: string) => /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(v);
+const isUrl = (v: string) => { try { const u = new URL(v); return u.protocol === "https:"; } catch { return false; } };
+const isMail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+const Card = ({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) => (
+  <section className="rounded-2xl border border-[#e3eaf8] bg-white p-5">
+    <h2 className="font-display text-lg font-bold">{title}</h2>{sub && <p className="mt-1 text-sm text-navy/60">{sub}</p>}
+    <div className="mt-4 space-y-4">{children}</div>
+  </section>
+);
+const input = "mt-1.5 block w-full rounded-xl border border-[#d6e2ff] bg-white px-3 py-2.5 text-sm font-normal";
+const Seg = <V extends string>({ value, set, opts, label }: { value: V; set: (v: V) => void; opts: [V, string][]; label: string }) => (
+  <div role="group" aria-label={label} className="flex flex-wrap gap-2">
+    {opts.map(([k, l]) => (
+      <button type="button" key={k} onClick={() => set(k)} aria-pressed={value === k} className={`rounded-full border px-4 py-1.5 text-sm ${value === k ? "border-navy bg-navy text-white" : "border-[#d6e2ff]"}`}>{l}</button>
+    ))}
+  </div>
+);
+const Toggle = ({ on, set, label }: { on: boolean; set: (v: boolean) => void; label: string }) => (
+  <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => set(!on)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${on ? "bg-blue" : "bg-[#d6e2ff]"}`}>
+    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? "left-[22px]" : "left-0.5"}`} />
+  </button>
+);
+
+function Preview({ c, step }: { c: Cfg; step: Step }) {
+  const t = T[c.lang], dark = c.theme === "dark", fg = onColor(c.color), r = RADIUS[c.shape];
+  const bg = dark ? "#0A1647" : "#FFFFFF", tx = dark ? "#FFFFFF" : "#0A1647", mut = dark ? "rgba(255,255,255,.65)" : "rgba(10,22,71,.6)", line = dark ? "rgba(255,255,255,.18)" : "#e3eaf8";
+  const docs = (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]);
+  const idx = ["welcome", "document", "selfie", "done"].indexOf(step);
+  const name = c.name.trim() || "Your Company";
+  const Btn = ({ children }: { children: React.ReactNode }) => (
+    <div className="mt-4 py-3 text-center text-[13px] font-semibold" style={{ background: c.color, color: fg, borderRadius: r }}>{children}</div>
+  );
+  return (
+    <div className="mx-auto w-[290px] rounded-[2.2rem] border-[7px] border-navy bg-navy shadow-xl" role="img" aria-label={`Preview of the hosted verification page: ${step}`}>
+      <div className="flex h-[560px] flex-col overflow-hidden rounded-[1.7rem]" style={{ background: bg, color: tx }}>
+        <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: line }}>
+          {c.logo
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={c.logo} alt="" className="h-7 max-w-[110px] object-contain" />
+            : <span className="grid h-7 w-7 place-items-center rounded-lg text-xs font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>}
+          <span className="truncate text-sm font-bold">{name}</span>
+          {step !== "welcome" && <span className="ml-auto text-[10px]" style={{ color: mut }}>{t.step} {idx}/3</span>}
+        </div>
+        <div className="flex flex-1 flex-col p-5">
+          {step === "welcome" && (<>
+            <h3 className="mt-3 font-display text-xl font-extrabold leading-tight">{c.title.trim() || t.title}</h3>
+            <p className="mt-2 text-[13px]" style={{ color: mut }}>{c.subtitle.trim() || t.sub}</p>
+            <ol className="mt-5 space-y-3 text-[13px]">
+              {[t.s1, t.s2, t.s3].map((x, i) => (
+                <li key={x} className="flex items-center gap-3"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold" style={{ background: c.color, color: fg }}>{i + 1}</span>{x}</li>
+              ))}
+            </ol>
+            <div className="mt-auto"><p className="text-[10px] leading-snug" style={{ color: mut }}>{t.consent}</p><Btn>{t.start}</Btn></div>
+          </>)}
+          {step === "document" && (<>
+            <h3 className="font-display text-lg font-extrabold">{t.choose}</h3>
+            <ul className="mt-3 space-y-2 text-[13px]">
+              {docs.length ? docs.map((k, i) => (
+                <li key={k} className="flex items-center gap-3 border px-3 py-2.5" style={{ borderColor: i === 0 ? c.color : line, borderRadius: Math.min(r, 14) }}>
+                  <span className="h-3.5 w-3.5 rounded-full border-2" style={{ borderColor: c.color, background: i === 0 ? c.color : "transparent" }} />{t[k]}
+                </li>
+              )) : <li style={{ color: mut }}>—</li>}
+            </ul>
+            <div className="mt-4 grid flex-1 place-items-center border-2 border-dashed text-[11px]" style={{ borderColor: c.color, borderRadius: Math.min(r, 14), color: mut }}>{t.capture}</div>
+            <Btn>{t.capture}</Btn>
+          </>)}
+          {step === "selfie" && (<>
+            <h3 className="font-display text-lg font-extrabold">{t.selfieT}</h3>
+            <p className="mt-1 text-[13px]" style={{ color: mut }}>{t.selfieS}</p>
+            <div className="mt-4 grid flex-1 place-items-center"><div className="h-48 w-36 rounded-[50%] border-[3px]" style={{ borderColor: c.color }} /></div>
+            <Btn>{t.selfieB}</Btn>
+          </>)}
+          {step === "done" && (<>
+            <div className="grid flex-1 place-items-center text-center">
+              <div>
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-full" style={{ background: c.color, color: fg }}><svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden><path d="M5 12.5l4.500 4.500L19 7.500" /></svg></span>
+                <h3 className="mt-4 font-display text-xl font-extrabold">{t.doneT}</h3>
+                <p className="mt-2 text-[13px]" style={{ color: mut }}>{t.doneS}</p>
+              </div>
+            </div>
+            <Btn>{t.back} {name}</Btn>
+          </>)}
+          {isMail(c.support) && (step === "welcome" || step === "done") && <p className="mt-2 break-all text-center text-[10px]" style={{ color: mut }}>{t.help} {c.support}</p>}
+          <p className="mt-3 text-center text-[10px]" style={{ color: mut }}>{c.hidePowered ? " " : t.powered}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function WhiteLabel() {
+  const [c, setC] = useState<Cfg>(DEFAULT);
+  const [step, setStep] = useState<Step>("welcome");
+  const [saved, setSaved] = useState(false);
+  const [logoErr, setLogoErr] = useState("");
+  const [hex, setHex] = useState(DEFAULT.color);
+  const urlRef = useRef<string | null>(null);
+  useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
+
+  const set = <K extends keyof Cfg>(k: K, v: Cfg[K]) => { setC((p) => ({ ...p, [k]: v })); setSaved(false); };
+  const err = useMemo(() => ({
+    domain: c.domain && !isHost(c.domain) ? "Enter a valid hostname, e.g. verify.yourcompany.com" : "",
+    redirect: c.redirect && !isUrl(c.redirect) ? "Must be a valid https:// URL" : "",
+    support: c.support && !isMail(c.support) ? "Enter a valid email address" : "",
+    docs: Object.values(c.docs).some(Boolean) ? "" : "Enable at least one document type",
+  }), [c]);
+  const invalid = Object.values(err).some(Boolean);
+
+  const onLogo = (f: File | undefined) => {
+    setLogoErr(""); if (!f) return;
+    if (!["image/png", "image/jpeg", "image/svg+xml", "image/webp"].includes(f.type)) return setLogoErr("Use a PNG, JPG, SVG or WebP image.");
+    if (f.size > 1024 * 1024) return setLogoErr("Logo must be under 1 MB.");
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = URL.createObjectURL(f); set("logo", urlRef.current);
+  };
+  const color = (v: string) => { setHex(v); if (isHex(v)) set("color", v.toUpperCase()); };
+  const reset = () => { if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; } setC(DEFAULT); setHex(DEFAULT.color); setLogoErr(""); setSaved(false); };
+
+  return (
+    <>
+      <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">White label</h1>
+      <p className="mt-1 text-sm text-navy/60">Make the verification page look like your own brand before you send it to your customers.</p>
+
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_340px]">
+        <form onSubmit={(e) => { e.preventDefault(); if (!invalid) setSaved(true); }} className="min-w-0 space-y-4">
+          <Card title="Brand" sub="Shown at the top of the verification page.">
+            <label className="block text-sm font-medium">Brand name<input value={c.name} maxLength={40} onChange={(e) => set("name", e.target.value)} className={input} /></label>
+            <div className="text-sm font-medium">Logo
+              <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                <span className="grid h-14 w-28 place-items-center overflow-hidden rounded-xl border border-[#d6e2ff] bg-[#F6F8FC]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {c.logo ? <img src={c.logo} alt="Logo preview" className="max-h-12 max-w-24 object-contain" /> : <span className="text-xs font-normal text-navy/40">No logo</span>}
+                </span>
+                <label className="cursor-pointer rounded-full border border-[#d6e2ff] px-4 py-2 text-sm font-normal hover:bg-ice">Upload logo
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="sr-only" onChange={(e) => onLogo(e.target.files?.[0])} /></label>
+                {c.logo && <button type="button" onClick={() => set("logo", null)} className="text-xs underline">Remove</button>}
+              </div>
+              {logoErr && <p role="alert" className="mt-1 text-xs font-normal text-[#B42318]">{logoErr}</p>}
+              <p className="mt-1 text-xs font-normal text-navy/50">PNG, JPG, SVG or WebP · max 1 MB.</p>
+            </div>
+          </Card>
+
+          <Card title="Appearance" sub="Colors and style of the buttons and the page.">
+            <div className="text-sm font-medium">Primary color
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {PRESETS.map((p) => (
+                  <button type="button" key={p} aria-label={`Use ${p}`} aria-pressed={c.color === p} onClick={() => color(p)}
+                    className={`h-8 w-8 rounded-full border-2 ${c.color === p ? "border-navy" : "border-white shadow ring-1 ring-[#d6e2ff]"}`} style={{ background: p }} />
+                ))}
+                <input type="color" aria-label="Pick a color" value={c.color} onChange={(e) => color(e.target.value)} className="h-8 w-10 cursor-pointer rounded border border-[#d6e2ff] bg-white" />
+                <input value={hex} onChange={(e) => color(e.target.value)} aria-label="Hex color" maxLength={7} className="w-28 rounded-xl border border-[#d6e2ff] px-3 py-1.5 font-mono text-xs font-normal" />
+              </div>
+              {!isHex(hex) && <p role="alert" className="mt-1 text-xs font-normal text-[#B42318]">Use a hex color like #1E4FE0.</p>}
+            </div>
+            <div className="text-sm font-medium">Theme<div className="mt-1.5"><Seg label="Theme" value={c.theme} set={(v) => set("theme", v)} opts={[["light", "Light"], ["dark", "Dark"]]} /></div></div>
+            <div className="text-sm font-medium">Button shape<div className="mt-1.5"><Seg label="Button shape" value={c.shape} set={(v) => set("shape", v)} opts={[["square", "Square"], ["rounded", "Rounded"], ["pill", "Pill"]]} /></div></div>
+          </Card>
+
+          <Card title="Content" sub="Language and the welcome message. Leave blank to use the default text.">
+            <div className="text-sm font-medium">Language<div className="mt-1.5"><Seg label="Language" value={c.lang} set={(v) => set("lang", v)} opts={[["en", "English"], ["fr", "Français"], ["ht", "Kreyòl"]]} /></div></div>
+            <label className="block text-sm font-medium">Welcome title<input value={c.title} maxLength={60} onChange={(e) => set("title", e.target.value)} placeholder={T[c.lang].title} className={input} /></label>
+            <label className="block text-sm font-medium">Welcome message<textarea value={c.subtitle} maxLength={140} rows={2} onChange={(e) => set("subtitle", e.target.value)} placeholder={T[c.lang].sub} className={input} /></label>
+            <label className="block text-sm font-medium">Support email shown to your customers<input type="email" value={c.support} onChange={(e) => set("support", e.target.value)} placeholder="support@yourcompany.com" className={input} />
+              {err.support && <span role="alert" className="mt-1 block text-xs font-normal text-[#B42318]">{err.support}</span>}</label>
+          </Card>
+
+          <Card title="Verification flow" sub="Which documents your customers can use.">
+            {(["id", "passport", "license"] as DocKey[]).map((k) => (
+              <div key={k} className="flex items-center justify-between gap-4 text-sm"><span>{T.en[k]}</span><Toggle on={c.docs[k]} set={(v) => set("docs", { ...c.docs, [k]: v })} label={T.en[k]} /></div>
+            ))}
+            {err.docs && <p role="alert" className="text-xs text-[#B42318]">{err.docs}</p>}
+            <label className="block text-sm font-medium">Redirect after completion<input type="url" value={c.redirect} onChange={(e) => set("redirect", e.target.value)} placeholder="https://yourcompany.com/verified" className={input} />
+              {err.redirect && <span role="alert" className="mt-1 block text-xs font-normal text-[#B42318]">{err.redirect}</span>}</label>
+          </Card>
+
+          <Card title="Custom domain" sub="Serve the verification page from your own domain.">
+            <label className="block text-sm font-medium">Domain<input value={c.domain} onChange={(e) => set("domain", e.target.value.trim().toLowerCase())} placeholder="verify.yourcompany.com" className={`${input} font-mono`} />
+              {err.domain && <span role="alert" className="mt-1 block text-xs font-normal text-[#B42318]">{err.domain}</span>}</label>
+            {c.domain && !err.domain && (
+              <div className="rounded-xl border border-[#e3eaf8] bg-[#F6F8FC] p-4 text-sm">
+                <div className="flex items-center justify-between"><span className="font-semibold">DNS record</span><span className="rounded-full bg-[#FEF3E2] px-2.5 py-0.5 font-mono text-[11px] text-[#B54708]">NOT CONNECTED</span></div>
+                <dl className="mt-2 grid grid-cols-[70px_1fr] gap-y-1 font-mono text-xs"><dt className="text-navy/55">Type</dt><dd>CNAME</dd><dt className="text-navy/55">Name</dt><dd className="break-all">{c.domain}</dd><dt className="text-navy/55">Value</dt><dd>custom.freda-verify.example</dd></dl>
+                <p className="mt-2 text-xs text-navy/50">Demo: domain verification and certificates are not active yet. The target value above is an example.</p>
+              </div>
+            )}
+          </Card>
+
+          <Card title="Branding on the page">
+            <div className="flex items-center justify-between gap-4 text-sm"><span>Hide “Powered by Freda Verify”<span className="block text-xs text-navy/50">May depend on your plan.</span></span><Toggle on={c.hidePowered} set={(v) => set("hidePowered", v)} label="Hide Powered by Freda Verify" /></div>
+          </Card>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button disabled={invalid || !isHex(hex)} className="rounded-full bg-blue px-6 py-2.5 text-sm font-semibold text-white hover:bg-navy disabled:opacity-50">Save changes</button>
+            <button type="button" onClick={reset} className="rounded-full border border-[#d6e2ff] px-5 py-2.5 text-sm">Reset to defaults</button>
+            {saved && <span role="status" className="text-sm font-medium text-[#067647]">Saved ✓</span>}
+          </div>
+          <p className="text-xs text-navy/50">Demo: settings live in this browser tab only and are not stored yet.</p>
+        </form>
+
+        <aside className="xl:sticky xl:top-4" aria-label="Live preview">
+          <div className="rounded-2xl border border-[#e3eaf8] bg-white p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Live preview</h2><span className="font-mono text-[10px] uppercase tracking-widest text-navy/50">Hosted page</span></div>
+            <div className="mb-4 flex flex-wrap justify-center gap-1.5" role="tablist" aria-label="Preview step">
+              {([["welcome", "Welcome"], ["document", "Document"], ["selfie", "Selfie"], ["done", "Done"]] as [Step, string][]).map(([k, l]) => (
+                <button key={k} role="tab" aria-selected={step === k} onClick={() => setStep(k)} className={`rounded-full px-3 py-1 text-xs ${step === k ? "bg-navy text-white" : "border border-[#d6e2ff]"}`}>{l}</button>
+              ))}
+            </div>
+            <Preview c={c} step={step} />
+          </div>
+        </aside>
+      </div>
+    </>
+  );
+}

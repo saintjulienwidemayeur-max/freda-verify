@@ -93,6 +93,7 @@ app/
     verifications/page.tsx      People verified (KYC): list + detail + media
     businesses/page.tsx         Businesses (KYB) list + detail
     api-keys/page.tsx           API keys UI
+    white-label/page.tsx        White-label config + live preview of the hosted verification page
     logs/page.tsx               API request logs UI
     settings/page.tsx           Workspace, webhook URL, notifications
     support/page.tsx            FAQ, links, contact
@@ -101,6 +102,7 @@ components/
   OverviewChart.tsx             Interactive bar chart
   Verifications.tsx             People list/filter/search/detail/approve-reject
   Media.tsx                     Selfie "video" player + ID front/back + lightbox
+  WhiteLabel.tsx                Branding form (name, logo, colors, theme, shape, language, texts, docs, domain, redirect) + phone preview
   Businesses.tsx, ApiKeys.tsx, Logs.tsx, Settings.tsx, Support.tsx
   FaceMatch.tsx                 Landing animation (document photo vs selfie)
   Sections.tsx                  Landing sections (Platform, Developers, AML, services, FAQ...)
@@ -128,6 +130,7 @@ Not yet existing: login / sign-up / password reset, hosted verification page for
 | `components/ApiKeys.tsx` | Keys are random hex generated in the browser (`crypto.getRandomValues`); not stored, not valid for any API. **Real secret keys must never be generated or shown by frontend code.** |
 | `components/Logs.tsx` | 9 hard-coded request logs. |
 | `components/Settings.tsx` | Form state in memory only. Nothing saved. |
+| `components/WhiteLabel.tsx` | Branding config lives in React state only (logo is an in-memory object URL). Custom-domain "DNS record" and its target value are examples; no domain or certificate is verified. The phone preview is a mock of a hosted page that does not exist yet. |
 | `app/dashboard/page.tsx`, `OverviewChart.tsx` | All numbers (12,480 checks, 96.4%, charts, activity) are invented. |
 | `components/FaceMatch.tsx` | Marketing animation; scores 98 % / 34 % are scripted. |
 | `components/Support.tsx` | "All systems operational" is static text. |
@@ -331,9 +334,22 @@ Dashboard sections requested: Overview, Verifications, Customers, Organizations,
 | Analytics | **missing** (Overview chart only) |
 | Settings | UI mock ✔ |
 | Logs, Support | UI mock ✔ (extra, not in spec) |
-| Hosted verification flow (end user) | **missing** — separate mobile-first experience |
+| White label | UI mock ✔ (`/dashboard/white-label`): brand, colors, theme, button shape, language (EN/FR/HT), texts, accepted documents, redirect URL, custom domain, hide "Powered by", live phone preview |
+| Hosted verification flow (end user) | **missing** — only the preview mock inside White label; the real mobile-first flow is not built |
 | Login / signup / MFA / password recovery | **missing** |
 | Landing | done visually; copy needs claim review |
+
+---
+
+### White-label requirements (target, for the backend phase)
+
+- Store per-organization branding as a validated theme record (name, logo key in object storage, color, theme, shape, language, texts, allowed documents, redirect URL, support email, custom domain, `hide_powered_by`).
+- Treat every branding field as untrusted input: length limits, hex-color validation, **no HTML** in texts (render as text), logos restricted to PNG/JPG/WebP and sanitized SVG (or reject SVG), size limit, virus/type check, served from a separate asset origin.
+- Redirect URLs: HTTPS only, allow-list per organization, never open redirects.
+- Custom domains: DNS ownership verification (CNAME/TXT), automatic TLS issuance and renewal, protection against subdomain takeover, per-domain tenant routing.
+- Always show required consent/privacy text and legal notices even when white-labelled; do not let branding remove them.
+- "Hide Powered by Freda Verify" is a commercial/plan decision (open, D10).
+- The hosted page reads the theme by session token and must never expose the organization's secret keys.
 
 ---
 
@@ -427,4 +443,5 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-19 — Added White label page (branding form + live preview of the hosted verification page, mock only) and documented white-label requirements.
 - 2026-11-19 — Initial CLAUDE.md. Frontend prototype documented: landing, brand identity, dashboard (Overview, Verifications with media viewer, Businesses, API Keys, Logs, Settings, Support). No backend yet.
