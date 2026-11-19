@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRIES, DOC_ICON, Ic, LANGS, RADIUS, T, flag, fold, isMail, onColor, termsLabel } from "./HostedPreview";
 import type { Cfg, DocKey, Lang, Shape, Theme } from "./HostedPreview";
+import Scanner from "./Scanner";
 
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
 const DEFAULTS: Cfg = {
@@ -57,50 +58,6 @@ const issues = (q: Quality, t: typeof T.en) => [q.dark && t.qDark, q.bright && t
 type Shot = { url: string; q: Quality };
 type PStep = "welcome" | "country" | "document" | "front" | "back" | "selfie" | "review" | "done";
 
-/* ───────────── live camera ───────────── */
-function Camera({ facing, onShot, onClose, label, cancel, denied, accent, accentFg, radius }: {
-  facing: "user" | "environment"; onShot: (b: Blob) => void; onClose: () => void; label: string; cancel: string; denied: string; accent: string; accentFg: string; radius: number;
-}) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const [err, setErr] = useState(false);
-  useEffect(() => {
-    let stream: MediaStream | null = null, dead = false;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 } }, audio: false });
-        if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
-        if (ref.current) { ref.current.srcObject = stream; await ref.current.play().catch(() => {}); }
-      } catch { setErr(true); }
-    })();
-    return () => { dead = true; stream?.getTracks().forEach((t) => t.stop()); };
-  }, [facing]);
-  const snap = () => {
-    const v = ref.current; if (!v || !v.videoWidth) return;
-    const cv = document.createElement("canvas"); cv.width = v.videoWidth; cv.height = v.videoHeight;
-    cv.getContext("2d")!.drawImage(v, 0, 0);
-    cv.toBlob((b) => b && onShot(b), "image/jpeg", 0.88);
-  };
-  if (err) return (
-    <div className="grid flex-1 place-items-center rounded-2xl bg-black/5 p-6 text-center text-sm" role="alert">
-      <div>{denied}<button type="button" onClick={onClose} className="mt-4 block w-full rounded-full border px-4 py-2 text-sm font-semibold">{cancel}</button></div>
-    </div>
-  );
-  return (
-    <div className="flex flex-1 flex-col gap-3">
-      <div className="relative flex-1 overflow-hidden rounded-2xl bg-black">
-        <video ref={ref} playsInline muted autoPlay className={`absolute inset-0 h-full w-full object-cover ${facing === "user" ? "[transform:scaleX(-1)]" : ""}`} />
-        {facing === "user"
-          ? <span className="pointer-events-none absolute left-1/2 top-1/2 h-[62%] w-[56%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-[3px] border-white/90 shadow-[0_0_0_999px_rgba(0,0,0,.45)]" />
-          : <span className="pointer-events-none absolute left-1/2 top-1/2 aspect-[1.586] w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border-[3px] border-white/90 shadow-[0_0_0_999px_rgba(0,0,0,.45)]" />}
-      </div>
-      <div className="flex gap-3">
-        <button type="button" onClick={onClose} className="rounded-full border px-5 py-3 text-sm font-semibold" style={{ borderRadius: radius }}>{cancel}</button>
-        <button type="button" onClick={snap} className="flex-1 py-3 text-sm font-semibold" style={{ background: accent, color: accentFg, borderRadius: radius }}>{label}</button>
-      </div>
-    </div>
-  );
-}
-
 export default function HostedPage() {
   const [c, setC] = useState<Cfg>(DEFAULTS);
   const [ready, setReady] = useState(false);
@@ -110,6 +67,7 @@ export default function HostedPage() {
   const [kind, setKind] = useState<DocKey | null>(null);
   const [shots, setShots] = useState<{ front?: Shot; back?: Shot; selfie?: Shot }>({});
   const [cam, setCam] = useState(false);
+  const fresh = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [agree, setAgree] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
@@ -142,13 +100,22 @@ export default function HostedPage() {
 
   const setShot = useCallback(async (key: "front" | "back" | "selfie", blob: Blob) => {
     setBusy(true);
-    const url = URL.createObjectURL(blob); urls.current.add(url);
+    const url = URL.createObjectURL(blob); urls.current.add(url); fresh.current = url;
     const quality = await analyze(blob);
     setShots((s) => { if (s[key]) { URL.revokeObjectURL(s[key]!.url); urls.current.delete(s[key]!.url); } return { ...s, [key]: { url, q: quality } }; });
     setCam(false); setBusy(false);
   }, []);
   const drop = (key: "front" | "back" | "selfie") => setShots((s) => { if (s[key]) { URL.revokeObjectURL(s[key]!.url); urls.current.delete(s[key]!.url); } const n = { ...s }; delete n[key]; return n; });
   const wipe = () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); setShots({}); };
+  // open the scanner automatically on each capture step; auto-advance after a fresh good capture
+  useEffect(() => { setCam((step === "front" || step === "back" || step === "selfie") && !shots[step]); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (step !== "front" && step !== "back" && step !== "selfie") return;
+    const s = shots[step];
+    if (!s || fresh.current !== s.url || issues(s.q, T[c.lang]).length > 0) return;
+    const tm = setTimeout(() => { fresh.current = null; setStep(step === "selfie" ? "review" : order[order.indexOf(step) + 1]); }, 1300);
+    return () => clearTimeout(tm);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   const finish = () => { wipe(); setStep("done"); };
   const restart = () => { wipe(); setKind(null); setAgree(false); setStep("welcome"); };
 
@@ -184,15 +151,17 @@ export default function HostedPage() {
       <p className="mt-1 text-[15px]" style={{ color: mut }}>{sub}</p>
       {cam ? (
         <div className="mt-4 flex min-h-[380px] flex-1 flex-col">
-          <Camera facing={isSelfie ? "user" : "environment"} onShot={(b) => setShot(key, b)} onClose={() => setCam(false)} label={t.capture} cancel={t.cancel} denied={t.camDenied} accent={c.color} accentFg={fg} radius={r} />
+          <Scanner mode={isSelfie ? "selfie" : "doc"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r}
+            tx={{ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel }} />
         </div>
       ) : s ? (
         <div className="mt-4 flex flex-1 flex-col gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={s.url} alt={title} className={`max-h-[46vh] w-full rounded-2xl object-contain ${isSelfie ? "aspect-[3/4] object-cover" : ""}`} style={{ background: soft }} />
+          {!bad && <p className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: c.color }}><Ic d="M5 12.5l4.500 4.500L19 7.500" className="h-4 w-4" />{t.scanDone}</p>}
           <Chips s={s} />
           <div className="mt-auto space-y-2 pt-2">
-            <Btn onClick={() => { drop(key); }} ghost={!bad}>{t.retake}</Btn>
+            <Btn onClick={() => { fresh.current = null; drop(key); setCam(true); }} ghost={!bad}>{t.retake}</Btn>
             {bad ? <button type="button" onClick={next} className="w-full py-2 text-sm font-semibold" style={{ color: c.color }}>{t.useAnyway}</button> : <Btn onClick={next}>{t.cont}</Btn>}
           </div>
         </div>
@@ -315,7 +284,7 @@ export default function HostedPage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {s && <img src={s.url} alt={label} className="aspect-[4/3] w-full rounded-xl object-cover" style={{ background: soft }} />}
                 <div className="mt-1.5 flex items-center justify-between text-xs"><span className="font-semibold">{label}</span>
-                  <button type="button" onClick={() => { drop(k); setStep(k); }} className="font-semibold" style={{ color: c.color }}>{t.retake}</button></div>
+                  <button type="button" onClick={() => { fresh.current = null; drop(k); setStep(k); setCam(true); }} className="font-semibold" style={{ color: c.color }}>{t.retake}</button></div>
               </div>); })}
           </div>
           <div className="mt-auto space-y-3 pt-6"><Btn onClick={finish} disabled={sides.some((k) => !shots[k])}>{t.submit}</Btn></div><Secured />

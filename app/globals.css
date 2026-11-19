@@ -8,3 +8,5 @@ h1, h2, h3, h4 { font-family: var(--h), var(--f), system-ui, sans-serif; letter-
 ::selection { background: #8CC8FF; color: #0A1647; }
 :focus-visible { outline: 2px solid #1E4FE0; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+@keyframes scan-line { 0% { top: 6%; } 50% { top: 92%; } 100% { top: 6%; } }

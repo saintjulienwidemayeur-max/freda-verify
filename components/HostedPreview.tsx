@@ -25,6 +25,7 @@ type Dict = {
   frontT: string; frontS: string; backT: string; backS: string; pageT: string; pageS: string;
   takeCam: string; upload: string; retake: string; useAnyway: string; capture: string; cancel: string; camDenied: string;
   qGood: string; qDark: string; qBright: string; qBlur: string; reviewT: string; reviewS: string; submit: string;
+  scanPlace: string; scanFace: string; scanHold: string; scanDark: string; scanGlare: string; scanBlur: string; scanAuto: string; scanDone: string; capNow: string;
   demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
 };
 
@@ -42,6 +43,7 @@ export const T: Record<Lang, Dict> = {
     frontT: "Front of your document", frontS: "Place the front inside the frame.", backT: "Back of your document", backS: "Now turn it over and capture the back.", pageT: "Passport photo page", pageS: "Open the passport to the photo page.",
     takeCam: "Use camera", upload: "Upload a photo", retake: "Retake", useAnyway: "Use anyway", capture: "Capture", cancel: "Cancel", camDenied: "Camera unavailable. You can upload a photo instead.",
     qGood: "Looks good", qDark: "Too dark — find better light", qBright: "Too bright or glare", qBlur: "Blurry — hold steady", reviewT: "Review your photos", reviewS: "Make sure everything is clear and readable.", submit: "Submit",
+    scanPlace: "Place the document inside the frame", scanFace: "Center your face in the oval", scanHold: "Hold steady…", scanDark: "Too dark — find better light", scanGlare: "Glare detected — tilt slightly", scanBlur: "Move closer or hold still", scanAuto: "Automatic capture", scanDone: "Captured!", capNow: "Capture now",
     demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
   },
   fr: {
@@ -57,6 +59,7 @@ export const T: Record<Lang, Dict> = {
     frontT: "Recto de votre document", frontS: "Placez le recto dans le cadre.", backT: "Verso de votre document", backS: "Retournez-le et capturez le verso.", pageT: "Page photo du passeport", pageS: "Ouvrez le passeport à la page photo.",
     takeCam: "Utiliser la caméra", upload: "Téléverser une photo", retake: "Reprendre", useAnyway: "Utiliser quand même", capture: "Capturer", cancel: "Annuler", camDenied: "Caméra indisponible. Vous pouvez téléverser une photo.",
     qGood: "Image correcte", qDark: "Trop sombre — cherchez plus de lumière", qBright: "Trop clair ou reflet", qBlur: "Flou — restez stable", reviewT: "Vérifiez vos photos", reviewS: "Assurez-vous que tout est net et lisible.", submit: "Envoyer",
+    scanPlace: "Placez le document dans le cadre", scanFace: "Centrez votre visage dans l'ovale", scanHold: "Ne bougez pas…", scanDark: "Trop sombre — cherchez plus de lumière", scanGlare: "Reflet détecté — inclinez légèrement", scanBlur: "Rapprochez-vous ou restez stable", scanAuto: "Capture automatique", scanDone: "Capturé !", capNow: "Capturer maintenant",
     demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
   },
   ht: {
@@ -72,6 +75,7 @@ export const T: Record<Lang, Dict> = {
     frontT: "Devan dokiman w", frontS: "Mete devan an andedan kadre a.", backT: "Dèyè dokiman w", backS: "Kounye a vire l epi pran dèyè a.", pageT: "Paj foto paspò a", pageS: "Louvri paspò a nan paj foto a.",
     takeCam: "Itilize kamera", upload: "Voye yon foto", retake: "Refè", useAnyway: "Itilize l kanmenm", capture: "Pran foto", cancel: "Anile", camDenied: "Kamera pa disponib. Ou ka voye yon foto.",
     qGood: "Foto a bon", qDark: "Twò nwa — chèche plis limyè", qBright: "Twò klè oswa gen refle", qBlur: "Flou — pa bouje", reviewT: "Revize foto w yo", reviewS: "Asire w tout bagay klè epi lizib.", submit: "Voye",
+    scanPlace: "Mete dokiman an andedan kadre a", scanFace: "Mete figi w nan ovòl la", scanHold: "Pa bouje…", scanDark: "Twò nwa — chèche plis limyè", scanGlare: "Gen refle — enkline l yon ti jan", scanBlur: "Pwoche oswa pa bouje", scanAuto: "Kapti otomatik", scanDone: "Kaptire!", capNow: "Pran foto kounye a",
     demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
   },
 };
