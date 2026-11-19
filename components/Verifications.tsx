@@ -1,15 +1,16 @@
 "use client";
 import { useMemo, useState } from "react";
+import Media from "./Media";
 
 type Status = "APPROVED" | "REVIEW" | "PENDING" | "REJECTED";
 type Person = {
   id: string; name: string; doc: string; country: string; docNo: string; dob: string; when: string;
-  status: Status; score: number; liveness: boolean | null; age: string; aml: "Clear" | "Match" | "—"; reason?: string;
+  status: Status; score: number; liveness: boolean | null; age: string; aml: "Clear" | "Match" | "—"; reason?: string; face?: "man" | "woman";
 };
 
 const DATA: Person[] = [
-  { id: "ver_9f31a2", name: "Marc Jean-Baptiste", doc: "ID card", country: "HT", docNo: "HT-••••917", dob: "1991-03-14", when: "Today, 19:41", status: "APPROVED", score: 99.8, liveness: true, age: "34", aml: "Clear" },
-  { id: "ver_9f2e10", name: "Nadège Pierre", doc: "Passport", country: "HT", docNo: "PA••••204", dob: "1994-07-02", when: "Today, 19:12", status: "REVIEW", score: 72.4, liveness: true, age: "31", aml: "Clear", reason: "Face match below auto-approve threshold" },
+  { id: "ver_9f31a2", name: "Marc Jean-Baptiste", doc: "ID card", country: "HT", docNo: "HT-••••917", dob: "1991-03-14", when: "Today, 19:41", status: "APPROVED", score: 99.8, liveness: true, age: "34", aml: "Clear", face: "man" },
+  { id: "ver_9f2e10", name: "Nadège Pierre", doc: "Passport", country: "HT", docNo: "PA••••204", dob: "1994-07-02", when: "Today, 19:12", status: "REVIEW", score: 72.4, liveness: true, age: "31", aml: "Clear", reason: "Face match below auto-approve threshold", face: "woman" },
   { id: "ver_9f2a6c", name: "Jonas Étienne", doc: "ID card", country: "HT", docNo: "HT-••••553", dob: "1988-11-23", when: "Today, 18:47", status: "APPROVED", score: 98.6, liveness: true, age: "37", aml: "Clear" },
   { id: "ver_9f1b77", name: "Carla Dessalines", doc: "Driver's license", country: "DO", docNo: "DL••••881", dob: "1996-01-30", when: "Today, 17:30", status: "PENDING", score: 0, liveness: null, age: "—", aml: "—" },
   { id: "ver_9f0c42", name: "Ricardo Alvarez", doc: "Passport", country: "PA", docNo: "PN••••392", dob: "1985-05-09", when: "Today, 16:05", status: "REJECTED", score: 31.2, liveness: false, age: "40", aml: "Clear", reason: "Liveness failed: replayed screen detected" },
@@ -103,6 +104,7 @@ export default function Verifications() {
                 <li key={k} className="flex items-center justify-between py-2"><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${DOT[s]}`} />{k}</span><span className="font-mono text-xs">{v}</span></li>
               ))}
             </ul>
+            <Media key={p.id} p={p} />
             {p.reason && <p className="mt-4 rounded-xl border border-[#f1d9b6] bg-[#FEF3E2] p-3 text-xs text-[#B54708]">{p.reason}</p>}
             {(p.status === "REVIEW" || p.status === "PENDING") && (
               <div className="mt-4 flex gap-2">
