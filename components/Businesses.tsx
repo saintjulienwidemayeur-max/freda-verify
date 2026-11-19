@@ -16,10 +16,10 @@ const DATA: Biz[] = [
 ];
 
 const BADGE: Record<Status, string> = {
-  APPROVED: "bg-black text-white",
-  REJECTED: "border border-black bg-white line-through",
-  PENDING: "border border-dashed border-black",
-  REVIEW: "border border-black bg-white",
+  APPROVED: "bg-[#E7F7EF] text-[#067647]",
+  REJECTED: "bg-[#FDECEA] text-[#B42318]",
+  PENDING: "bg-[#FEF3E2] text-[#B54708]",
+  REVIEW: "bg-[#FEF3E2] text-[#B54708]",
 };
 const FILTERS = ["ALL", "APPROVED", "REVIEW", "PENDING", "REJECTED"] as const;
 
@@ -40,29 +40,29 @@ export default function Businesses() {
       <h1 className="text-3xl font-extrabold tracking-tighter">Businesses</h1>
       <p className="mt-1 text-sm opacity-60">KYB verifications · sample data</p>
 
-      <div className="mt-5 grid grid-cols-2 gap-px border border-black bg-black md:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-px border border-navy/80 bg-navy md:grid-cols-4">
         {([["Total", DATA.length], ["Approved", count("APPROVED")], ["In review", count("REVIEW") + count("PENDING")], ["Rejected", count("REJECTED")]] as const).map(([l, v]) => (
-          <div key={l} className="bg-[#e8e8e6] p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
+          <div key={l} className="bg-ice p-4"><div className="text-2xl font-bold">{v}</div><div className="text-xs opacity-60">{l}</div></div>
         ))}
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         {FILTERS.map((x) => (
           <button key={x} onClick={() => setF(x)} aria-pressed={f === x}
-            className={`rounded-full border border-black px-3 py-1 font-mono text-xs ${f === x ? "bg-black text-white" : ""}`}>{x}</button>
+            className={`rounded-full border border-navy/80 px-3 py-1 font-mono text-xs ${f === x ? "bg-navy text-white" : ""}`}>{x}</button>
         ))}
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search business…" aria-label="Search business"
-          className="ml-auto w-full border border-black bg-transparent px-3 py-1.5 text-sm md:w-64" />
+          className="ml-auto w-full border border-navy/80 bg-transparent px-3 py-1.5 text-sm md:w-64" />
       </div>
 
-      <div className="mt-4 overflow-x-auto border border-black">
+      <div className="mt-4 overflow-x-auto border border-navy/80">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black font-mono text-xs">
+          <thead className="border-b border-navy/80 font-mono text-xs">
             <tr>{["Business", "Country", "Source", "UBOs", "Risk", "Status", "Score", "Date"].map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((b) => (
-              <tr key={b.name} onClick={() => setOpen(b.name)} className="cursor-pointer border-b border-black/20 last:border-0 hover:bg-black/5">
+              <tr key={b.name} onClick={() => setOpen(b.name)} className="cursor-pointer border-b border-blue/15 last:border-0 hover:bg-blue/5">
                 <td className="p-3 font-medium"><button className="text-left underline-offset-2 hover:underline" onClick={() => setOpen(b.name)}>{b.name}</button></td>
                 <td className="p-3 font-mono">{b.country}</td><td className="p-3">{b.reg}</td><td className="p-3 font-mono">{b.ubos}</td>
                 <td className="p-3">{b.risk}</td>
@@ -77,7 +77,7 @@ export default function Businesses() {
       </div>
 
       {sel && (
-        <div className="mt-6 border border-black p-4" role="region" aria-label="Business details">
+        <div className="mt-6 border border-navy/80 p-4" role="region" aria-label="Business details">
           <div className="flex items-start justify-between">
             <div><div className="text-lg font-bold">{sel.name}</div><div className="text-xs opacity-60">{sel.country} · {sel.reg}</div></div>
             <button onClick={() => setOpen(null)} className="font-mono text-xs underline">Close</button>
@@ -88,7 +88,7 @@ export default function Businesses() {
               ["Beneficial owners (UBO)", `${sel.ubos} identified`],
               ["Sanctions / AML screening", sel.risk === "High" ? "Match — needs review" : "Clear"],
               ["Risk level", sel.risk],
-            ].map(([k, v]) => <li key={k} className="flex justify-between border-b border-black/20 pb-1"><span className="opacity-60">{k}</span><span className="font-mono">{v}</span></li>)}
+            ].map(([k, v]) => <li key={k} className="flex justify-between border-b border-blue/15 pb-1"><span className="opacity-60">{k}</span><span className="font-mono">{v}</span></li>)}
           </ul>
         </div>
       )}

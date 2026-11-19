@@ -26,7 +26,7 @@ function Mesh({ phase }: { phase: Phase }) {
   const on = phase === "face";
   return (
     <svg viewBox="0 0 240 310" className="absolute inset-0 h-full w-full">
-      <g stroke="#000" strokeOpacity=".25" strokeWidth=".6">
+      <g stroke="#1E4FE0" strokeOpacity=".25" strokeWidth=".6">
         {pts.map(([x, y]) => (
           <g key={k(x, y)}>
             {set.has(k(x + S, y)) && <line x1={x} y1={y} x2={x + S} y2={y} />}
@@ -35,13 +35,13 @@ function Mesh({ phase }: { phase: Phase }) {
         ))}
       </g>
       <motion.g animate={{ opacity: on ? [0.4, 1, 0.4] : phase === "idle" ? 0.3 : 1 }} transition={{ duration: 1.6, repeat: on ? Infinity : 0 }}>
-        {pts.map(([x, y]) => <circle key={k(x, y)} cx={x} cy={y} r="1.8" fill="#000" />)}
+        {pts.map(([x, y]) => <circle key={k(x, y)} cx={x} cy={y} r="1.8" fill="#0A1647" />)}
       </motion.g>
-      <g fill="none" stroke="#000" strokeWidth="1.4" strokeLinecap="round">
+      <g fill="none" stroke="#1E4FE0" strokeWidth="1.4" strokeLinecap="round">
         <ellipse cx="90" cy="130" rx="15" ry="6" /><ellipse cx="150" cy="130" rx="15" ry="6" />
         <path d="M120 135 L114 178 Q120 184 126 178" /><path d="M96 218 Q120 234 144 218" />
       </g>
-      {on && <motion.rect x="20" width="200" height="3" fill="#000" initial={{ y: 20 }} animate={{ y: [20, 285, 20] }} transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }} />}
+      {on && <motion.rect x="20" width="200" height="3" fill="#0A1647" initial={{ y: 20 }} animate={{ y: [20, 285, 20] }} transition={{ duration: 2.2, repeat: Infinity, ease: "linear" }} />}
     </svg>
   );
 }
@@ -63,21 +63,21 @@ export default function Demo() {
 
   const busy = phase === "doc" || phase === "face";
   const done = phase === "done";
-  const box = "relative h-80 overflow-hidden rounded-2xl border border-black bg-white/70";
+  const box = "relative h-80 overflow-hidden rounded-2xl border border-navy/80 bg-white/70";
   return (
-    <div className="rounded-3xl border border-black bg-[#efefed] p-5">
+    <div className="rounded-3xl border border-navy/80 bg-ice p-5">
       <div className="mb-4 flex gap-2" role="tablist">
         {(["KYC", "KYB"] as Mode[]).map((m) => (
           <button key={m} role="tab" aria-selected={mode === m} onClick={() => { setMode(m); setPhase("idle"); }}
-            className={`rounded-full border border-black px-4 py-1.5 text-sm ${mode === m ? "bg-black text-white" : ""}`}>{m}</button>
+            className={`rounded-full border border-navy/80 px-4 py-1.5 text-sm ${mode === m ? "bg-navy text-white" : ""}`}>{m}</button>
         ))}
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className={`${box} grid place-items-center`}>
-          <div className="relative w-4/5 overflow-hidden rounded-lg border border-black bg-white p-3 font-mono text-[11px]">
+          <div className="relative w-4/5 overflow-hidden rounded-lg border border-navy/80 bg-white p-3 font-mono text-[11px]">
             <div className="mb-2 text-[10px] tracking-wider">{mode === "KYC" ? "CARTE D'IDENTITÉ / ID CARD" : "EXTRAIT KBIS / REGISTRE"}</div>
             <div className="flex gap-3">
-              <div className="h-16 w-12 shrink-0 bg-black/80" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "4px 4px" }} />
+              <div className="h-16 w-12 shrink-0 bg-navy/80" style={{ backgroundImage: "radial-gradient(#fff 1px,transparent 1px)", backgroundSize: "4px 4px" }} />
               <div className="grid gap-1">
                 {FIELDS[mode].map(([l, v], i) => (
                   <motion.div key={l} initial={false} animate={{ opacity: phase === "idle" ? 0.15 : 1 }} transition={{ delay: phase === "idle" ? 0 : 0.4 + i * 0.5 }}>
@@ -86,7 +86,7 @@ export default function Demo() {
                 ))}
               </div>
             </div>
-            {phase === "doc" && <motion.div className="absolute inset-x-0 h-[3px] bg-black" initial={{ top: 0 }} animate={{ top: ["0%", "100%", "0%"] }} transition={{ duration: 2.4, ease: "linear", repeat: Infinity }} />}
+            {phase === "doc" && <motion.div className="absolute inset-x-0 h-[3px] bg-navy" initial={{ top: 0 }} animate={{ top: ["0%", "100%", "0%"] }} transition={{ duration: 2.4, ease: "linear", repeat: Infinity }} />}
           </div>
         </div>
         <div className={box}>
@@ -100,10 +100,10 @@ export default function Demo() {
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 font-mono text-xs md:grid-cols-4">
         {[["Response", done ? "1.2s" : "—"], ["Match score", done ? `${score.toFixed(1)}%` : "—"], ["Liveness", done ? "PASS" : "—"], ["Decision", done ? "APPROVED" : busy ? "…" : "—"]].map(([l, v]) => (
-          <div key={l} className="rounded-xl border border-black p-3"><div className="text-lg font-semibold">{v}</div><div className="opacity-60">{l}</div></div>
+          <div key={l} className="rounded-xl border border-navy/80 p-3"><div className="text-lg font-semibold">{v}</div><div className="opacity-60">{l}</div></div>
         ))}
       </div>
-      <button onClick={run} disabled={busy} className="mt-4 rounded-full bg-black px-6 py-3 text-sm text-white disabled:opacity-50">
+      <button onClick={run} disabled={busy} className="mt-4 rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy disabled:opacity-50">
         {done ? "Run again" : `Simulate a ${mode} check`} ↗
       </button>
     </div>

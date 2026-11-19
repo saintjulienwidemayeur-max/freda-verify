@@ -63,19 +63,19 @@ export default function ApiHub() {
         {NODES.map((_, i) => {
           const p = pos(i); const on = i === active;
           return (
-            <motion.line key={i} x1="50" y1="50" x2={p.x} y2={p.y} stroke="#000"
+            <motion.line key={i} x1="50" y1="50" x2={p.x} y2={p.y} stroke="#1E4FE0"
               strokeWidth={on ? 0.45 : 0.22} strokeOpacity={on ? 1 : 0.22} variants={lineV} custom={i} />
           );
         })}
         {!reduce && (
-          <motion.circle key={tick} r="1.1" fill="#000"
+          <motion.circle key={tick} r="1.1" fill="#0A1647"
             initial={{ cx: 50, cy: 50, opacity: 1 }} animate={{ cx: target.x, cy: target.y, opacity: [1, 1, 0] }}
             transition={{ duration: 1.1, ease: "easeInOut" }} />
         )}
       </svg>
 
       <div className="absolute left-1/2 top-1/2 h-[25%] w-[25%] -translate-x-1/2 -translate-y-1/2">
-        <motion.div variants={hubV} className="grid h-full w-full place-items-center rounded-full border border-black bg-white shadow-[0_10px_50px_rgba(0,0,0,.18)]">
+        <motion.div variants={hubV} className="grid h-full w-full place-items-center rounded-full border border-navy/80 bg-white shadow-[0_10px_50px_rgba(30,79,224,.22)]">
           <span className="text-center font-mono text-[7px] font-semibold leading-snug tracking-[0.14em] sm:text-[10px]">
             FREDA VERIFY<br />API
           </span>
@@ -89,13 +89,13 @@ export default function ApiHub() {
             onMouseEnter={() => { setActive(i); setTick((t) => t + 1); setPaused(true); }} onMouseLeave={() => setPaused(false)}>
             <motion.div variants={nodeV} custom={i} className="relative h-full w-full">
               <motion.div
-                animate={{ scale: on ? 1.12 : 1, backgroundColor: on ? "#000" : "#fff", color: on ? "#fff" : "#000" }}
+                animate={{ scale: on ? 1.12 : 1, backgroundColor: on ? "#1E4FE0" : "#fff", color: on ? "#fff" : "#0A1647" }}
                 transition={{ duration: 0.35 }}
-                className="grid h-full w-full place-items-center rounded-full border border-black shadow-md"
+                className="grid h-full w-full place-items-center rounded-full border border-navy/80 shadow-md"
               >
                 <Svg>{n.icon}</Svg>
               </motion.div>
-              <span className={`absolute left-1/2 w-20 -translate-x-1/2 text-center text-[10px] leading-tight text-black sm:w-28 sm:text-[11px] ${up ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${on ? "font-bold" : "opacity-70"}`}>
+              <span className={`absolute left-1/2 w-20 -translate-x-1/2 text-center text-[10px] leading-tight text-navy sm:w-28 sm:text-[11px] ${up ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${on ? "font-bold" : "opacity-70"}`}>
                 {n.label}
               </span>
             </motion.div>

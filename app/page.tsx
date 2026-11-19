@@ -18,14 +18,17 @@ const PLANS = [
 export default function Home() {
   return (
     <div>
-      <div className="bg-[#fcfcfc]">
+      <div className="bg-white">
       <div className="mx-auto max-w-6xl px-5">
       <header className="relative z-20 flex items-center justify-between py-5 text-sm">
-        <span className="font-bold tracking-tight">FREDA VÉRIFIER</span>
+        <Link href="/" className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.svg" alt="" className="h-9 w-9" />Freda <span className="text-electric">Verify</span>
+        </Link>
         <nav className="hidden gap-8 md:flex"><a href="#insights">Connaissances</a><a href="#solutions">Solutions</a><a href="#pricing">Tarification</a></nav>
         <div className="flex items-center gap-4">
           <Link href="/dashboard">Se connecter</Link>
-          <a href="#demo" className="rounded-full bg-black px-5 py-2.5 text-white">Essayez maintenant</a>
+          <a href="#demo" className="rounded-full bg-blue px-5 py-2.5 font-semibold text-white hover:bg-navy">Essayez maintenant</a>
         </div>
       </header>
 
@@ -34,14 +37,14 @@ export default function Home() {
         <div
           className="relative left-1/2 w-screen -translate-x-1/2 overflow-hidden px-5 pt-14 pb-0 md:pb-[calc(100vw*941/1671*0.29)]"
         >
-          <div className="relative z-10 [text-shadow:0_0_10px_#fcfcfc,0_0_3px_#fcfcfc]">
+          <div className="relative z-10 [text-shadow:0_0_10px_#ffffff,0_0_3px_#ffffff]">
             <h1 className="mx-auto max-w-3xl text-5xl font-extrabold leading-[0.95] tracking-tighter md:text-7xl">
               Vérification d&apos;identité automatisée conçue pour la rapidité.
             </h1>
-            <p className="mx-auto mt-6 max-w-lg text-base text-black">
+            <p className="mx-auto mt-6 max-w-lg text-base text-navy">
               Vérifiez les personnes et les entreprises en quelques secondes. Lecture de documents, reconnaissance faciale et détection de fraude en un seul appel.
             </p>
-            <a href="#demo" className="mt-8 inline-flex rounded-full bg-black px-6 py-3 text-sm text-white [text-shadow:none]">Start Verifying ↗</a>
+            <a href="#demo" className="mt-8 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy [text-shadow:none]">Start Verifying ↗</a>
           </div>
           {/* Arrière-plan (mobile et PC) : ancré en bas, le haut s'estompe pour garder le texte lisible */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -66,11 +69,11 @@ export default function Home() {
       <Platform />
       <Developers />
       <AmlScreening />
-      <section id="solutions" className="border-t border-black py-16">
+      <section id="solutions" className="border-t border-navy/80 py-16">
         <h2 className="max-w-xl text-4xl font-extrabold tracking-tighter">One platform for every identity decision.</h2>
-        <div className="mt-10 grid gap-px border border-black bg-black md:grid-cols-4">
+        <div className="mt-10 grid gap-px border border-navy/80 bg-navy md:grid-cols-4">
           {FEATURES.map(([t, d]) => (
-            <div key={t} className="bg-[#e8e8e6] p-6"><h3 className="font-bold">{t}</h3><p className="mt-2 text-sm">{d}</p></div>
+            <div key={t} className="bg-ice p-6"><h3 className="font-bold">{t}</h3><p className="mt-2 text-sm">{d}</p></div>
           ))}
         </div>
       </section>
@@ -79,7 +82,7 @@ export default function Home() {
       <Industries />
       <Workflow />
       <Audit />
-      <section id="demo" className="border-t border-black py-16">
+      <section id="demo" className="border-t border-navy/80 py-16">
         <h2 className="mb-2 text-4xl font-extrabold tracking-tighter">See a check run.</h2>
         <p className="mb-8 text-sm">Simulated data. No account needed.</p>
         <Demo />
@@ -87,18 +90,18 @@ export default function Home() {
 
       <Integration />
       <Security />
-      <section id="pricing" className="border-t border-black py-16">
+      <section id="pricing" className="border-t border-navy/80 py-16">
         <h2 className="text-4xl font-extrabold tracking-tighter">Pricing</h2>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {PLANS.map(([n, p, d]) => (
-            <div key={n} className="rounded-2xl border border-black p-6"><div className="font-bold">{n}</div><div className="my-2 text-4xl font-extrabold">{p}</div><div className="text-sm">{d}</div></div>
+            <div key={n} className="rounded-2xl border border-navy/80 p-6"><div className="font-bold">{n}</div><div className="my-2 text-4xl font-extrabold">{p}</div><div className="text-sm">{d}</div></div>
           ))}
         </div>
       </section>
 
       <Faq />
       <Contact />
-      <footer id="insights" className="flex flex-wrap justify-between gap-3 border-t border-black py-8 text-sm">
+      <footer id="insights" className="flex flex-wrap justify-between gap-3 border-t border-navy/80 py-8 text-sm">
         <span>© 2026 Freda Verify</span><span>Docs · Status · Privacy</span>
       </footer>
       </div>

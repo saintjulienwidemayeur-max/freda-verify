@@ -4,7 +4,7 @@ import AmlCard from "./AmlCard";
 
 function Sec({ id, title, sub, children }: { id?: string; title: string; sub?: string; children: ReactNode }) {
   return (
-    <section id={id} className="border-t border-black py-16">
+    <section id={id} className="border-t border-navy/80 py-16">
       <h2 className="max-w-2xl text-4xl font-extrabold tracking-tighter">{title}</h2>
       {sub && <p className="mt-3 max-w-xl text-sm">{sub}</p>}
       <div className="mt-10">{children}</div>
@@ -13,9 +13,9 @@ function Sec({ id, title, sub, children }: { id?: string; title: string; sub?: s
 }
 
 const Grid = ({ items, cols = "md:grid-cols-3" }: { items: string[][]; cols?: string }) => (
-  <div className={`grid gap-px border border-black bg-black ${cols}`}>
+  <div className={`grid gap-px border border-navy/80 bg-navy ${cols}`}>
     {items.map(([t, d]) => (
-      <div key={t} className="bg-[#e8e8e6] p-6">
+      <div key={t} className="bg-ice p-6">
         <h3 className="font-bold">{t}</h3>
         <p className="mt-2 text-sm">{d}</p>
       </div>
@@ -55,7 +55,7 @@ export function Industries() {
 
 export function Workflow() {
   const Box = ({ t, d, dark }: { t: string; d: string; dark?: boolean }) => (
-    <div className={`rounded-2xl border border-black p-5 ${dark ? "bg-black text-white" : ""}`}>
+    <div className={`rounded-2xl border border-navy/80 p-5 ${dark ? "bg-navy text-white" : ""}`}>
       <div className="font-bold">{t}</div><div className="mt-1 text-sm opacity-80">{d}</div>
     </div>
   );
@@ -78,7 +78,7 @@ export function Workflow() {
 export function Audit() {
   return (
     <Sec title="Chaque décision est traçable." sub="Vérifications, alertes, codes de raison et contexte du dossier sont réunis dans un seul enregistrement.">
-      <pre className="overflow-x-auto rounded-2xl border border-black bg-white/60 p-5 font-mono text-xs leading-6">{`{
+      <pre className="overflow-x-auto rounded-2xl border border-navy/80 bg-white/60 p-5 font-mono text-xs leading-6">{`{
   "case_id": "case_20817",
   "type": "kyc",
   "checks": { "document": "pass", "face": "pass", "liveness": "pass", "aml": "review" },
@@ -127,9 +127,9 @@ const FAQ = [
 export function Faq() {
   return (
     <Sec id="faq" title="Questions fréquentes">
-      <div className="border-t border-black">
+      <div className="border-t border-navy/80">
         {FAQ.map(([q, a]) => (
-          <details key={q} className="group border-b border-black py-4">
+          <details key={q} className="group border-b border-navy/80 py-4">
             <summary className="cursor-pointer list-none font-bold">
               <span className="mr-3 inline-block transition-transform group-open:rotate-45">+</span>{q}
             </summary>
@@ -144,7 +144,7 @@ export function Faq() {
 export function Contact() {
   return (
     <Sec id="contact" title="Parlons de votre cas.">
-      <a href="mailto:contact@example.com" className="inline-flex rounded-full bg-black px-6 py-3 text-sm text-white">Parler à l&apos;équipe ↗</a>
+      <a href="mailto:contact@example.com" className="inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Parler à l&apos;équipe ↗</a>
     </Sec>
   );
 }
@@ -180,7 +180,7 @@ const PLATFORM = [
 
 export function Platform() {
   return (
-    <section id="platform" className="border-t border-black py-16 text-center">
+    <section id="platform" className="border-t border-navy/80 py-16 text-center">
       <p className="font-mono text-xs uppercase tracking-widest">Une seule plateforme</p>
       <h2 className="mx-auto mt-3 max-w-3xl text-5xl font-extrabold leading-[0.95] tracking-tighter md:text-6xl">
         Authentifier. <span className="opacity-40">Vérifier.</span>
@@ -189,16 +189,16 @@ export function Platform() {
         Construisez et déployez vos parcours d&apos;identité avec une seule API. Utilisez nos modules prêts à l&apos;emploi ou composez les vôtres, de l&apos;authentification biométrique à la vérification des entreprises.
       </p>
       <div className="mt-7 flex flex-wrap justify-center gap-3">
-        <a href="#demo" className="rounded-full bg-black px-6 py-3 text-sm text-white">Voir la vérification ↗</a>
-        <a href="#integration" className="rounded-full border border-black px-6 py-3 text-sm">Commencer à construire</a>
+        <a href="#demo" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Voir la vérification ↗</a>
+        <a href="#integration" className="rounded-full border border-navy/80 px-6 py-3 text-sm">Commencer à construire</a>
       </div>
 
       <div className="mt-12 grid gap-8 md:grid-cols-2">
         {PLATFORM.map(({ t, d, Icon, bg }) => (
           <article key={t} className="group text-left">
-            <div className="relative grid h-72 place-items-center overflow-hidden rounded-3xl border border-black">
+            <div className="relative grid h-72 place-items-center overflow-hidden rounded-3xl border border-navy/80">
               <div className="absolute inset-0 scale-125 blur-2xl transition-transform duration-700 group-hover:scale-150" style={{ background: bg }} />
-              <div className="relative grid h-28 w-28 place-items-center rounded-3xl bg-white shadow-[0_10px_40px_rgba(0,0,0,.18)] transition-transform duration-300 group-hover:-translate-y-1">
+              <div className="relative grid h-28 w-28 place-items-center rounded-3xl bg-white shadow-[0_10px_40px_rgba(30,79,224,.22)] transition-transform duration-300 group-hover:-translate-y-1">
                 <Icon />
               </div>
             </div>
@@ -213,7 +213,7 @@ export function Platform() {
 
 export function Developers() {
   return (
-    <section id="developers" className="border-t border-black py-16">
+    <section id="developers" className="border-t border-navy/80 py-16">
       <p className="font-mono text-xs uppercase tracking-widest">
         Pour les développeurs · Pour les agents IA · Conçu pour être ouvert
       </p>
@@ -225,8 +225,8 @@ export function Developers() {
         Une équipe intègre en un après-midi ; un agent IA y arrive avec une seule instruction grâce à MCP.
       </p>
       <div className="mt-7 flex flex-wrap gap-3">
-        <a href="#integration" className="rounded-full bg-black px-6 py-3 text-sm text-white">Lire la documentation ↗</a>
-        <a href="#contact" className="rounded-full border border-black px-6 py-3 text-sm">Obtenir une clé API</a>
+        <a href="#integration" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Lire la documentation ↗</a>
+        <a href="#contact" className="rounded-full border border-navy/80 px-6 py-3 text-sm">Obtenir une clé API</a>
       </div>
 
       <div className="mt-14 grid items-center gap-10 md:grid-cols-2">
@@ -237,12 +237,12 @@ export function Developers() {
             Un seul appel couvre la vérification de documents, la reconnaissance faciale, le liveness, le KYC, le KYB et le filtrage AML.
             Même clé, même moteur de flux, modules enchaînables dans une seule session, sans travail d&apos;intégration supplémentaire entre eux.
           </p>
-          <a href="#integration" className="mt-6 inline-flex rounded-full border border-black px-6 py-3 text-sm">Lire la documentation API ↗</a>
+          <a href="#integration" className="mt-6 inline-flex rounded-full border border-navy/80 px-6 py-3 text-sm">Lire la documentation API ↗</a>
         </div>
         <ApiHub />
       </div>
 
-      <div className="mt-14 max-w-3xl overflow-hidden rounded-2xl border border-black bg-black text-white shadow-[0_20px_60px_rgba(0,0,0,.25)]">
+      <div className="mt-14 max-w-3xl overflow-hidden rounded-2xl border border-navy/80 bg-navy text-white shadow-[0_20px_60px_rgba(0,0,0,.25)]">
         <div className="flex gap-1.5 border-b border-white/15 px-4 py-3">
           {[0, 1, 2].map((i) => <span key={i} className="h-2.5 w-2.5 rounded-full bg-white/30" />)}
           <span className="ml-3 font-mono text-[11px] opacity-60">POST /v1/sessions</span>
@@ -264,7 +264,7 @@ export function Developers() {
 
 export function AmlScreening() {
   return (
-    <section id="aml" className="border-t border-black py-16">
+    <section id="aml" className="border-t border-navy/80 py-16">
       <div className="grid items-center gap-12 md:grid-cols-2">
         <div>
           <p className="font-mono text-xs uppercase">02 · Filtrage AML</p>
@@ -276,7 +276,7 @@ export function AmlScreening() {
             Choisissez les catégories qui comptent pour vous : sanctions, personnes politiquement exposées, médias défavorables.
             Gardez-les sous surveillance chaque jour, sans rien faire de plus.
           </p>
-          <a href="#contact" className="mt-7 inline-flex rounded-full bg-black px-6 py-3 text-sm text-white">Parler à l&apos;équipe ↗</a>
+          <a href="#contact" className="mt-7 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Parler à l&apos;équipe ↗</a>
         </div>
         <AmlCard />
       </div>
