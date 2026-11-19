@@ -25,8 +25,12 @@ PASSWORD = "correct horse battery"
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
     with get_engine().begin() as c:
+        c.execute(text("DROP SCHEMA IF EXISTS freda_verify CASCADE"))
         c.execute(text("DROP SCHEMA public CASCADE"))
         c.execute(text("CREATE SCHEMA public"))
+        # decoy table of ANOTHER application that shares the database (see test_schema_and_config.py)
+        c.execute(text("CREATE TABLE public.users (id int primary key, email text)"))
+        c.execute(text("INSERT INTO public.users VALUES (1, 'other-app@example.com')"))
     command.upgrade(Config("alembic.ini"), "head")        # the tests exercise the real migrations, not create_all()
 
 
@@ -34,7 +38,7 @@ def _schema():
 def _clean():
     ratelimit.reset_memory()
     with get_engine().begin() as c:
-        c.execute(text("TRUNCATE users, organizations, memberships, refresh_sessions, password_reset_tokens, recovery_codes, api_keys, audit_logs, request_logs RESTART IDENTITY CASCADE"))
+        c.execute(text("TRUNCATE " + ", ".join(f"freda_verify.{t}" for t in ("users", "organizations", "memberships", "refresh_sessions", "password_reset_tokens", "recovery_codes", "api_keys", "audit_logs", "request_logs")) + " RESTART IDENTITY CASCADE"))
     yield
 
 

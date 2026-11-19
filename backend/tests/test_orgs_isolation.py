@@ -98,7 +98,7 @@ def test_owner_protections(client):
 def test_database_refuses_to_modify_the_audit_log(client):
     register(client)
     with get_engine().connect() as c:
-        for stmt in ("UPDATE audit_logs SET action = 'tampered'", "DELETE FROM audit_logs"):
+        for stmt in ("UPDATE freda_verify.audit_logs SET action = 'tampered'", "DELETE FROM freda_verify.audit_logs"):
             with pytest.raises(Exception, match="append-only"):
                 c.execute(text(stmt))
             c.rollback()
@@ -114,4 +114,4 @@ def test_audit_trail_records_security_events_without_secrets(client):
     assert {"org.created", "api_key.created", "api_key.revoked"} <= set(actions)
     assert key["secret"] not in client.get(f"/api/v1/organizations/{org['id']}/audit-logs", headers=auth(t)).text
     with SessionLocal() as db:
-        assert db.execute(text("select count(*) from audit_logs where meta::text like :s"), {"s": f"%{key['secret']}%"}).scalar() == 0
+        assert db.execute(text("select count(*) from freda_verify.audit_logs where meta::text like :s"), {"s": f"%{key['secret']}%"}).scalar() == 0

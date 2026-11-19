@@ -24,7 +24,7 @@ def test_key_secret_is_shown_once_and_only_its_hash_is_stored(client):
     with SessionLocal() as db:
         row = db.scalar(select(ApiKey))
         assert len(row.key_hash) == 64 and row.key_hash != key["secret"]
-        assert db.execute(text("select count(*) from api_keys where key_hash = :s or name = :s or prefix = :s"), {"s": key["secret"]}).scalar() == 0
+        assert db.execute(text("select count(*) from freda_verify.api_keys where key_hash = :s or name = :s or prefix = :s"), {"s": key["secret"]}).scalar() == 0
 
 
 def test_key_authentication_revocation_and_last_used(client):
@@ -99,5 +99,5 @@ def test_prod_refuses_to_start_without_real_secrets():
     with pytest.raises(ValidationError):
         Settings(**base, secret_key="short", encryption_key="k")
     with pytest.raises(ValidationError):
-        Settings(**base, secret_key="x" * 40, encryption_key="k", cors_origins=["*"])
-    assert Settings(**base, secret_key="x" * 40, encryption_key="k").app_env == "prod"
+        Settings(**base, secret_key="x" * 40, encryption_key="y" * 32, cors_origins=["*"])
+    assert Settings(**base, secret_key="x" * 40, encryption_key="y" * 32).app_env == "prod"

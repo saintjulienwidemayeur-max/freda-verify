@@ -7,7 +7,8 @@ RUN useradd --system --uid 10001 --no-create-home app
 COPY alembic.ini .
 COPY alembic ./alembic
 COPY app ./app
+COPY docker-entrypoint.sh .
 USER app
 EXPOSE 8000
-# migrations are run explicitly: docker compose run --rm backend alembic upgrade head
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# the entrypoint applies the migrations (tables are created automatically) and then starts the API
+CMD ["./docker-entrypoint.sh"]

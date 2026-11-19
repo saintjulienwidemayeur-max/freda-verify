@@ -9,7 +9,9 @@ from app.core.config import get_settings
 
 @lru_cache
 def get_engine() -> Engine:
-    return create_engine(get_settings().database_url, pool_pre_ping=True, pool_size=10, max_overflow=10)
+    url = get_settings().database_url
+    args = {"prepare_threshold": None} if ":6543/" in url else {}      # Supabase transaction pooler (6543) cannot keep prepared statements
+    return create_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=10, connect_args=args)
 
 
 @lru_cache

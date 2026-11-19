@@ -5,7 +5,7 @@ description = "Freda Verify API (Phase 1: foundation)"
 requires-python = ">=3.12"
 
 [tool.ruff]
-line-length = 200
+line-length = 260
 target-version = "py312"
 
 [tool.ruff.lint]

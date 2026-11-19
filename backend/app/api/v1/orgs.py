@@ -148,6 +148,19 @@ def audit_logs(limit: int = 50, before_id: int | None = None, ctx: OrgCtx = Depe
              "target_id": r.target_id, "ip": r.ip, "meta": r.meta, "created_at": r.created_at} for r in rows]
 
 
+@router.get("/organizations/{org_id}/request-logs")
+def request_logs(limit: int = 50, before_id: int | None = None, status_class: int | None = None, ctx: OrgCtx = Depends(org_access("keys:read")), db: Session = Depends(get_db)):
+    """Newest API requests of the organization (route template, status, latency, key prefix). No bodies, headers or IPs are ever stored."""
+    q = select(RequestLog, ApiKey.prefix).join(ApiKey, ApiKey.id == RequestLog.api_key_id, isouter=True).where(RequestLog.organization_id == ctx.org.id)
+    if before_id:
+        q = q.where(RequestLog.id < before_id)
+    if status_class in (2, 3, 4, 5):
+        q = q.where(RequestLog.status >= status_class * 100, RequestLog.status < status_class * 100 + 100)
+    rows = db.execute(q.order_by(RequestLog.id.desc()).limit(max(1, min(limit, 200)))).all()
+    return [{"id": r.id, "created_at": r.created_at, "method": r.method, "path": r.path, "status": r.status, "latency_ms": r.latency_ms,
+             "api_key_prefix": prefix, "request_id": r.request_id} for r, prefix in rows]
+
+
 @router.get("/usage")
 def usage(organization_id: uuid.UUID | None = None, principal: Principal = Depends(get_principal), db: Session = Depends(get_db)):
     """Requests of the last 30 days for one organization (API key: its own; dashboard user: ?organization_id=, must be a member)."""

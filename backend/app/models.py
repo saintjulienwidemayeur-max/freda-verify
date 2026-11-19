@@ -7,7 +7,7 @@ from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, I
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.base import Base, fk
 
 
 def now() -> datetime:
@@ -63,8 +63,8 @@ class Membership(Base):
     __tablename__ = "memberships"
     __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_membership"),)
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("users.id"), ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     user: Mapped[User] = relationship(back_populates="memberships")
@@ -75,7 +75,7 @@ class RefreshSession(Base):
     """One row per refresh token (rotated on every use; reuse of a rotated token revokes every session of the user)."""
     __tablename__ = "refresh_sessions"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("users.id"), ondelete="CASCADE"), index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -87,7 +87,7 @@ class RefreshSession(Base):
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("users.id"), ondelete="CASCADE"), index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -96,7 +96,7 @@ class PasswordResetToken(Base):
 class RecoveryCode(Base):
     __tablename__ = "recovery_codes"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("users.id"), ondelete="CASCADE"), index=True)
     code_hash: Mapped[str] = mapped_column(String(64))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -105,13 +105,13 @@ class ApiKey(Base):
     """Only the SHA-256 of the key is stored. The secret is returned once, at creation."""
     __tablename__ = "api_keys"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(80))
     env: Mapped[str] = mapped_column(String(8))                                      # test | live
     prefix: Mapped[str] = mapped_column(String(16))
     last4: Mapped[str] = mapped_column(String(4))
     key_hash: Mapped[str] = mapped_column(String(64), unique=True)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
