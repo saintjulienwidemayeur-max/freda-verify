@@ -88,6 +88,7 @@ app/
   page.tsx                      landing page (French/English mix)
   globals.css                   Tailwind base + brand colors + focus ring
   icon.png, apple-icon.png      favicons from brand pack
+  verify/page.tsx               PUBLIC hosted verification page for end users (demo mode, see 3.5)
   dashboard/
     page.tsx                    Overview (stat cards, chart, recent verifications, activity)
     verifications/page.tsx      People verified (KYC): list + detail + media
