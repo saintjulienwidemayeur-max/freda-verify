@@ -67,13 +67,13 @@ function Preview({ c, step }: { c: Cfg; step: Step }) {
   return (
     <div className="mx-auto w-[290px] rounded-[2.2rem] border-[7px] border-navy bg-navy shadow-xl" role="img" aria-label={`Preview of the hosted verification page: ${step}`}>
       <div className="flex h-[560px] flex-col overflow-hidden rounded-[1.7rem]" style={{ background: bg, color: tx }}>
-        <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: line }}>
+        <div className="flex flex-col items-center gap-1.5 border-b px-4 py-3 text-center" style={{ borderColor: line }}>
           {c.logo
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={c.logo} alt="" className="h-7 max-w-[110px] object-contain" />
-            : <span className="grid h-7 w-7 place-items-center rounded-lg text-xs font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>}
-          <span className="truncate text-sm font-bold">{name}</span>
-          {step !== "welcome" && <span className="ml-auto text-[10px]" style={{ color: mut }}>{t.step} {idx}/3</span>}
+            ? <img src={c.logo} alt="" className="h-9 max-w-[150px] object-contain" />
+            : <span className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>}
+          <span className="max-w-full truncate text-sm font-bold">{name}</span>
+          {step !== "welcome" && <span className="text-[10px]" style={{ color: mut }}>{t.step} {idx}/3</span>}
         </div>
         <div className="flex flex-1 flex-col p-5">
           {step === "welcome" && (<>
