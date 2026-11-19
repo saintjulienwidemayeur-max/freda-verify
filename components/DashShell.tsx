@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
+import { useAuth } from "@/lib/auth";
 
 const I = ({ children }: { children: ReactNode }) => (
   <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{children}</svg>
@@ -26,8 +28,21 @@ const MAIN: [keyof typeof ICONS, string, string | null][] = [
 ];
 const SETTING: [keyof typeof ICONS, string, string][] = [["settings", "Settings", "/dashboard/settings"], ["help", "Support & Help", "/dashboard/support"]];
 
-export default function DashShell({ active, children }: { active: string; children: ReactNode }) {
+export default function DashShell({ active, children, sample = true }: { active: string; children: ReactNode; sample?: boolean }) {
   const [mini, setMini] = useState(false);
+  const { status, user, orgs, org, setOrg, logout } = useAuth();
+  const router = useRouter();
+  const path = usePathname();
+  // UX guard only: the API itself refuses every request without a valid session
+  useEffect(() => { if (status === "anon") router.replace(`/login?next=${encodeURIComponent(path || "/dashboard")}`); }, [status, router, path]);
+  if (status !== "authed") {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#F6F8FC]" role="status" aria-label="Loading">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#d6e2ff] border-t-blue" />
+      </div>
+    );
+  }
+  const initials = (user?.full_name || user?.email || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const label = (t: string) => <span className={mini ? "md:hidden" : ""}>{t}</span>;
   const item = "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm";
 
@@ -72,9 +87,19 @@ export default function DashShell({ active, children }: { active: string; childr
         </nav>
 
         <div className="hidden p-3 md:block">
-          <div className="flex items-center gap-3 rounded-2xl border border-[#e3eaf8] p-2.5">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-navy text-xs font-bold text-white">FV</span>
-            {!mini && <div className="min-w-0 text-xs"><div className="truncate font-semibold">Demo workspace</div><div className="truncate text-navy/50">Sample data</div></div>}
+          <div className="rounded-2xl border border-[#e3eaf8] p-2.5">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-navy text-xs font-bold text-white" title={user?.email}>{initials}</span>
+              {!mini && <div className="min-w-0 flex-1 text-xs"><div className="truncate font-semibold">{user?.full_name}</div><div className="truncate text-navy/50">{org?.name ?? "No organization"}{org?.role ? ` · ${org.role}` : ""}</div></div>}
+              <button onClick={() => void logout().then(() => router.replace("/login"))} aria-label="Sign out" title="Sign out" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-navy/60 hover:bg-ice hover:text-navy">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 4H5.5A1.5 1.5 0 0 0 4 5.500v13A1.5 1.5 0 0 0 5.500 20H9M16 16l4-4-4-4M20 12H9" /></svg>
+              </button>
+            </div>
+            {!mini && orgs.length > 1 && (
+              <select value={org?.id ?? ""} onChange={(e) => setOrg(e.target.value)} aria-label="Switch organization" className="mt-2.5 w-full rounded-lg border border-[#e3eaf8] bg-white px-2 py-1.5 text-xs">
+                {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            )}
           </div>
         </div>
       </aside>
@@ -82,7 +107,9 @@ export default function DashShell({ active, children }: { active: string; childr
       <div className="min-w-0 flex-1">
         <header className="flex items-center justify-between border-b border-[#e3eaf8] bg-white px-6 py-4 text-sm">
           <div className="flex items-center gap-2"><span className="text-navy/45">Main menu</span><span className="text-navy/30">/</span><span className="flex items-center gap-1.5 font-medium">{ICONS[([...MAIN, ...SETTING].find((m) => m[1] === active) ?? MAIN[0])[0]]}{active}</span></div>
-          <span className="rounded-full border border-[#d6e2ff] bg-ice px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-blue">Sample data</span>
+          {sample
+            ? <span className="rounded-full border border-[#d6e2ff] bg-ice px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-blue">Sample data</span>
+            : <span className="rounded-full border border-[#b7e8cf] bg-[#E7F7EF] px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[#067647]">Live data</span>}
         </header>
         <main className="p-6">{children}</main>
       </div>

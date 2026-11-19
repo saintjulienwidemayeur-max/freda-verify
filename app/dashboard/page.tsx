@@ -1,5 +1,6 @@
 import Link from "next/link";
 import DashShell from "@/components/DashShell";
+import LiveUsage from "@/components/LiveUsage";
 import OverviewChart from "@/components/OverviewChart";
 
 type Status = "APPROVED" | "REJECTED" | "PENDING";
@@ -43,7 +44,9 @@ export default function Dashboard() {
       <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">Welcome to Freda Verify 👋</h1>
       <p className="mt-1 text-sm text-navy/60">Track verifications, review decisions and monitor your API — all in one place.</p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <LiveUsage />
+      <p className="mt-6 font-mono text-[10px] uppercase tracking-widest text-navy/40">Sample data below · verifications and analytics are not connected yet</p>
+      <div className="mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {STATS.map((s) => (
           <div key={s.label} className="rounded-2xl border border-[#e3eaf8] bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-medium"><span className="grid h-8 w-8 place-items-center rounded-lg border border-[#e3eaf8] text-blue">{s.icon}</span>{s.label}</div>

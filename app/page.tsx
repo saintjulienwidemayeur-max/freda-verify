@@ -26,8 +26,8 @@ export default function Home() {
         </Link>
         <nav className="hidden gap-8 md:flex"><a href="#insights">Connaissances</a><a href="#solutions">Solutions</a><a href="#pricing">Tarification</a></nav>
         <div className="flex items-center gap-4">
-          <Link href="/dashboard">Se connecter</Link>
-          <a href="#contact" className="rounded-full bg-blue px-5 py-2.5 font-semibold text-white hover:bg-navy">Essayez maintenant</a>
+          <Link href="/login">Se connecter</Link>
+          <Link href="/signup" className="rounded-full bg-blue px-5 py-2.5 font-semibold text-white hover:bg-navy">Essayez maintenant</Link>
         </div>
       </header>
 

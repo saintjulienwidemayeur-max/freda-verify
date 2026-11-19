@@ -4,5 +4,5 @@ import Logs from "@/components/Logs";
 export const metadata = { title: "Logs — Freda Verify" };
 
 export default function Page() {
-  return <DashShell active="Logs"><Logs /></DashShell>;
+  return <DashShell active="Logs" sample={false}><Logs /></DashShell>;
 }

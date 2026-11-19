@@ -4,7 +4,7 @@ Permanent technical reference and development guide for **Freda Verify**.
 Last updated: 2026-11-19. Keep this file in sync with the code (rule 16, section 12).
 
 > **Read this first:** the repository holds (1) a **frontend prototype** (landing site + sample dashboard + a demo hosted verification page) and (2) a **Phase 1 backend foundation** in `backend/` (accounts, organizations, roles, API keys, audit log, MRZ check-digit validator).
-> There is still **no verification engine**: no OCR, no face matching, no liveness server-side, no AML, no result/webhook. The dashboard is **not connected** to the backend and shows hard-coded sample data. See sections 3.5 (mock inventory) and 3.8 (backend).
+> There is still **no verification engine**: no OCR, no face matching, no liveness server-side, no AML, no result/webhook. Login/sign-up and the **API Keys, Logs, Settings (workspace, team, two-step verification)** pages and the usage card on Overview are **connected to the backend**; Overview charts, Verifications, Businesses, White label and the hosted page are not (sample data / local state). See sections 3.5 (mock inventory), 3.8 (backend) and 3.9 (Supabase + Render).
 > Never describe any feature as working, production-ready or "verified" unless section 3 says it is real.
 
 ---
@@ -64,7 +64,7 @@ Assets: `public/logo-mark.svg` (used), `public/logo.png`, `public/logo-white.png
 | Fonts | `next/font/google` (Inter, Plus Jakarta Sans, IBM Plex Mono). **Build needs network** to fetch them. |
 | Output | **Static export** (`output: "export"` in `next.config.mjs`) → `out/` |
 | Hosting | Render **Static Site**: build `npm install && npm run build`, publish dir `out` |
-| Backend | **Phase 1 only** (`backend/`, see 3.8): FastAPI + PostgreSQL + Alembic, auth, organizations, API keys, audit/request logs, MRZ validator. Frontend does not call it yet |
+| Backend | **Phase 1 only** (`backend/`, see 3.8): FastAPI + PostgreSQL + Alembic, auth, organizations, API keys, audit/request logs, MRZ validator. Connected to the frontend for auth, API keys, logs, team and MFA (see 3.9) |
 | Frontend tests / CI | CI workflow `.github/workflows/ci.yml` (frontend type-check + build, backend lint + migrations + tests); **no frontend tests** |
 | Lockfile | `package-lock.json` (npm) |
 | Source size | ~1,800 lines of TSX |
@@ -88,6 +88,7 @@ app/
   page.tsx                      landing page (French/English mix)
   globals.css                   Tailwind base + brand colors + focus ring
   icon.png, apple-icon.png      favicons from brand pack
+  login/ signup/ forgot-password/ reset-password/   auth pages (components/AuthUI.tsx) talking to the backend
   verify/page.tsx               PUBLIC hosted verification page for end users (demo mode, see 3.5)
   dashboard/
     page.tsx                    Overview (stat cards, chart, recent verifications, activity)
@@ -98,8 +99,13 @@ app/
     logs/page.tsx               API request logs UI
     settings/page.tsx           Workspace, webhook URL, notifications
     support/page.tsx            FAQ, links, contact
+lib/
+  api.ts                        API client (typed errors, 401 → refresh once, cross-tab refresh lock, safeNext), token storage
+  auth.tsx                      AuthProvider/useAuth (login, MFA step, register, logout, organization switch), role helpers `can.*`
 components/
-  DashShell.tsx                 Sidebar (collapsible) + top bar, used by all dashboard pages
+  AuthUI.tsx                    Login / sign-up / forgot / reset forms + split-screen layout
+  LiveUsage.tsx                 Real usage card on Overview
+  DashShell.tsx                 Sidebar (collapsible) + top bar + **session guard** (redirects to /login?next=…), user/org card, organization switcher, sign out; `sample` prop controls the Sample/Live badge
   OverviewChart.tsx             Interactive bar chart
   Verifications.tsx             People list/filter/search/detail/approve-reject
   Media.tsx                     Selfie "video" player + ID front/back + lightbox
@@ -138,12 +144,12 @@ Not yet existing: login / sign-up / password reset, hosted verification page for
 | `components/Verifications.tsx` | 10 hard-coded people, scores, checks, reasons. Approve/Reject only changes React state (lost on refresh). |
 | `components/Media.tsx` | The "video" is a **photo animated with CSS**, not a real recording. ID front/back are **generic drawn cards**, not real documents. Only 2 demo photos exist (`public/faces`). |
 | `components/Businesses.tsx` | 8 hard-coded companies. |
-| `components/ApiKeys.tsx` | Keys are random hex generated in the browser (`crypto.getRandomValues`); not stored, not valid for any API. **Real secret keys must never be generated or shown by frontend code.** |
-| `components/Logs.tsx` | 9 hard-coded request logs. |
-| `components/Settings.tsx` | Form state in memory only. Nothing saved. |
+| `components/ApiKeys.tsx` | **Real** (backend): list/create/revoke through `/organizations/{id}/api-keys`; the secret is shown once and never stored in the browser. (Old client-side key generation was removed.) |
+| `components/Logs.tsx` | **Real** (backend): request log (route template, status, latency, key prefix) and audit trail. Empty until the API is used. |
+| `components/Settings.tsx` | **Real** (backend): rename organization, team (add existing user, change role, remove), TOTP two-step verification with recovery codes. Webhook URL and notification toggles were removed (no backend yet). |
 | `components/HostedPage.tsx` (`/verify`) | **Public page. Real UI, no backend.** The scanner opens the camera automatically on each capture step and **captures automatically** (`components/Scanner.tsx`): it analyses the frame area every 140 ms (brightness, glare, sharpness via Laplacian variance, frame-to-frame stability) and captures after ~1.3 s of good frames (selfie: ~3 s with a visible 3-2-1 countdown); a manual "Capture now" appears after 9 s and an upload fallback exists. **Documents now use OpenCV.js card-edge detection** (`cardDetect.ts`): it finds a convex 4-corner shape with a card/passport-page aspect ratio (1.2–1.9) and 65–115° corners, checks fit ("Move closer / back / center"), corner stability, exposure, glare and sharpness, then captures a perspective-corrected, upright crop (~1000 px wide). Limits: it detects a card-SHAPED rectangle, not a genuine document (a credit card, a card-shaped object or a screen can pass); low contrast against the background can miss the edges; no OCR, no document-type classification, no tamper checks. If OpenCV (or MediaPipe, needed for the face-photo check) cannot load, the document scanner **fails closed**: it shows an error with a "Try again" button and accepts nothing. **Selfie (`FaceScanner.tsx`)**: MediaPipe Face Landmarker (self-hosted, in-browser) requires exactly one face, centered in the oval, big enough and frontal (yaw within ±9°) for ~0.8 s, takes the still photo, then **asks the user to turn their head LEFT or RIGHT (random)** showing an animated pointing finger (👈/👉) with chevrons and a direction label. Success = head yaw ≥ 20° in the requested direction for 2 consecutive frames (≈ nose/cheek ratio 0.17 as fallback); the wrong direction shows "Other way"; after 12 s the direction flips ("Let's try again"). Sign convention (verified): yaw > 0 = user's LEFT, < 0 = user's RIGHT, from `atan2(m[8], m[10])` of the facial transformation matrix; the preview is mirrored so the finger points to the same side the user sees. **Limits: this is a basic active challenge, NOT certified liveness.** A replayed video, a deep-fake or a 3D mask can pass; no PAD, no texture/depth analysis, no server-side re-check, no face matching against the document. It was tested only with synthetic perspective-warped frames (≈5° effective yaw) using a test-only build flag `NEXT_PUBLIC_TURN_DEG` (**never set it in production**; default 20°) and never with real head turns on real phones: thresholds must be tuned on real devices. If MediaPipe cannot load, the selfie scanner **fails closed** (error + "Try again"); there is no weaker fallback. Document authenticity, face matching and certified liveness belong to Phases 2–3. Camera (`getUserMedia`) and file input work; a local quality check (brightness, glare, blur via canvas) runs in the browser. Photos live only in memory (`blob:` URLs), are never uploaded (no network request is made), and are deleted on submit/restart. The final screen says "Demo complete — no verification was performed" and **never shows a verdict**. Branding comes from URL params (`name,color,theme,shape,lang,docs,title,subtitle,support`), validated and rendered as text; `redirect` and logo are deliberately NOT accepted from the URL (open-redirect / untrusted-image risk). Do not wire any upload to this page until the backend, consent and retention requirements (sections 5, 8, white-label requirements) are met. |
 | `components/WhiteLabel.tsx` | Branding config lives in React state only (logo is an in-memory object URL). Custom-domain "DNS record" and its target value are examples; no domain or certificate is verified. The phone preview (`HostedPreview.tsx`) is a clickable mock of a hosted page that does not exist yet: no camera, no upload, no real country/document rules (country list is a fixed sample of 24 ISO codes, names via `Intl.DisplayNames`; Kreyòl falls back to French names). |
-| `app/dashboard/page.tsx`, `OverviewChart.tsx` | All numbers (12,480 checks, 96.4%, charts, activity) are invented. |
+| `app/dashboard/page.tsx`, `OverviewChart.tsx` | The "API usage · last 30 days" card (`LiveUsage.tsx`) is real (`/usage`). All other numbers (12,480 checks, 96.4%, charts, activity) are invented and labelled "Sample data below". |
 | `components/FaceMatch.tsx` | Marketing animation; scores 98 % / 34 % are scripted. |
 | `components/Support.tsx` | "All systems operational" is static text. |
 
@@ -187,12 +193,14 @@ backend/
   app/models.py                users, organizations, memberships, refresh_sessions, password_reset_tokens, recovery_codes, api_keys, audit_logs, request_logs
   app/api/v1/                  auth.py, orgs.py (orgs, members, api keys, audit logs, usage), tools.py (MRZ check)
   app/services/                audit.py, mrz.py (ICAO 9303 TD1/TD2/TD3 parser + check digits)
-  alembic/versions/0001_*.py   initial schema (+ PostgreSQL trigger that makes audit_logs append-only)
-  tests/                       54 tests against a real PostgreSQL (runs the real migrations)
+  alembic/versions/0001_*.py   initial schema in the dedicated PostgreSQL schema `freda_verify` (+ trigger that makes audit_logs append-only)
+  alembic/versions/0002_*.py   lock-down: row level security on every table + revoke from Supabase `anon`/`authenticated`
+  tests/                       58 tests against a real PostgreSQL (runs the real migrations)
+  docker-entrypoint.sh         applies the migrations at container start (tables are created automatically), then starts uvicorn
 infra/docker-compose.yml       postgres 16, redis 7, minio, backend; every secret required from infra/.env (see infra/.env.example)
 ```
 
-**Endpoints** (`/api/v1`): `POST /auth/register|login|refresh|logout|mfa/verify|mfa/setup|mfa/enable|mfa/disable|password/forgot|password/reset`, `GET /auth/me`; `GET|POST /organizations`, `GET|PATCH /organizations/{id}`, `GET|POST /organizations/{id}/members`, `PATCH|DELETE /organizations/{id}/members/{user_id}`, `GET|POST /organizations/{id}/api-keys`, `DELETE /organizations/{id}/api-keys/{key_id}`, `GET /organizations/{id}/audit-logs`; `GET /usage` (API key or `?organization_id=`); `POST /tools/mrz/check`. OpenAPI at `/docs` (disabled when `FV_APP_ENV=prod`). **Not built yet** (spec endpoints): `/verifications*`, `/webhooks`.
+**Endpoints** (`/api/v1`): `POST /auth/register|login|refresh|logout|mfa/verify|mfa/setup|mfa/enable|mfa/disable|password/forgot|password/reset`, `GET /auth/me`; `GET|POST /organizations`, `GET|PATCH /organizations/{id}`, `GET|POST /organizations/{id}/members`, `PATCH|DELETE /organizations/{id}/members/{user_id}`, `GET|POST /organizations/{id}/api-keys`, `DELETE /organizations/{id}/api-keys/{key_id}`, `GET /organizations/{id}/audit-logs`, `GET /organizations/{id}/request-logs`; `GET /usage` (API key or `?organization_id=`); `POST /tools/mrz/check`. OpenAPI at `/docs` (disabled when `FV_APP_ENV=prod`). **Not built yet** (spec endpoints): `/verifications*`, `/webhooks`.
 
 **Security decisions implemented and tested:**
 - Passwords: argon2id, min 10 chars, rejects common/repetitive passwords and ones containing the e-mail name; constant-time-ish login (dummy hash for unknown e-mails); same error for unknown e-mail and wrong password; lockout after 5 failures (15 min) shown as a generic 429; per-IP and per-e-mail rate limits on credential endpoints (Redis when `FV_REDIS_URL` is set, otherwise in-process).
@@ -206,7 +214,7 @@ infra/docker-compose.yml       postgres 16, redis 7, minio, backend; every secre
 
 **MRZ validator (`app/services/mrz.py`)**: parses TD3 (passport), TD2 and TD1 (ID card) MRZ text and verifies the ICAO 9303 check digits (document number, birth date, expiry date, optional data, composite) with weights 7-3-1, parses names/dates/sex/expiry and flags impossible dates and expired documents; optional correction of common OCR confusions (O/0, I/1, B/8, S/5, Z/2) only where the grammar requires digits/letters (the number of corrections is reported). Tested with the ICAO specimen TD3 and TD1 and a generated TD2, tampered digits, wrong layouts and forbidden characters. **It validates the internal consistency of text you already have; it does not read the MRZ from an image (no OCR yet) and does not prove a document is genuine.** The hosted page does not use it yet (it needs OCR; Phase 2: PaddleOCR on the server).
 
-**Known gaps in Phase 1 (do not hide them):** no e-mail verification at sign-up (anyone can register any address); no e-mail provider, so password-reset links are only logged in `dev` (never in prod) and nothing is sent; members can be added only if they already have an account (no invitation e-mails); no `Idempotency-Key` handling yet; request logs are written synchronously; the in-process rate limiter is per worker (use Redis in prod); no backups, no monitoring, no pen test; platform-admin features absent; the Docker image and the compose stack were validated only with `docker compose config` (no Docker daemon in the build sandbox), not built or run; tests ran on Python 3.13 / PostgreSQL 16.15 locally while the Docker image and CI use Python 3.12 (the CI workflow had not run when this was written).
+**Known gaps in Phase 1 (do not hide them):** the registration form does not verify e-mail addresses and the reset page cannot receive a link (no e-mail provider); no e-mail verification at sign-up (anyone can register any address); no e-mail provider, so password-reset links are only logged in `dev` (never in prod) and nothing is sent; members can be added only if they already have an account (no invitation e-mails); no `Idempotency-Key` handling yet; request logs are written synchronously; the in-process rate limiter is per worker (use Redis in prod); no backups, no monitoring, no pen test; platform-admin features absent; the Docker image and the compose stack were validated only with `docker compose config` (no Docker daemon in the build sandbox), not built or run; tests ran on Python 3.13 / PostgreSQL 16.15 locally while the Docker image and CI use Python 3.12 (the CI workflow had not run when this was written).
 
 **Run locally:**
 ```bash
@@ -216,6 +224,26 @@ alembic upgrade head && uvicorn app.main:app --reload
 FV_TEST_DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/freda_test python -m pytest   # database name must end in _test (it is wiped)
 ruff check .
 ```
+
+## 3.9 Supabase + Render: how the database, backend and frontend connect
+
+**Architecture.** Static site (Render) → HTTPS → FastAPI container (Render web service) → PostgreSQL (Supabase). Supabase is used **only as managed PostgreSQL**; authentication, MFA, roles and API keys are Freda Verify's own (backend). We do not use Supabase Auth, PostgREST or the anon key: the browser never talks to the database.
+
+**Tables create themselves.** The container runs `alembic upgrade head` at every start (`docker-entrypoint.sh`, `FV_AUTO_MIGRATE=true`). It creates the schema `freda_verify` and every table; later versions add only what is missing; a PostgreSQL advisory lock makes two containers starting together safe. Alternative without a server: `alembic upgrade head --sql` prints the SQL to paste in the Supabase SQL editor.
+
+**Isolation (important).** All tables live in the schema **`freda_verify`**, never in `public`. This was introduced after finding that the existing Supabase project "Freda Workspace" already hosts another application (`public.users`, `public.api_keys`, orders, domains…) whose names would have collided. **Never point Freda Verify at a database that holds another application's data unless you accept this schema isolation; the owner of that project chose a separate project instead.** Migration 0002 enables row level security (no policies) on every table and revokes `anon`/`authenticated` privileges, so even if the schema is later exposed to the Supabase API nothing is readable. After the first deploy run the Supabase security advisors and fix anything reported.
+
+**Connection string.** Use the **Session pooler** string (Supabase dashboard → Connect), it works over IPv4 and keeps prepared statements: `postgresql://postgres.<project-ref>:<DB-PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres`. The backend accepts `postgres://` / `postgresql://` and adds `sslmode=require` for remote hosts. The transaction pooler (port 6543) is supported (`prepare_threshold=None`) but is not recommended for migrations. The direct connection (`db.<ref>.supabase.co`) is IPv6-only on the free tier and may not be reachable from the host. Hardening (recommended): create a dedicated database role for the app instead of the `postgres` role.
+
+**Runbook.**
+1. Supabase: create the new project (not "Freda Workspace"), set a strong DB password, copy the **Session pooler** URI.
+2. Render: *New → Blueprint* on this repo (`render.yaml`: service `freda-verify-api` (Docker, `backend/`) + static site `freda-verify`). Secrets are typed in the Render dashboard, never in git: `FV_DATABASE_URL` (the URI above), `FV_CORS_ORIGINS` (JSON list with the static site URL, e.g. `["https://freda-verify.onrender.com"]`). `FV_SECRET_KEY` and `FV_ENCRYPTION_KEY` are generated by Render (`generateValue`); keep them stable (changing `FV_SECRET_KEY` signs everyone out; changing `FV_ENCRYPTION_KEY` makes stored TOTP secrets unreadable).
+3. Static site env var `NEXT_PUBLIC_API_URL` = the API service URL (e.g. `https://freda-verify-api.onrender.com`). It is inlined at build time: redeploy the static site after changing it.
+4. Open `/signup`. First start: check the API logs for `Running upgrade -> 0001`, then `GET /health/ready`.
+
+**Frontend session handling (decision).** Access token (15 min) lives in memory only. The refresh token is stored in `localStorage` when "Keep me signed in" is ticked, otherwise in `sessionStorage`. Trade-off: JavaScript-readable storage is exposed to XSS (no CSP is configured yet; the site loads no third-party scripts). Mitigations in place: refresh tokens rotate on every use and reuse revokes all sessions; short access tokens. Refreshes are serialised across tabs with the Web Locks API (without it, two tabs refreshing the same token would look like theft and sign the user out everywhere). **Move to an httpOnly, Secure, SameSite cookie once the API and the app share a registrable domain** (custom domain, e.g. `app.example.com` + `api.example.com`; with both on `onrender.com` browsers treat them as different sites and block such cookies). The route guard in `DashShell` is UX only; the API refuses every request without a valid session.
+
+**Verified end-to-end locally** (Playwright against uvicorn + PostgreSQL 16 + the static build, 20 checks): guard redirect with `?next=`, weak-password message, sign-up, real user/org in the sidebar, key creation (secret shown once, gone after reload), the key authenticating against the API, request log and audit trail, revocation (401), organization rename, MFA enrolment + recovery codes, session surviving reload, sign out, MFA sign-in with a recovery code, two tabs loading at once, generic forgot-password answer. **Not verified:** the Supabase connection itself (no project/password available to the build sandbox), the Render Blueprint, a real browser on Safari/Android, e-mail sending (none exists).
 
 ---
 
@@ -513,6 +541,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-19 — Frontend connected to the backend: login, sign-up, forgot/reset password, session guard, user/org card + organization switcher, real API Keys / Logs / Settings (team, MFA) pages and live usage card; backend moved to the dedicated schema `freda_verify` (RLS + revoke migration), tables created automatically at container start, DSN normalisation for Supabase, `/request-logs` endpoint, `render.yaml`; 20 browser end-to-end checks, 58 backend tests. Supabase/Render deployment not performed.
 - 2026-11-19 — Backend Phase 1 foundation (`backend/`, `infra/`, CI): FastAPI + PostgreSQL + Alembic, auth (argon2id, JWT, refresh rotation, TOTP MFA, lockout, rate limit), organizations + RBAC + tenant isolation, hashed API keys, append-only audit log, request logs, structured errors; ICAO 9303 MRZ check-digit validator + `/tools/mrz/check`; 54 tests. Frontend not connected yet.
 - 2026-11-19 — Hosted page and its preview default to the Freda Verify name and logo when the white label is not filled.
 - 2026-11-19 — Hardening of `/verify`: removed the review screen; strict passport/ID validation (shape + face photo + MRZ) for live scans and uploads; scanners fail closed instead of falling back to weak heuristics; selfie challenge is now two random steps (turn, then the other way; blink opt-in); SVG animated hand + chevrons instead of emoji; `?debug=1` overlay for real-device tuning; engines preloaded; large binaries (OpenCV, MediaPipe wasm) are no longer committed (copied from node_modules by `scripts/copy-vendor.mjs`); MediaPipe model license confirmed from the official model cards.
