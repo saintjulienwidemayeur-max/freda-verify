@@ -7,6 +7,7 @@ const I = ({ children }: { children: ReactNode }) => (
 );
 const ICONS = {
   overview: <I><rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><rect x="13.5" y="13.5" width="7" height="7" rx="2" /></I>,
+  people: <I><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.5-3.6 3.2-5.5 6.5-5.5s6 1.900 6.500 5.500M16 4.800a3.500 3.500 0 0 1 0 6.400M18 14.800c1.900.7 3.200 2.300 3.500 5.200" /></I>,
   business: <I><path d="M4 20V6.5A1.5 1.5 0 0 1 5.5 5H13a1.5 1.5 0 0 1 1.5 1.5V20M14.5 10H18.5A1.5 1.5 0 0 1 20 11.5V20M2.5 20h19M8 9h2.5M8 12.5h2.5M8 16h2.5" /></I>,
   key: <I><circle cx="8" cy="15" r="3.5" /><path d="M10.5 12.5L20 3M16 7l3 3M13.5 9.5l2 2" /></I>,
   logs: <I><path d="M5 4.5h14M5 9.5h14M5 14.5h9M5 19.5h6" /></I>,
@@ -16,6 +17,7 @@ const ICONS = {
 
 const MAIN: [keyof typeof ICONS, string, string | null][] = [
   ["overview", "Overview", "/dashboard"],
+  ["people", "Verifications", "/dashboard/verifications"],
   ["business", "Businesses", "/dashboard/businesses"],
   ["key", "API Keys", "/dashboard/api-keys"],
   ["logs", "Logs", "/dashboard/logs"],

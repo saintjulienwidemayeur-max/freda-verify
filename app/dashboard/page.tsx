@@ -1,3 +1,4 @@
+import Link from "next/link";
 import DashShell from "@/components/DashShell";
 import OverviewChart from "@/components/OverviewChart";
 
@@ -61,7 +62,7 @@ export default function Dashboard() {
         <div className="min-w-0 space-y-4">
           <OverviewChart />
           <section className="rounded-2xl border border-[#e3eaf8] bg-white p-5" aria-label="Recent verifications">
-            <h2 className="font-display text-lg font-bold">Recent verifications</h2>
+            <div className="flex items-center justify-between"><h2 className="font-display text-lg font-bold">Recent verifications</h2><Link href="/dashboard/verifications" className="text-sm font-medium text-blue hover:underline">View all →</Link></div>
             <div className="mt-3 overflow-x-auto rounded-xl border border-[#e3eaf8]">
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#F6F8FC] font-mono text-[11px] text-navy/60"><tr>{["Name", "Type", "Document", "Status", "Match"].map((h) => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead>
