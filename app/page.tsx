@@ -1,7 +1,7 @@
 import Link from "next/link";
+import FaceMatch from "@/components/FaceMatch";
 import { Platform, Developers, AmlScreening, Services, Industries, Workflow, Audit, Integration, Security, Faq, Contact } from "@/components/Sections";
 
-const LOGOS = ["Northwind", "lumen", "HALCYON", "Ardent", "kestrel.io", "VANTA"];
 const FEATURES = [
   ["Fully automated", "Documents, selfies and business registries are checked in seconds, with no manual review queue."],
   ["KYC and KYB, one API", "Verify people and companies in the same flow, with the same response format."],
@@ -56,16 +56,23 @@ export default function Home() {
             }}
           />
         </div>
-        <p className="mt-6 text-sm">Trusted by tech leaders and regional businesses</p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 pb-16 text-lg font-semibold opacity-80">
-          {LOGOS.map((l) => <span key={l}>{l}</span>)}
-        </div>
+        <div className="pb-16" />
       </section>
 
       </div>
       </div>
       <div className="mx-auto max-w-6xl px-5">
       <Platform />
+      <section id="face-match" className="grid items-center gap-10 py-16 md:grid-cols-2">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-widest text-blue">Correspondance faciale</p>
+          <h2 className="mt-3 text-4xl font-extrabold tracking-tighter">Le selfie, comparé à la pièce d&apos;identité.</h2>
+          <p className="mt-4 max-w-md text-base text-navy/80">
+            Compare le selfie en direct à la photo sur la pièce d&apos;identité, sans seconde capture ni étape supplémentaire. Obtiens un score de similarité, une décision et tous les drapeaux de risque dans la même réponse.
+          </p>
+        </div>
+        <FaceMatch />
+      </section>
       <Developers />
       <AmlScreening />
       <section id="solutions" className="py-16">
