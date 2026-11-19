@@ -1,0 +1,58 @@
+# Local development stack. Every secret comes from infra/.env (copy infra/.env.example, never commit it).
+# Start:    docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
+# Migrate:  docker compose -f infra/docker-compose.yml --env-file infra/.env run --rm backend alembic upgrade head
+name: freda-verify
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: freda
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+      POSTGRES_DB: freda
+    volumes: [pgdata:/var/lib/postgresql/data]
+    ports: ["127.0.0.1:5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U freda -d freda"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in infra/.env}"]
+    ports: ["127.0.0.1:6379:6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  minio:                      # S3-compatible object storage for documents and selfies (used from Phase 2)
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in infra/.env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in infra/.env}
+    volumes: [miniodata:/data]
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
+
+  backend:
+    build: ../backend
+    environment:
+      FV_APP_ENV: ${FV_APP_ENV:-dev}
+      FV_DATABASE_URL: postgresql+psycopg://freda:${POSTGRES_PASSWORD}@postgres:5432/freda
+      FV_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      FV_SECRET_KEY: ${FV_SECRET_KEY:?set FV_SECRET_KEY in infra/.env}
+      FV_ENCRYPTION_KEY: ${FV_ENCRYPTION_KEY:?set FV_ENCRYPTION_KEY in infra/.env}
+      FV_CORS_ORIGINS: ${FV_CORS_ORIGINS:-["http://localhost:3000"]}
+      FV_TRUST_PROXY: ${FV_TRUST_PROXY:-false}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports: ["127.0.0.1:8000:8000"]
+
+volumes:
+  pgdata:
+  miniodata:

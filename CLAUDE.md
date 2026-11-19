@@ -3,9 +3,8 @@
 Permanent technical reference and development guide for **Freda Verify**.
 Last updated: 2026-11-19. Keep this file in sync with the code (rule 16, section 12).
 
-> **Read this first:** today the repository is a **frontend-only prototype** (landing site + sample dashboard).
-> There is **no backend, no database, no authentication, no AI/OCR and no real verification**.
-> Everything a dashboard shows is hard-coded sample data. See section 3.5 (mock inventory).
+> **Read this first:** the repository holds (1) a **frontend prototype** (landing site + sample dashboard + a demo hosted verification page) and (2) a **Phase 1 backend foundation** in `backend/` (accounts, organizations, roles, API keys, audit log, MRZ check-digit validator).
+> There is still **no verification engine**: no OCR, no face matching, no liveness server-side, no AML, no result/webhook. The dashboard is **not connected** to the backend and shows hard-coded sample data. See sections 3.5 (mock inventory) and 3.8 (backend).
 > Never describe any feature as working, production-ready or "verified" unless section 3 says it is real.
 
 ---
@@ -65,7 +64,8 @@ Assets: `public/logo-mark.svg` (used), `public/logo.png`, `public/logo-white.png
 | Fonts | `next/font/google` (Inter, Plus Jakarta Sans, IBM Plex Mono). **Build needs network** to fetch them. |
 | Output | **Static export** (`output: "export"` in `next.config.mjs`) → `out/` |
 | Hosting | Render **Static Site**: build `npm install && npm run build`, publish dir `out` |
-| Backend / DB / auth / tests / CI / Docker | **None** |
+| Backend | **Phase 1 only** (`backend/`, see 3.8): FastAPI + PostgreSQL + Alembic, auth, organizations, API keys, audit/request logs, MRZ validator. Frontend does not call it yet |
+| Frontend tests / CI | CI workflow `.github/workflows/ci.yml` (frontend type-check + build, backend lint + migrations + tests); **no frontend tests** |
 | Lockfile | `package-lock.json` (npm) |
 | Source size | ~1,800 lines of TSX |
 
@@ -156,6 +156,7 @@ Every dashboard page shows a "Sample data" badge and/or a "Demo:" note. Keep the
 - **Passport is strict.** A passport page is accepted only if the flattened crop has (1) a passport-page aspect ratio (1.30–1.56; ID-1 cards are 1.45–1.75, so an ID card is refused as a passport and vice versa), (2) a face photo of printed size (20–85 % of page height) on the left half (MediaPipe face detector) and (3) the two dense full-width text lines of the MRZ in the bottom ~30 % (OpenCV adaptive threshold + row/column analysis). ID/licence front needs shape + face photo; back needs shape. Uploaded photos go through the same pipeline and are stored as the flattened crop. Rejections explain why (shape / photo / MRZ / cannot check).
 - **Tested only with synthetic documents** drawn with PIL (a valid passport page, one without MRZ, one without photo, an ID card, a plain face, an upload of each). It was never tested with real passports, real lighting, glare, worn documents or different national passport layouts; the MRZ and face thresholds will need tuning on real samples. **The checks do not prove a document is genuine** (a printed or on-screen copy of a real page with the right layout passes); MRZ check digits are not verified, no OCR, no tamper detection.
 - **Selfie challenge:** one face, centered, looking straight → still photo taken; then task 1 = turn LEFT or RIGHT (random) and task 2 = turn the OTHER way (random content, user must look straight between tasks, 14 s per task with the turn threshold relaxed to 75 % after 6 s, 20° yaw by default measured relative to the user's own straight pose). Blink is implemented with baseline-relative blendshape thresholds but is **opt-in (`?blink=1`)**: with a synthetic closed-eye image the model scored only 0.34–0.39 and the open-eye baseline of the test portrait was already 0.28, so it could not be validated; do not enable it for users before testing on real faces/devices.
+- **First real-device test (iPhone, Safari, 2026-11-19, user screenshots):** MediaPipe ran on the GPU delegate at 9–10 fps; the two-step challenge (right then left) completed with "Parfait !"; head yaw reached 38.6° (ratio 0.60) on a turn and ~1–3° when looking straight (baseline 1.5°), so the 20° threshold is comfortable; open-eye blink scores were 0.03–0.33 (varies with lighting/angle, which is why blink stays opt-in); the animated hand + chevrons + label were legible. One device only: still test Android, low-end phones, other lighting.
 - **Debug overlay:** open `/verify?...&debug=1` on a phone to see live values (delegate/fps, number of faces, head yaw in degrees, nose/cheek ratio, blink scores, document ratio/fill/sharpness). Use it to tune thresholds on real devices.
 - **Still NOT certified liveness.** A replayed video, a deep fake or a 3D mask can pass; random multi-step content only makes pre-recorded replay harder. There is no face match between selfie and document photo (needs a license-cleared face-recognition model, D7) and no server-side verification.
 - Engines are preloaded when the user reaches the document step (OpenCV ~10 MB, MediaPipe ~15 MB wasm + 3.7 MB model).
@@ -174,6 +175,47 @@ The public copy describes capabilities that do not exist. Review before any publ
 | Pricing: Starter $0 / 100 checks, Growth $0.40, Enterprise custom | Placeholder numbers, not decided. |
 | API example `POST https://api.freda.dev/v1/sessions` + header `x-api-key` | Domain and endpoint do not exist; also differ from the target API (section 6). |
 | Audit JSON example (`case_20817`, `analyst_04`) | Illustrative only. |
+
+## 3.8 Backend (Phase 1 foundation)
+
+Location `backend/` (Python, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL). Local infra in `infra/docker-compose.yml`. CI in `.github/workflows/ci.yml`.
+
+```
+backend/
+  app/main.py                  app factory, CORS, /health, /health/ready, routers under /api/v1
+  app/core/                    config (env FV_*), security (argon2id, JWT, API keys, Fernet), deps (auth + RBAC), errors, middleware, ratelimit, net
+  app/models.py                users, organizations, memberships, refresh_sessions, password_reset_tokens, recovery_codes, api_keys, audit_logs, request_logs
+  app/api/v1/                  auth.py, orgs.py (orgs, members, api keys, audit logs, usage), tools.py (MRZ check)
+  app/services/                audit.py, mrz.py (ICAO 9303 TD1/TD2/TD3 parser + check digits)
+  alembic/versions/0001_*.py   initial schema (+ PostgreSQL trigger that makes audit_logs append-only)
+  tests/                       54 tests against a real PostgreSQL (runs the real migrations)
+infra/docker-compose.yml       postgres 16, redis 7, minio, backend; every secret required from infra/.env (see infra/.env.example)
+```
+
+**Endpoints** (`/api/v1`): `POST /auth/register|login|refresh|logout|mfa/verify|mfa/setup|mfa/enable|mfa/disable|password/forgot|password/reset`, `GET /auth/me`; `GET|POST /organizations`, `GET|PATCH /organizations/{id}`, `GET|POST /organizations/{id}/members`, `PATCH|DELETE /organizations/{id}/members/{user_id}`, `GET|POST /organizations/{id}/api-keys`, `DELETE /organizations/{id}/api-keys/{key_id}`, `GET /organizations/{id}/audit-logs`; `GET /usage` (API key or `?organization_id=`); `POST /tools/mrz/check`. OpenAPI at `/docs` (disabled when `FV_APP_ENV=prod`). **Not built yet** (spec endpoints): `/verifications*`, `/webhooks`.
+
+**Security decisions implemented and tested:**
+- Passwords: argon2id, min 10 chars, rejects common/repetitive passwords and ones containing the e-mail name; constant-time-ish login (dummy hash for unknown e-mails); same error for unknown e-mail and wrong password; lockout after 5 failures (15 min) shown as a generic 429; per-IP and per-e-mail rate limits on credential endpoints (Redis when `FV_REDIS_URL` is set, otherwise in-process).
+- Sessions: 15-min JWT access token (HS256, `typ` claim so MFA/refresh tokens can never be used as access tokens); opaque refresh tokens stored only as SHA-256, **rotated on every use**, and **reuse of a rotated token revokes every session of that user**; password reset revokes all sessions.
+- MFA: TOTP (pyotp), secret encrypted at rest (Fernet), replay of a TOTP step refused, 8 single-use recovery codes stored hashed.
+- API keys: `fv_test_…` / `fv_live_…`, secret returned **once**, only SHA-256 + prefix + last 4 stored, revocation, per-key rate limit, `last_used_at`.
+- Tenant isolation: every query is scoped by `organization_id`; non-members get **404** (not 403) so organizations cannot be enumerated; keys/ids of another tenant are "not found" even through your own org path; API keys cannot call dashboard routes.
+- RBAC: owner / admin / member / viewer with a permission map in `core/deps.py`; last-owner protection; only owners can create/remove owners.
+- Audit log (who/what/when/IP, no secrets) is append-only at the database level (trigger rejects UPDATE/DELETE). Request log stores method, route template, status, latency, org and key id only: **no bodies, headers, query strings or IPs**.
+- Errors are structured (`{"error": {code, message, request_id, details}}`), validation errors never echo submitted values, 500s never leak internals; `X-Request-ID` is accepted/generated; security headers on every response; CORS allow-list from env (wildcard refused in prod); in `prod` the app refuses to start without `FV_SECRET_KEY` (≥ 32 chars) and `FV_ENCRYPTION_KEY`.
+
+**MRZ validator (`app/services/mrz.py`)**: parses TD3 (passport), TD2 and TD1 (ID card) MRZ text and verifies the ICAO 9303 check digits (document number, birth date, expiry date, optional data, composite) with weights 7-3-1, parses names/dates/sex/expiry and flags impossible dates and expired documents; optional correction of common OCR confusions (O/0, I/1, B/8, S/5, Z/2) only where the grammar requires digits/letters (the number of corrections is reported). Tested with the ICAO specimen TD3 and TD1 and a generated TD2, tampered digits, wrong layouts and forbidden characters. **It validates the internal consistency of text you already have; it does not read the MRZ from an image (no OCR yet) and does not prove a document is genuine.** The hosted page does not use it yet (it needs OCR; Phase 2: PaddleOCR on the server).
+
+**Known gaps in Phase 1 (do not hide them):** no e-mail verification at sign-up (anyone can register any address); no e-mail provider, so password-reset links are only logged in `dev` (never in prod) and nothing is sent; members can be added only if they already have an account (no invitation e-mails); no `Idempotency-Key` handling yet; request logs are written synchronously; the in-process rate limiter is per worker (use Redis in prod); no backups, no monitoring, no pen test; platform-admin features absent; the Docker image and the compose stack were validated only with `docker compose config` (no Docker daemon in the build sandbox), not built or run; tests ran on Python 3.13 / PostgreSQL 16.15 locally while the Docker image and CI use Python 3.12 (the CI workflow had not run when this was written).
+
+**Run locally:**
+```bash
+cd backend && python -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt
+cp .env.example .env            # fill FV_DATABASE_URL (and generate FV_SECRET_KEY / FV_ENCRYPTION_KEY)
+alembic upgrade head && uvicorn app.main:app --reload
+FV_TEST_DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/freda_test python -m pytest   # database name must end in _test (it is wiped)
+ruff check .
+```
 
 ---
 
@@ -208,16 +250,16 @@ Later, if desired, move the web app to `apps/web` in a monorepo.
 
 | ID | Module | Scope | Status |
 |---|---|---|---|
-| A | Authentication | register, login, reset, MFA, RBAC, sessions | not started |
-| B | Organizations | multi-tenant isolation, team, permissions, settings | not started |
+| A | Authentication | register, login, reset, MFA, RBAC, sessions | **Phase 1 done in backend** (register, login, refresh rotation + reuse detection, logout, password reset, TOTP MFA + recovery codes, lockout, rate limit). Missing: e-mail verification, e-mail sending, frontend pages |
+| B | Organizations | multi-tenant isolation, team, permissions, settings | **Phase 1 done in backend** (orgs, memberships, roles owner/admin/member/viewer, tenant isolation tests). Missing: e-mail invitations, org deletion, settings |
 | C | Document engine | upload, quality, OCR, classification, MRZ, expiry, consistency, tamper hints | not started |
 | D | Biometric engine | selfie, face detect/compare, liveness, anti-spoofing, confidence | not started |
 | E | AML engine | PEP, sanctions, watchlists, name/DOB matching, history | not started |
 | F | Risk engine | document/biometric/AML risk, indicators, thresholds | not started |
 | G | Decision engine | APPROVED / REJECTED / PENDING / MANUAL_REVIEW / EXPIRED | not started |
 | H | Verification management | sessions, links, progress, storage, manual review, reports | UI mock only |
-| I | Developer platform | API keys, test/live, docs, webhooks, logs, usage, SDK docs | UI mock only |
-| J | Administration | platform admins, monitoring, fraud, audit, config | not started |
+| I | Developer platform | API keys, test/live, docs, webhooks, logs, usage, SDK docs | **Partial**: API keys (test/live, hashed, revoke), request logs, `/usage`, MRZ tool endpoint exist in backend. Missing: webhooks, sandbox, docs, SDKs; UI still mock |
+| J | Administration | platform admins, monitoring, fraud, audit, config | **Partial**: append-only audit log (DB trigger) + per-org audit endpoint. Missing: platform admin endpoints/UI, monitoring |
 
 Rule: **never auto-reject solely on an uncertain AI score.** Low confidence → `MANUAL_REVIEW`.
 
@@ -409,6 +451,8 @@ npx tsc --noEmit       # type-check only
 npx serve out          # preview the static export (next start is not supported)
 ```
 
+Backend commands: see section 3.8.
+
 ---
 
 ## 13. Roadmap
@@ -425,6 +469,7 @@ Exit: UI complete and honest about being mocked; API contract frozen (OpenAPI dr
 ### Phase 1 — Foundation
 Backend scaffold, Docker Compose (Postgres, Redis, MinIO), Alembic, auth (register/login/reset/MFA), organizations, RBAC, API-key issuing (hashed), request logging, audit log, CI.
 Exit: a user can sign up, create an organization and a test API key; tenant isolation tests pass.
+**Status (2026-11-19): exit criteria met in the backend** (register → org → API key, 54 tests including tenant isolation; smoke-tested with uvicorn + PostgreSQL + Redis). Still open for Phase 1: e-mail verification and sending, org invitations, idempotency keys, frontend login/sign-up wired to the API, backups, deployment, CI run.
 
 ### Phase 2 — Document engine
 Upload to private storage, image-quality checks, PaddleOCR, document classification, MRZ parsing (checksum validation), expiry and consistency checks, tamper heuristics (clearly labeled heuristic).
@@ -454,8 +499,8 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 | # | Decision | Recommendation |
 |---|---|---|
 | D1 | Frontend framework: keep **Next.js (static export)** or switch to a plain React SPA (Vite)? | Keep Next.js for now (already built; still React + TS + Tailwind). Revisit if SSR is never needed. |
-| D2 | Repo layout: add `backend/` and `infra/` beside the current app, or restructure into a monorepo (`apps/web`) now? | Add beside now; restructure later. |
-| D3 | API auth style and path: `Authorization: Bearer` + `/api/v1/verifications` (spec) vs the `x-api-key` + `/v1/sessions` shown in the UI. | Follow the spec; update UI/copy. Support Bearer with `fv_test_` / `fv_live_` prefixes. |
+| D2 | Repo layout: add `backend/` and `infra/` beside the current app, or restructure into a monorepo (`apps/web`) now? | **Decided & done**: `backend/` and `infra/` sit beside the Next.js app. |
+| D3 | API auth style and path: `Authorization: Bearer` + `/api/v1/verifications` (spec) vs the `x-api-key` + `/v1/sessions` shown in the UI. | **Backend follows the spec**: `Authorization: Bearer` (JWT for dashboard users, `fv_test_`/`fv_live_` keys for the API) under `/api/v1`. UI/landing copy still show `x-api-key` and `/v1/sessions`: update them. |
 | D4 | Public-copy honesty: remove or soften unimplemented claims on the landing page now? | Yes, before sharing the site publicly. |
 | D5 | Branch/merge: merge to `main` and deploy from `main`? | Yes (needs an explicit go-ahead to open a PR). |
 | D6 | Hosting for backend and AI (CPU vs GPU, region, provider) and data-residency choice. | Decide after Phase 1; drives cost and legal. |
@@ -468,6 +513,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-19 — Backend Phase 1 foundation (`backend/`, `infra/`, CI): FastAPI + PostgreSQL + Alembic, auth (argon2id, JWT, refresh rotation, TOTP MFA, lockout, rate limit), organizations + RBAC + tenant isolation, hashed API keys, append-only audit log, request logs, structured errors; ICAO 9303 MRZ check-digit validator + `/tools/mrz/check`; 54 tests. Frontend not connected yet.
 - 2026-11-19 — Hosted page and its preview default to the Freda Verify name and logo when the white label is not filled.
 - 2026-11-19 — Hardening of `/verify`: removed the review screen; strict passport/ID validation (shape + face photo + MRZ) for live scans and uploads; scanners fail closed instead of falling back to weak heuristics; selfie challenge is now two random steps (turn, then the other way; blink opt-in); SVG animated hand + chevrons instead of emoji; `?debug=1` overlay for real-device tuning; engines preloaded; large binaries (OpenCV, MediaPipe wasm) are no longer committed (copied from node_modules by `scripts/copy-vendor.mjs`); MediaPipe model license confirmed from the official model cards.
 - 2026-11-19 — Selfie scanner with MediaPipe face detection and a random LEFT/RIGHT head-turn challenge with an animated pointing finger (`FaceScanner.tsx`, `faceDetect.ts`). Basic active challenge only (not certified liveness); tested with synthetic frames, not real devices.

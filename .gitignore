@@ -9,3 +9,15 @@ next-env.d.ts
 # large vendored binaries are copied from node_modules by scripts/copy-vendor.mjs (prebuild)
 public/vendor/opencv.js
 public/vendor/mediapipe/wasm/
+
+# secrets and local environment files
+.env
+.env.*
+!.env.example
+infra/.env
+backend/.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+backend/.venv/

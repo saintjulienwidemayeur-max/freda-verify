@@ -1,0 +1,149 @@
+"""Phase 1 data model. Every tenant-owned row carries organization_id; access is always filtered by it."""
+import enum
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+
+def now() -> datetime:
+    return datetime.now(UTC)
+
+
+class Role(enum.StrEnum):
+    owner = "owner"
+    admin = "admin"
+    member = "member"
+    viewer = "viewer"
+
+
+class KeyEnv(enum.StrEnum):
+    test = "test"
+    live = "live"
+
+
+_PK = dict(primary_key=True, default=uuid.uuid4)
+_TS = dict(type_=DateTime(timezone=True))
+_JSON = JSON().with_variant(JSONB(), "postgresql")
+_BIGPK = BigInteger().with_variant(Integer(), "sqlite")
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)          # stored lower-case
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(120))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_secret_enc: Mapped[str | None] = mapped_column(String(255), nullable=True)   # Fernet-encrypted TOTP secret
+    mfa_last_step: Mapped[int | None] = mapped_column(BigInteger, nullable=True)     # blocks TOTP replay
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    memberships: Mapped[list["Membership"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    memberships: Mapped[list["Membership"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+    __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_membership"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    user: Mapped[User] = relationship(back_populates="memberships")
+    organization: Mapped[Organization] = relationship(back_populates="memberships")
+
+
+class RefreshSession(Base):
+    """One row per refresh token (rotated on every use; reuse of a rotated token revokes every session of the user)."""
+    __tablename__ = "refresh_sessions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RecoveryCode(Base):
+    __tablename__ = "recovery_codes"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ApiKey(Base):
+    """Only the SHA-256 of the key is stored. The secret is returned once, at creation."""
+    __tablename__ = "api_keys"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    env: Mapped[str] = mapped_column(String(8))                                      # test | live
+    prefix: Mapped[str] = mapped_column(String(16))
+    last4: Mapped[str] = mapped_column(String(4))
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuditLog(Base):
+    """Append-only (a PostgreSQL trigger rejects UPDATE/DELETE). Never store secrets, tokens or document data here."""
+    __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_org_id", "organization_id", "id"),)
+    id: Mapped[int] = mapped_column(_BIGPK, primary_key=True, autoincrement=True)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    actor_api_key_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    meta: Mapped[dict] = mapped_column(_JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class RequestLog(Base):
+    """One row per API request. No headers, bodies, query strings or IP addresses are stored."""
+    __tablename__ = "request_logs"
+    __table_args__ = (Index("ix_reqlog_org_time", "organization_id", "created_at"),)
+    id: Mapped[int] = mapped_column(_BIGPK, primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(40))
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    method: Mapped[str] = mapped_column(String(8))
+    path: Mapped[str] = mapped_column(String(200))                                   # route template, e.g. /api/v1/organizations/{org_id}
+    status: Mapped[int] = mapped_column(Integer)
+    latency_ms: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

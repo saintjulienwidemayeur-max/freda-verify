@@ -1,0 +1,95 @@
+"""Passwords (argon2id), JWTs, opaque tokens, API keys, TOTP-secret encryption."""
+import hashlib
+import hmac
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
+from cryptography.fernet import Fernet
+
+from app.core.config import get_settings
+
+_ph = PasswordHasher()
+# verified against when the e-mail is unknown so that response time does not reveal which e-mails exist
+_DUMMY_HASH = _ph.hash("dummy-password-for-timing-equalisation")
+COMMON = {"password", "password1", "123456789", "1234567890", "qwertyuiop", "azertyuiop", "iloveyou12", "motdepasse", "freda verify"}
+
+
+def validate_password(password: str, email: str = "") -> list[str]:
+    problems: list[str] = []
+    if len(password) < 10:
+        problems.append("must be at least 10 characters")
+    if len(password) > 128:
+        problems.append("must be at most 128 characters")
+    if len(set(password)) < 5:
+        problems.append("is too repetitive")
+    if password.lower() in COMMON:
+        problems.append("is too common")
+    local = email.split("@")[0].lower()
+    if local and len(local) >= 4 and local in password.lower():
+        problems.append("must not contain your e-mail name")
+    return problems
+
+
+def hash_password(password: str) -> str:
+    return _ph.hash(password)
+
+
+def verify_password(password: str, hashed: str | None) -> bool:
+    try:
+        return _ph.verify(hashed or _DUMMY_HASH, password) and hashed is not None
+    except (VerifyMismatchError, InvalidHashError):
+        return False
+
+
+def sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def new_token(nbytes: int = 32) -> str:
+    return secrets.token_urlsafe(nbytes)
+
+
+def new_hex(nbytes: int = 4) -> str:
+    return secrets.token_hex(nbytes)
+
+
+def safe_equal(a: str, b: str) -> bool:
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
+def create_jwt(subject: str, kind: str, minutes: int, extra: dict[str, Any] | None = None) -> str:
+    s = get_settings()
+    now = datetime.now(UTC)
+    claims = {"sub": subject, "typ": kind, "iss": s.issuer, "iat": now, "exp": now + timedelta(minutes=minutes), "jti": secrets.token_hex(8), **(extra or {})}
+    return jwt.encode(claims, s.secret_key, algorithm="HS256")
+
+
+def decode_jwt(token: str, kind: str) -> dict[str, Any] | None:
+    s = get_settings()
+    try:
+        claims = jwt.decode(token, s.secret_key, algorithms=["HS256"], issuer=s.issuer, options={"require": ["exp", "iat", "sub", "typ"]})
+    except jwt.PyJWTError:
+        return None
+    return claims if claims.get("typ") == kind else None
+
+
+def generate_api_key(env: str) -> tuple[str, str, str, str]:
+    """Returns (secret, prefix, last4, sha256). The secret is shown once and never stored."""
+    secret = f"fv_{env}_{secrets.token_urlsafe(24)}"
+    return secret, secret[:12], secret[-4:], sha256(secret)
+
+
+def _fernet() -> Fernet:
+    return Fernet(get_settings().encryption_key.encode())
+
+
+def encrypt_secret(plain: str) -> str:
+    return _fernet().encrypt(plain.encode()).decode()
+
+
+def decrypt_secret(token: str) -> str:
+    return _fernet().decrypt(token.encode()).decode()
