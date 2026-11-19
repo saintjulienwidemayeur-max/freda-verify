@@ -102,6 +102,7 @@ components/
   OverviewChart.tsx             Interactive bar chart
   Verifications.tsx             People list/filter/search/detail/approve-reject
   Media.tsx                     Selfie "video" player + ID front/back + lightbox
+  HostedPreview.tsx             Mock of the end-user hosted verification page (welcome, country, document, selfie, done), driven by the white-label config
   WhiteLabel.tsx                Branding form (name, logo, colors, theme, shape, language, texts, docs, domain, redirect) + phone preview
   Businesses.tsx, ApiKeys.tsx, Logs.tsx, Settings.tsx, Support.tsx
   FaceMatch.tsx                 Landing animation (document photo vs selfie)
@@ -130,7 +131,7 @@ Not yet existing: login / sign-up / password reset, hosted verification page for
 | `components/ApiKeys.tsx` | Keys are random hex generated in the browser (`crypto.getRandomValues`); not stored, not valid for any API. **Real secret keys must never be generated or shown by frontend code.** |
 | `components/Logs.tsx` | 9 hard-coded request logs. |
 | `components/Settings.tsx` | Form state in memory only. Nothing saved. |
-| `components/WhiteLabel.tsx` | Branding config lives in React state only (logo is an in-memory object URL). Custom-domain "DNS record" and its target value are examples; no domain or certificate is verified. The phone preview is a mock of a hosted page that does not exist yet. |
+| `components/WhiteLabel.tsx` | Branding config lives in React state only (logo is an in-memory object URL). Custom-domain "DNS record" and its target value are examples; no domain or certificate is verified. The phone preview (`HostedPreview.tsx`) is a clickable mock of a hosted page that does not exist yet: no camera, no upload, no real country/document rules (country list is a fixed sample of 24 ISO codes, names via `Intl.DisplayNames`; Kreyòl falls back to French names). |
 | `app/dashboard/page.tsx`, `OverviewChart.tsx` | All numbers (12,480 checks, 96.4%, charts, activity) are invented. |
 | `components/FaceMatch.tsx` | Marketing animation; scores 98 % / 34 % are scripted. |
 | `components/Support.tsx` | "All systems operational" is static text. |
@@ -335,7 +336,7 @@ Dashboard sections requested: Overview, Verifications, Customers, Organizations,
 | Settings | UI mock ✔ |
 | Logs, Support | UI mock ✔ (extra, not in spec) |
 | White label | UI mock ✔ (`/dashboard/white-label`): brand, colors, theme, button shape, language (EN/FR/HT), texts, accepted documents, redirect URL, custom domain, hide "Powered by", live phone preview |
-| Hosted verification flow (end user) | **missing** — only the preview mock inside White label; the real mobile-first flow is not built |
+| Hosted verification flow (end user) | **mock only** — clickable 5-step preview inside White label (welcome with language picker and 2-step stepper, issuing-country picker with search, document type, selfie, done). The real mobile-first page (camera, uploads, session token) is not built |
 | Login / signup / MFA / password recovery | **missing** |
 | Landing | done visually; copy needs claim review |
 
@@ -443,5 +444,6 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-19 — Redesigned the hosted verification preview (Didit-style welcome, issuing-country step with search, document cards, selfie, done; phone chrome; "Secured by Freda Verify"). No social sign-in by decision.
 - 2026-11-19 — Added White label page (branding form + live preview of the hosted verification page, mock only) and documented white-label requirements.
 - 2026-11-19 — Initial CLAUDE.md. Frontend prototype documented: landing, brand identity, dashboard (Overview, Verifications with media viewer, Businesses, API Keys, Logs, Settings, Support). No backend yet.

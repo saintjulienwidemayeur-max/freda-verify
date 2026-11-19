@@ -1,36 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-type Lang = "fr" | "en" | "ht";
-type Theme = "light" | "dark";
-type Shape = "square" | "rounded" | "pill";
-type DocKey = "id" | "passport" | "license";
-type Step = "welcome" | "document" | "selfie" | "done";
-
-type Cfg = {
-  name: string; logo: string | null; color: string; theme: Theme; shape: Shape; lang: Lang;
-  title: string; subtitle: string; docs: Record<DocKey, boolean>; domain: string; redirect: string;
-  support: string; hidePowered: boolean;
-};
+import HostedPreview, { T, type Cfg, type DocKey, type Step } from "./HostedPreview";
 
 const DEFAULT: Cfg = {
   name: "Your Company", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
   title: "", subtitle: "", docs: { id: true, passport: true, license: false }, domain: "", redirect: "", support: "", hidePowered: false,
 };
 const PRESETS = ["#1E4FE0", "#0A1647", "#12B76A", "#7A3FF2", "#E5484D", "#F79009"];
-const RADIUS: Record<Shape, number> = { square: 6, rounded: 14, pill: 999 };
-
-const T: Record<Lang, Record<string, string>> = {
-  en: { title: "Verify your identity", sub: "It takes about two minutes. You will need an ID document and your camera.", start: "Start verification", s1: "Scan your document", s2: "Take a selfie", s3: "Get your result", consent: "By continuing you agree to the processing of your identity data.", choose: "Choose your document", id: "National ID card", passport: "Passport", license: "Driver's license", capture: "Capture document", selfieT: "Take a selfie", selfieS: "Center your face in the oval and hold still.", selfieB: "Take selfie", doneT: "Thank you!", doneS: "We received your information. You will be notified of the result shortly.", back: "Back to", powered: "Powered by Freda Verify", step: "Step", help: "Need help?" },
-  fr: { title: "Vérifiez votre identité", sub: "Cela prend environ deux minutes. Munissez-vous d'une pièce d'identité et de votre caméra.", start: "Commencer la vérification", s1: "Scannez votre document", s2: "Prenez un selfie", s3: "Recevez votre résultat", consent: "En continuant, vous acceptez le traitement de vos données d'identité.", choose: "Choisissez votre document", id: "Carte d'identité nationale", passport: "Passeport", license: "Permis de conduire", capture: "Capturer le document", selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale et ne bougez pas.", selfieB: "Prendre le selfie", doneT: "Merci !", doneS: "Nous avons reçu vos informations. Vous serez informé du résultat sous peu.", back: "Retour à", powered: "Propulsé par Freda Verify", step: "Étape", help: "Besoin d'aide ?" },
-  ht: { title: "Verifye idantite ou", sub: "Sa pran apeprè de minit. Ou bezwen yon pyès idantite ak kamera w.", start: "Kòmanse verifikasyon", s1: "Eskane dokiman w", s2: "Pran yon selfi", s3: "Resevwa rezilta w", consent: "Lè w kontinye, ou aksepte trètman done idantite w.", choose: "Chwazi dokiman w", id: "Kat idantite nasyonal", passport: "Paspò", license: "Pèmi kondwi", capture: "Pran foto dokiman an", selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la epi pa bouje.", selfieB: "Pran selfi a", doneT: "Mèsi !", doneS: "Nou resevwa enfòmasyon w yo. N ap enfòme w rezilta a talè.", back: "Retounen sou", powered: "Pwopilse pa Freda Verify", step: "Etap", help: "Bezwen èd?" },
-};
-
 const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
-const onColor = (hex: string) => {
-  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#0A1647" : "#FFFFFF";
-};
 const isHost = (v: string) => /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(v);
 const isUrl = (v: string) => { try { const u = new URL(v); return u.protocol === "https:"; } catch { return false; } };
 const isMail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -54,73 +31,6 @@ const Toggle = ({ on, set, label }: { on: boolean; set: (v: boolean) => void; la
     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? "left-[22px]" : "left-0.5"}`} />
   </button>
 );
-
-function Preview({ c, step }: { c: Cfg; step: Step }) {
-  const t = T[c.lang], dark = c.theme === "dark", fg = onColor(c.color), r = RADIUS[c.shape];
-  const bg = dark ? "#0A1647" : "#FFFFFF", tx = dark ? "#FFFFFF" : "#0A1647", mut = dark ? "rgba(255,255,255,.65)" : "rgba(10,22,71,.6)", line = dark ? "rgba(255,255,255,.18)" : "#e3eaf8";
-  const docs = (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]);
-  const idx = ["welcome", "document", "selfie", "done"].indexOf(step);
-  const name = c.name.trim() || "Your Company";
-  const Btn = ({ children }: { children: React.ReactNode }) => (
-    <div className="mt-4 py-3 text-center text-[13px] font-semibold" style={{ background: c.color, color: fg, borderRadius: r }}>{children}</div>
-  );
-  return (
-    <div className="mx-auto w-[290px] rounded-[2.2rem] border-[7px] border-navy bg-navy shadow-xl" role="img" aria-label={`Preview of the hosted verification page: ${step}`}>
-      <div className="flex h-[560px] flex-col overflow-hidden rounded-[1.7rem]" style={{ background: bg, color: tx }}>
-        <div className="flex flex-col items-center gap-1.5 border-b px-4 py-3 text-center" style={{ borderColor: line }}>
-          {c.logo
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={c.logo} alt="" className="h-9 max-w-[150px] object-contain" />
-            : <span className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>}
-          <span className="max-w-full truncate text-sm font-bold">{name}</span>
-          {step !== "welcome" && <span className="text-[10px]" style={{ color: mut }}>{t.step} {idx}/3</span>}
-        </div>
-        <div className="flex flex-1 flex-col p-5">
-          {step === "welcome" && (<>
-            <h3 className="mt-3 font-display text-xl font-extrabold leading-tight">{c.title.trim() || t.title}</h3>
-            <p className="mt-2 text-[13px]" style={{ color: mut }}>{c.subtitle.trim() || t.sub}</p>
-            <ol className="mt-5 space-y-3 text-[13px]">
-              {[t.s1, t.s2, t.s3].map((x, i) => (
-                <li key={x} className="flex items-center gap-3"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold" style={{ background: c.color, color: fg }}>{i + 1}</span>{x}</li>
-              ))}
-            </ol>
-            <div className="mt-auto"><p className="text-[10px] leading-snug" style={{ color: mut }}>{t.consent}</p><Btn>{t.start}</Btn></div>
-          </>)}
-          {step === "document" && (<>
-            <h3 className="font-display text-lg font-extrabold">{t.choose}</h3>
-            <ul className="mt-3 space-y-2 text-[13px]">
-              {docs.length ? docs.map((k, i) => (
-                <li key={k} className="flex items-center gap-3 border px-3 py-2.5" style={{ borderColor: i === 0 ? c.color : line, borderRadius: Math.min(r, 14) }}>
-                  <span className="h-3.5 w-3.5 rounded-full border-2" style={{ borderColor: c.color, background: i === 0 ? c.color : "transparent" }} />{t[k]}
-                </li>
-              )) : <li style={{ color: mut }}>—</li>}
-            </ul>
-            <div className="mt-4 grid flex-1 place-items-center border-2 border-dashed text-[11px]" style={{ borderColor: c.color, borderRadius: Math.min(r, 14), color: mut }}>{t.capture}</div>
-            <Btn>{t.capture}</Btn>
-          </>)}
-          {step === "selfie" && (<>
-            <h3 className="font-display text-lg font-extrabold">{t.selfieT}</h3>
-            <p className="mt-1 text-[13px]" style={{ color: mut }}>{t.selfieS}</p>
-            <div className="mt-4 grid flex-1 place-items-center"><div className="h-48 w-36 rounded-[50%] border-[3px]" style={{ borderColor: c.color }} /></div>
-            <Btn>{t.selfieB}</Btn>
-          </>)}
-          {step === "done" && (<>
-            <div className="grid flex-1 place-items-center text-center">
-              <div>
-                <span className="mx-auto grid h-14 w-14 place-items-center rounded-full" style={{ background: c.color, color: fg }}><svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden><path d="M5 12.5l4.500 4.500L19 7.500" /></svg></span>
-                <h3 className="mt-4 font-display text-xl font-extrabold">{t.doneT}</h3>
-                <p className="mt-2 text-[13px]" style={{ color: mut }}>{t.doneS}</p>
-              </div>
-            </div>
-            <Btn>{t.back} {name}</Btn>
-          </>)}
-          {isMail(c.support) && (step === "welcome" || step === "done") && <p className="mt-2 break-all text-center text-[10px]" style={{ color: mut }}>{t.help} {c.support}</p>}
-          <p className="mt-3 text-center text-[10px]" style={{ color: mut }}>{c.hidePowered ? " " : t.powered}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function WhiteLabel() {
   const [c, setC] = useState<Cfg>(DEFAULT);
@@ -192,7 +102,7 @@ export default function WhiteLabel() {
 
           <Card title="Content" sub="Language and the welcome message. Leave blank to use the default text.">
             <div className="text-sm font-medium">Language<div className="mt-1.5"><Seg label="Language" value={c.lang} set={(v) => set("lang", v)} opts={[["en", "English"], ["fr", "Français"], ["ht", "Kreyòl"]]} /></div></div>
-            <label className="block text-sm font-medium">Welcome title<input value={c.title} maxLength={60} onChange={(e) => set("title", e.target.value)} placeholder={T[c.lang].title} className={input} /></label>
+            <label className="block text-sm font-medium">Welcome title<input value={c.title} maxLength={60} onChange={(e) => set("title", e.target.value)} placeholder={`${T[c.lang].titleFor} ${c.name.trim() || "Your Company"}`} className={input} /></label>
             <label className="block text-sm font-medium">Welcome message<textarea value={c.subtitle} maxLength={140} rows={2} onChange={(e) => set("subtitle", e.target.value)} placeholder={T[c.lang].sub} className={input} /></label>
             <label className="block text-sm font-medium">Support email shown to your customers<input type="email" value={c.support} onChange={(e) => set("support", e.target.value)} placeholder="support@yourcompany.com" className={input} />
               {err.support && <span role="alert" className="mt-1 block text-xs font-normal text-[#B42318]">{err.support}</span>}</label>
@@ -235,11 +145,11 @@ export default function WhiteLabel() {
           <div className="rounded-2xl border border-[#e3eaf8] bg-white p-4">
             <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Live preview</h2><span className="font-mono text-[10px] uppercase tracking-widest text-navy/50">Hosted page</span></div>
             <div className="mb-4 flex flex-wrap justify-center gap-1.5" role="tablist" aria-label="Preview step">
-              {([["welcome", "Welcome"], ["document", "Document"], ["selfie", "Selfie"], ["done", "Done"]] as [Step, string][]).map(([k, l]) => (
+              {([["welcome", "Welcome"], ["country", "Country"], ["document", "Document"], ["selfie", "Selfie"], ["done", "Done"]] as [Step, string][]).map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={step === k} onClick={() => setStep(k)} className={`rounded-full px-3 py-1 text-xs ${step === k ? "bg-navy text-white" : "border border-[#d6e2ff]"}`}>{l}</button>
               ))}
             </div>
-            <Preview c={c} step={step} />
+            <HostedPreview c={c} step={step} go={setStep} setLang={(l) => set("lang", l)} />
           </div>
         </aside>
       </div>

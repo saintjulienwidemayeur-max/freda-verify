@@ -1,0 +1,287 @@
+"use client";
+import { useMemo, useState } from "react";
+
+export type Lang = "fr" | "en" | "ht";
+export type Theme = "light" | "dark";
+export type Shape = "square" | "rounded" | "pill";
+export type DocKey = "id" | "passport" | "license";
+export type Step = "welcome" | "country" | "document" | "selfie" | "done";
+export const STEPS: Step[] = ["welcome", "country", "document", "selfie", "done"];
+
+export type Cfg = {
+  name: string; logo: string | null; color: string; theme: Theme; shape: Shape; lang: Lang;
+  title: string; subtitle: string; docs: Record<DocKey, boolean>; domain: string; redirect: string;
+  support: string; hidePowered: boolean;
+};
+
+type Dict = {
+  titleFor: string; sub: string; step: string; idv: string; facev: string; start: string;
+  agreePre: string; agreePost: string; secured: string; help: string;
+  countryT: string; countryS: string; search: string; none: string; cont: string;
+  docT: string; docS: string; issued: string; change: string; id: string; passport: string; license: string;
+  idS: string; passportS: string; licenseS: string; tips: string;
+  selfieT: string; selfieS: string; selfieB: string; selfieTips: string;
+  doneT: string; doneS: string; back: string; redirect: string;
+};
+
+export const T: Record<Lang, Dict> = {
+  en: {
+    titleFor: "Verification for", sub: "Follow these quick steps to confirm your identity", step: "Step", idv: "ID verification", facev: "Face verification",
+    start: "Start verification", agreePre: "By starting you agree to", agreePost: "and to the processing of your identity data.",
+    secured: "Secured by", help: "Need help?",
+    countryT: "Where was your document issued?", countryS: "Select the country that issued your ID document.", search: "Search country", none: "No country found", cont: "Continue",
+    docT: "Choose your document", docS: "Select the document you want to use.", issued: "Issued in", change: "Change",
+    id: "National ID card", passport: "Passport", license: "Driver's license",
+    idS: "Front and back", passportS: "Photo page", licenseS: "Front and back", tips: "Good lighting · No glare · All corners visible",
+    selfieT: "Take a selfie", selfieS: "Center your face in the oval and hold still.", selfieB: "Take selfie", selfieTips: "Remove glasses · Neutral face · Good light",
+    doneT: "Verification submitted", doneS: "Thank you! We are reviewing your information. You will be notified of the result shortly.", back: "Back to", redirect: "You will be redirected automatically.",
+  },
+  fr: {
+    titleFor: "Vérification pour", sub: "Suivez ces étapes rapides pour confirmer votre identité", step: "Étape", idv: "Vérification de la pièce", facev: "Vérification du visage",
+    start: "Commencer la vérification", agreePre: "En commençant, vous acceptez les", agreePost: "et le traitement de vos données d'identité.",
+    secured: "Sécurisé par", help: "Besoin d'aide ?",
+    countryT: "Où votre document a-t-il été émis ?", countryS: "Choisissez le pays qui a émis votre pièce d'identité.", search: "Rechercher un pays", none: "Aucun pays trouvé", cont: "Continuer",
+    docT: "Choisissez votre document", docS: "Sélectionnez le document que vous souhaitez utiliser.", issued: "Émis en", change: "Modifier",
+    id: "Carte d'identité nationale", passport: "Passeport", license: "Permis de conduire",
+    idS: "Recto et verso", passportS: "Page photo", licenseS: "Recto et verso", tips: "Bon éclairage · Sans reflet · Coins visibles",
+    selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale et ne bougez pas.", selfieB: "Prendre le selfie", selfieTips: "Sans lunettes · Visage neutre · Bonne lumière",
+    doneT: "Vérification envoyée", doneS: "Merci ! Nous examinons vos informations. Vous serez informé du résultat sous peu.", back: "Retour à", redirect: "Vous serez redirigé automatiquement.",
+  },
+  ht: {
+    titleFor: "Verifikasyon pou", sub: "Swiv etap rapid sa yo pou konfime idantite w", step: "Etap", idv: "Verifikasyon pyès", facev: "Verifikasyon vizaj",
+    start: "Kòmanse verifikasyon", agreePre: "Lè w kòmanse, ou aksepte", agreePost: "ak trètman done idantite w.",
+    secured: "Sekirize pa", help: "Bezwen èd?",
+    countryT: "Ki peyi ki bay dokiman w lan?", countryS: "Chwazi peyi ki bay pyès idantite w la.", search: "Chèche yon peyi", none: "Pa jwenn peyi a", cont: "Kontinye",
+    docT: "Chwazi dokiman w", docS: "Chwazi dokiman ou vle itilize a.", issued: "Bay nan", change: "Chanje",
+    id: "Kat idantite nasyonal", passport: "Paspò", license: "Pèmi kondwi",
+    idS: "Devan ak dèyè", passportS: "Paj foto a", licenseS: "Devan ak dèyè", tips: "Bon limyè · Pa gen refle · Tout kwen yo vizib",
+    selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la epi pa bouje.", selfieB: "Pran selfi a", selfieTips: "Retire linèt · Figi nòmal · Bon limyè",
+    doneT: "Verifikasyon an voye", doneS: "Mèsi! N ap egzamine enfòmasyon w yo. N ap enfòme w rezilta a talè.", back: "Retounen sou", redirect: "W ap retounen otomatikman.",
+  },
+};
+
+const COUNTRIES = ["HT", "DO", "US", "CA", "FR", "BE", "CH", "GB", "ES", "DE", "BS", "JM", "TC", "PA", "MX", "CO", "BR", "CL", "AR", "SN", "CI", "CM", "NG", "GH"];
+const flag = (cc: string) => String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+const RADIUS: Record<Shape, number> = { square: 6, rounded: 14, pill: 999 };
+const LANGS: Lang[] = ["en", "fr", "ht"];
+
+export const onColor = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#0A1647" : "#FFFFFF";
+};
+const termsLabel = (l: Lang, n: string) => (l === "en" ? `${n}'s Terms and Conditions` : l === "fr" ? `Conditions d'utilisation de ${n}` : `Kondisyon itilizasyon ${n}`);
+const isMail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+const Ic = ({ d, className = "h-4 w-4" }: { d: string; className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={d} /></svg>
+);
+const DOC_ICON: Record<DocKey, string> = {
+  id: "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5zM8.5 12.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5.5 16c.5-1.600 1.600-2.400 3-2.400s2.500.8 3 2.400M14 9.5h4M14 13h4",
+  passport: "M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11.5 14a3.500 3.500 0 1 0 0-7 3.500 3.500 0 0 0 0 7zM8 10.5h7M11.5 7c1 1 1.400 2.200 1.400 3.500S12.500 13 11.500 14M8.500 17.500h6",
+  license: "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5zM6 9h6M6 12h4M14.500 15.500l1.500-4h1l1.500 4M15 14h2.500",
+};
+
+export default function HostedPreview({ c, step, go, setLang }: { c: Cfg; step: Step; go: (s: Step) => void; setLang: (l: Lang) => void }) {
+  const t = T[c.lang];
+  const [country, setCountry] = useState("HT");
+  const [q, setQ] = useState("");
+  const [langOpen, setLangOpen] = useState(false);
+
+  const dark = c.theme === "dark", fg = onColor(c.color), r = RADIUS[c.shape];
+  const bg = dark ? "#0A1647" : "#FFFFFF", tx = dark ? "#FFFFFF" : "#0A1647";
+  const mut = dark ? "rgba(255,255,255,.62)" : "rgba(10,22,71,.55)", line = dark ? "rgba(255,255,255,.14)" : "#E6ECF7";
+  const soft = dark ? "rgba(255,255,255,.06)" : "#F5F7FC";
+  const tint = `${c.color}1A`;
+  const name = c.name.trim() || "Your Company";
+  const card = Math.min(r, 16);
+
+  const names = useMemo(() => {
+    let dn: Intl.DisplayNames | null = null;
+    try { dn = new Intl.DisplayNames([c.lang === "ht" ? "fr" : c.lang], { type: "region" }); } catch { dn = null; }
+    return Object.fromEntries(COUNTRIES.map((cc) => [cc, dn?.of(cc) ?? cc])) as Record<string, string>;
+  }, [c.lang]);
+  const list = COUNTRIES.filter((cc) => names[cc].toLowerCase().includes(q.trim().toLowerCase()));
+  const docs = (["id", "passport", "license"] as DocKey[]).filter((k) => c.docs[k]);
+  const progress = { welcome: 0, country: 0.25, document: 0.5, selfie: 0.75, done: 1 }[step];
+  const prev: Partial<Record<Step, Step>> = { country: "welcome", document: "country", selfie: "document" };
+
+  const Btn = ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className="w-full py-3 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-40" style={{ background: c.color, color: fg, borderRadius: r }}>{children}</button>
+  );
+  const Logo = ({ size = 34 }: { size?: number }) => c.logo
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={c.logo} alt="" style={{ height: size, maxWidth: 150 }} className="object-contain" />
+    : <span className="grid place-items-center rounded-xl font-bold" style={{ width: size, height: size, background: c.color, color: fg, fontSize: size * 0.42 }}>{name[0]?.toUpperCase()}</span>;
+  const Secured = () => c.hidePowered ? null : (
+    <div className="mt-2 flex items-center justify-center gap-1.5 text-[9px]" style={{ color: mut }}>
+      {t.secured}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo-mark.svg" alt="" className="h-3.5 w-3.5" style={dark ? { filter: "brightness(1.6)" } : undefined} />
+      <span className="font-semibold">Freda Verify</span>
+    </div>
+  );
+  const TopBar = () => (
+    <div className="flex items-center gap-3 px-5 pt-1">
+      <button type="button" onClick={() => prev[step] && go(prev[step]!)} aria-label="Back"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ background: soft }}><Ic d="M15 6l-6 6 6 6" /></button>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: line }}>
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress * 100}%`, background: c.color }} />
+      </div>
+      <span className="text-[10px] tabular-nums" style={{ color: mut }}>{Math.round(progress * 4)}/4</span>
+    </div>
+  );
+
+  return (
+    <div className="relative mx-auto w-[290px] rounded-[2.6rem] bg-[#111] p-[9px] shadow-[0_24px_60px_rgba(10,22,71,.28)]" aria-label={`Preview of the hosted verification page: ${step}`}>
+      <div className="relative flex h-[600px] flex-col overflow-hidden rounded-[2.1rem]" style={{ background: bg, color: tx }}>
+        {/* status bar */}
+        <div className="relative flex h-10 shrink-0 items-center justify-between px-6 text-[11px] font-semibold">
+          <span>9:41</span>
+          <span className="absolute left-1/2 top-2 h-[22px] w-[84px] -translate-x-1/2 rounded-full bg-[#111]" />
+          <span className="flex items-center gap-1"><Ic d="M2 18h2M7 15h2v3M12 11h2v7M17 7h2v11" className="h-3 w-3" /><span className="h-2.5 w-5 rounded-[3px] border" style={{ borderColor: tx }}><span className="block h-full w-3/4 rounded-[1px]" style={{ background: tx }} /></span></span>
+        </div>
+
+        {step !== "welcome" && step !== "done" && <TopBar />}
+
+        <div className="flex min-h-0 flex-1 flex-col px-5 pb-3">
+          {step === "welcome" && (<>
+            <div className="relative mt-1 flex justify-end">
+              <button type="button" onClick={() => setLangOpen(!langOpen)} aria-label="Language" aria-expanded={langOpen}
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium" style={{ background: soft }}>
+                <Ic d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3.600 9h16.800M3.600 15h16.800M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" className="h-3.5 w-3.5" />
+                {c.lang.toUpperCase()}<Ic d="M6 9l6 6 6-6" className="h-3 w-3" />
+              </button>
+              {langOpen && (
+                <ul className="absolute right-0 top-9 z-10 w-28 overflow-hidden rounded-xl text-[11px] shadow-lg" style={{ background: bg, border: `1px solid ${line}` }}>
+                  {LANGS.map((l) => (
+                    <li key={l}><button type="button" onClick={() => { setLang(l); setLangOpen(false); }} className="flex w-full items-center justify-between px-3 py-2 text-left" style={{ background: l === c.lang ? tint : "transparent" }}>
+                      {{ en: "English", fr: "Français", ht: "Kreyòl" }[l]}{l === c.lang && <span style={{ color: c.color }}>✓</span>}</button></li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="mt-3 flex flex-col items-center text-center">
+              <Logo />
+              <h3 className="mt-3 font-display text-[22px] font-extrabold leading-[1.1] tracking-tight">{c.title.trim() || `${t.titleFor} ${name}`}</h3>
+              <p className="mt-2 text-[12px] leading-snug" style={{ color: mut }}>{c.subtitle.trim() || t.sub}</p>
+            </div>
+            <div className="flex flex-1 items-center justify-center">
+              <ol className="relative space-y-5 pl-5">
+                <span className="absolute left-0 top-0 h-full w-[3px] rounded-full" style={{ background: line }} />
+                <span className="absolute left-0 top-0 h-1/2 w-[3px] rounded-full" style={{ background: `linear-gradient(${c.color}, ${c.color}66)` }} />
+                {[t.idv, t.facev].map((x, i) => (
+                  <li key={x}>
+                    <div className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: mut }}>{t.step} {i + 1}</div>
+                    <div className="text-[15px] font-bold" style={{ color: i === 0 ? tx : mut }}>{x}</div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <Btn onClick={() => go("country")}>{t.start}</Btn>
+            <p className="mt-2.5 text-center text-[9.5px] leading-snug" style={{ color: mut }}>
+              {t.agreePre} <span className="font-medium" style={{ color: c.color }}>{termsLabel(c.lang, name)}</span> {t.agreePost}
+            </p>
+            {isMail(c.support) && <p className="mt-1 break-all text-center text-[9px]" style={{ color: mut }}>{t.help} {c.support}</p>}
+            <Secured />
+          </>)}
+
+          {step === "country" && (<>
+            <h3 className="mt-4 font-display text-[19px] font-extrabold leading-tight tracking-tight">{t.countryT}</h3>
+            <p className="mt-1 text-[12px]" style={{ color: mut }}>{t.countryS}</p>
+            <label className="mt-3 flex items-center gap-2 px-3 py-2.5 text-[12px] focus-within:ring-2" style={{ background: soft, borderRadius: card, ["--tw-ring-color" as string]: c.color }}>
+              <Ic d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4" className="h-3.5 w-3.5 shrink-0" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} aria-label={t.search}
+                className="w-full bg-transparent outline-none placeholder:opacity-60 focus-visible:outline-none" style={{ color: tx }} />
+            </label>
+            <ul className="-mx-1 mt-2 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:thin]" role="listbox" aria-label={t.countryT}>
+              {list.length === 0 && <li className="py-6 text-center text-[12px]" style={{ color: mut }}>{t.none}</li>}
+              {list.map((cc) => {
+                const on = cc === country;
+                return (
+                  <li key={cc} role="option" aria-selected={on}>
+                    <button type="button" onClick={() => setCountry(cc)} className="flex w-full items-center gap-3 px-2.5 py-2 text-left text-[13px]"
+                      style={{ background: on ? tint : "transparent", borderRadius: card }}>
+                      <span className="text-[18px] leading-none">{flag(cc)}</span>
+                      <span className={on ? "font-semibold" : ""}>{names[cc]}</span>
+                      {on && <span className="ml-auto grid h-4 w-4 place-items-center rounded-full" style={{ background: c.color, color: fg }}><Ic d="M5 12.5l4.500 4.500L19 7.500" className="h-2.5 w-2.5" /></span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="pt-3"><Btn onClick={() => go("document")}>{t.cont}</Btn></div>
+            <Secured />
+          </>)}
+
+          {step === "document" && (<>
+            <h3 className="mt-4 font-display text-[19px] font-extrabold leading-tight tracking-tight">{t.docT}</h3>
+            <p className="mt-1 text-[12px]" style={{ color: mut }}>{t.docS}</p>
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 text-[11.5px]" style={{ background: soft, borderRadius: card }}>
+              <span className="text-[16px] leading-none">{flag(country)}</span>
+              <span className="shrink-0" style={{ color: mut }}>{t.issued}</span><span className="min-w-0 truncate font-semibold">{names[country]}</span>
+              <button type="button" onClick={() => go("country")} className="ml-auto shrink-0 font-semibold" style={{ color: c.color }}>{t.change}</button>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {docs.length === 0 && <li className="text-[12px]" style={{ color: mut }}>—</li>}
+              {docs.map((k) => (
+                <li key={k}>
+                  <button type="button" onClick={() => go("selfie")} className="flex w-full items-center gap-3 border p-3 text-left transition-colors"
+                    style={{ borderColor: line, borderRadius: card }}>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: tint, color: c.color }}><Ic d={DOC_ICON[k]} className="h-5 w-5" /></span>
+                    <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{t[k]}</span><span className="block text-[11px]" style={{ color: mut }}>{t[`${k}S` as "idS"]}</span></span>
+                    <Ic d="M9 6l6 6-6 6" className="h-4 w-4 opacity-50" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-auto">
+              <p className="mb-2 flex items-center justify-center gap-1.5 text-center text-[10px]" style={{ color: mut }}><Ic d="M12 3l7 3v5c0 4.500-3 8-7 10-4-2-7-5.500-7-10V6z" className="h-3 w-3" />{t.tips}</p>
+              <Secured />
+            </div>
+          </>)}
+
+          {step === "selfie" && (<>
+            <h3 className="mt-4 text-center font-display text-[19px] font-extrabold leading-tight tracking-tight">{t.selfieT}</h3>
+            <p className="mt-1 text-center text-[12px]" style={{ color: mut }}>{t.selfieS}</p>
+            <div className="relative mx-auto mt-5 grid h-[230px] w-[178px] place-items-center">
+              <span className="absolute inset-0 rounded-[50%]" style={{ background: soft }} />
+              <svg viewBox="0 0 178 230" className="absolute inset-0 h-full w-full animate-[spin_14s_linear_infinite]" aria-hidden>
+                <ellipse cx="89" cy="115" rx="86" ry="112" fill="none" stroke={c.color} strokeWidth="3" strokeDasharray="10 9" strokeLinecap="round" />
+              </svg>
+              <svg viewBox="0 0 100 120" className="relative h-[150px] w-[125px] opacity-30" aria-hidden>
+                <circle cx="50" cy="44" r="22" fill={tx} /><path d="M10 120c3-28 20-40 40-40s37 12 40 40z" fill={tx} />
+              </svg>
+            </div>
+            <p className="mt-4 text-center text-[10px]" style={{ color: mut }}>{t.selfieTips}</p>
+            <div className="mt-auto"><Btn onClick={() => go("done")}>{t.selfieB}</Btn><Secured /></div>
+          </>)}
+
+          {step === "done" && (<>
+            <div className="flex flex-1 flex-col items-center justify-center text-center">
+              <div className="relative grid h-24 w-24 place-items-center">
+                <span className="absolute inset-0 rounded-full" style={{ background: tint }} />
+                <span className="absolute inset-3 rounded-full" style={{ background: `${c.color}33` }} />
+                <span className="relative grid h-14 w-14 place-items-center rounded-full" style={{ background: c.color, color: fg }}><Ic d="M5 12.5l4.500 4.500L19 7.500" className="h-7 w-7" /></span>
+              </div>
+              <h3 className="mt-5 font-display text-[21px] font-extrabold leading-tight tracking-tight">{t.doneT}</h3>
+              <p className="mt-2 text-[12px] leading-snug" style={{ color: mut }}>{t.doneS}</p>
+              {c.redirect && <p className="mt-3 text-[10px]" style={{ color: mut }}>{t.redirect}</p>}
+            </div>
+            <Btn onClick={() => go("welcome")}>{t.back} {name}</Btn>
+            {isMail(c.support) && <p className="mt-2 break-all text-center text-[9px]" style={{ color: mut }}>{t.help} {c.support}</p>}
+            <Secured />
+          </>)}
+        </div>
+
+        {/* browser bar */}
+        <div className="mx-3 mb-2 flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-[11px]" style={{ background: soft }}>
+          <Ic d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z" className="h-3 w-3 opacity-60" />
+          <span className="flex-1 truncate text-center">{c.domain || "verify.yourcompany.com"}</span>
+          <Ic d="M20 12a8 8 0 1 1-2.300-5.700M20 4v4h-4" className="h-3 w-3 opacity-60" />
+        </div>
+        <span className="mx-auto mb-1.5 block h-1 w-24 shrink-0 rounded-full" style={{ background: tx, opacity: 0.8 }} />
+      </div>
+    </div>
+  );
+}
