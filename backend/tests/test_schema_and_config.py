@@ -18,8 +18,10 @@ def test_all_tables_live_in_their_own_schema_and_other_apps_are_untouched():
 
 def test_row_level_security_is_enabled_on_every_table():
     with get_engine().connect() as c:
-        rows = c.execute(text("select tablename, rowsecurity from pg_tables where schemaname = 'freda_verify' and tablename <> 'alembic_version'")).all()
-    assert len(rows) == 9 and all(rls for _, rls in rows)
+        rows = c.execute(text("select tablename, rowsecurity from pg_tables where schemaname = 'freda_verify'")).all()
+        cfg = c.execute(text("select proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'freda_verify' and proname = 'audit_logs_immutable'")).scalar()
+    assert len(rows) == 10 and all(rls for _, rls in rows)          # the 9 tables + alembic_version
+    assert cfg == ["search_path=pg_catalog"]                         # the trigger function does not depend on the caller's search_path
 
 
 def test_database_url_is_normalised_like_providers_print_it():
