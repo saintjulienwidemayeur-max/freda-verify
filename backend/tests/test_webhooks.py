@@ -95,8 +95,9 @@ def test_result_endpoint_for_api_keys(client):
     client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/decision", json={"decision": "REJECTED"}, headers=auth(t))
     r = client.get(f"/api/v1/verifications/{v['id']}/result", headers=bearer).json()
     assert r["decision"] == "REJECTED" and r["decided_at"]
-    text_ = json.dumps(r)
-    assert "ERIKSSON" not in text_ and "L898902C3" not in text_                  # no identity data in the result
+    assert r["identity"]["source"] == "mrz" and r["identity"]["document_number"] == "L898902C3"          # the business that asked for the KYC gets the identity read from the document
+    assert "ERIKSSON" not in json.dumps(r["advisory"]) and "L898902C3" not in json.dumps(r["advisory"])   # but the advisory summary stays free of personal data
+    assert all("ERIKSSON" not in str(x["body"]) for x in FakeClient.calls)                                  # and webhooks never carry it
     _, _, other_key, _ = media_setup(client, "z@z.example", "Org Z")
     assert client.get(f"/api/v1/verifications/{v['id']}/result", headers={"Authorization": f"Bearer {other_key}"}).status_code == 404
 

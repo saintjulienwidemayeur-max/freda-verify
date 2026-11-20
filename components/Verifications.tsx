@@ -10,7 +10,7 @@ type Mrz = { format: string; document_type: string; issuing_country: string; sur
 type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string };
 type IdText = { status: string; fields?: number; matched?: number; name?: number; number?: boolean; birth?: boolean };
 type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number>; min_frame?: number | null; frames?: { status: string; real_probability: number | null }[] };
-type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; idtext?: IdText | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
+type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; idtext?: IdText | null; idfields?: { status: string; fields?: { name?: string; birth_date?: string; document_number?: string; expiry_date?: string }; plausible?: { name: boolean; birth_date: boolean; document_number: boolean; expired: boolean } } | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie", selfie_2: "Selfie · frame 2", selfie_3: "Selfie · frame 3", selfie_video: "Challenge video" };
 
@@ -126,6 +126,17 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. One check digit is a single digit: a wrong reading passes it about 1 time in 10, so compare the document number with the photo, especially for a single reading. Nationality, sex and names have no check digit. Valid check digits show the text is internally consistent, not that the document is genuine. Accuracy was measured on generated pages and checked on only two real documents: treat it as advice.</p>
         </div>
       )}
+
+      {admin && checks?.idfields && (
+        <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="Identity read from the ID card">
+          <h3 className="font-display text-sm font-bold">Identity read from the ID card (unverified reading)</h3>
+          {checks.idfields.status !== "extracted" ? <p className="mt-2 text-sm text-[#B54708]">The card text could not be read. Check the photo yourself.</p> : (
+            <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-xs">
+              {([["Name", checks.idfields.fields?.name, checks.idfields.plausible?.name], ["Birth date", checks.idfields.fields?.birth_date, checks.idfields.plausible?.birth_date], ["Document number", checks.idfields.fields?.document_number, checks.idfields.plausible?.document_number], ["Expiry date", checks.idfields.fields?.expiry_date, checks.idfields.plausible ? !checks.idfields.plausible.expired : undefined]] as [string, string | undefined, boolean | undefined][]).map(([k, val, ok]) => (
+                <div key={k} className="contents"><dt className="text-navy/50">{k}</dt><dd className="font-mono">{val ?? "—"} {val !== undefined && ok !== undefined && <span className={ok ? "text-[#067647]" : "text-[#B42318]"}>{ok ? "✓ plausible" : "✗ check"}</span>}</dd></div>))}
+            </dl>)}
+          <p className="mt-3 text-xs leading-relaxed text-navy/50">Read by OCR from the printed text: compare with the photo. Plausible means the values look like a real adult identity; it does not prove the person exists or that the card is genuine (no registry is consulted).</p>
+        </div>)}
 
       {admin && checks?.idtext && (
         <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="ID card text check">
@@ -244,7 +255,7 @@ export default function Verifications() {
         <form onSubmit={create} className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-[#e3eaf8] bg-white p-4">
           <label className="min-w-[14rem] flex-1 text-sm font-medium">Reference (optional)
             <input value={ref} onChange={(e) => setRef(e.target.value)} maxLength={100} placeholder="your customer id, e.g. cust-42" className="mt-1.5 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2.5 text-sm font-normal" /></label>
-          <details className="w-full"><summary className="cursor-pointer text-sm font-medium text-navy/70">Data the customer declared (optional: lets us check an ID card, which has no machine-readable zone)</summary>
+          <details className="w-full"><summary className="cursor-pointer text-sm font-medium text-navy/70">Data the customer declared (optional extra cross-check; not needed: the identity is read from the document)</summary>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
               <label className="text-xs font-medium">Full name<input value={expName} onChange={(e) => setExpName(e.target.value)} maxLength={100} className="mt-1 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
               <label className="text-xs font-medium">Date of birth<input type="date" value={expBirth} onChange={(e) => setExpBirth(e.target.value)} className="mt-1 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>

@@ -155,7 +155,7 @@ class Verification(Base):
     """A verification session created by a business. The end user opens the hosted page with a one-time-visible session token (only its SHA-256 is stored).
     There is NO verification engine yet: status stays PENDING (EXPIRED is derived from expires_at). No documents, selfies or results are stored."""
     __tablename__ = "verifications"
-    __table_args__ = (Index("ix_verifications_org_created", "organization_id", "created_at"),)
+    __table_args__ = (Index("ix_verifications_org_created", "organization_id", "created_at"), Index("ix_verifications_doc_hash", "organization_id", "doc_hash"))
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
     env: Mapped[str] = mapped_column(String(8))                                      # test | live (from the key; dashboard = test)
@@ -171,6 +171,7 @@ class Verification(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
     decision_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    doc_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)               # SHA-256 of organization + document number: lets us flag the same document used twice
     expected_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)       # Fernet JSON of what the customer DECLARED (name, birth date, document number): personal data
 
 
@@ -325,5 +326,5 @@ class DecisionPolicy(Base):
     uncertain: Mapped[str] = mapped_column(String(8), default="review")
     face_min: Mapped[float] = mapped_column(Float, default=0.363)
     require_pad: Mapped[bool] = mapped_column(Boolean, default=False)
-    id_cards: Mapped[str] = mapped_column(String(16), default="face_and_data")   # review | face_and_data | face_only
+    id_cards: Mapped[str] = mapped_column(String(24), default="face_and_extracted")   # review | face_and_data | face_only
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

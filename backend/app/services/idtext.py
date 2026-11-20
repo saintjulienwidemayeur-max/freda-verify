@@ -118,3 +118,108 @@ def compare(expected: dict, text: str) -> dict:
             out["birth"] = False
         out["matched"] += 1 if out["birth"] else 0
     return out
+
+
+# ───────── extraction of the identity data printed on an ID card / licence (no declared data needed) ─────────
+HEADER_WORDS = {"REPUBLIQUE", "REPIBLIK", "AYITI", "HAITI", "CARTE", "KAT", "IDENTITE", "IDANTITE", "NATIONALE", "NASYONAL", "DIDENTIFICATION", "D", "IDENTIFICATION", "ONI",
+                "NOM", "SIYATI", "PRENOM", "PRENOMS", "SEXE", "SEKS", "DATE", "NAISSANCE", "NESANS", "LIEU", "LOKAL", "NUMERO", "NIF", "CIN", "EXPIRATION", "EXPIRE", "VALABLE", "JUSQU",
+                "AU", "DE", "DU", "LA", "LE", "ET", "SIGNATURE", "PERMIS", "CONDUIRE", "DRIVER", "LICENSE", "LICENCE", "NATIONALITE", "HAITIENNE", "HAITIEN", "M", "F"}
+_DATE = re.compile(r"(?<!\d)(\d{1,2})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{4}|\d{2})(?!\d)")
+_NUM = re.compile(r"(?<![A-Z0-9])((?:[A-Z]{0,3}\d[\dA-Z \-]{6,18}\d))(?![A-Z0-9])")
+
+
+def _dates(text: str) -> list[tuple[date, str]]:
+    found: list[tuple[date, str]] = []
+    for ln in text.splitlines():
+        n = ln.upper()
+        for m in _DATE.finditer(n):
+            d_, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            y = y + (2000 if y < 40 else 1900) if y < 100 else y
+            try:
+                found.append((date(y, mo, d_), n))
+            except ValueError:
+                continue
+        toks = _norm(ln).split()
+        for i, t in enumerate(toks):
+            if t.isdigit() and len(t) <= 2 and i + 2 < len(toks):
+                mon = next((k for k, names in MONTHS.items() if toks[i + 1] in names), None)
+                if mon and toks[i + 2].isdigit() and len(toks[i + 2]) in (2, 4):
+                    y = int(toks[i + 2])
+                    y = y + (2000 if y < 40 else 1900) if y < 100 else y
+                    try:
+                        found.append((date(y, mon, int(t)), n))
+                    except ValueError:
+                        pass
+    return found
+
+
+def extract(text: str, today: date | None = None) -> dict:
+    """Best-effort identity fields from the printed text of an ID card / licence (no declared data needed). Heuristics: label-based first (Nom / Prénom / Date de naissance / numéro),
+    then plausibility (dates in range, a name made of 2+ words, a number of 8+ characters). Returns only what was found; the caller must still treat it as UNVERIFIED reading."""
+    today = today or date.today()
+    out: dict = {}
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    nlines = [_norm(ln) for ln in lines]
+    # name: words after the NOM / PRENOM labels, otherwise the longest all-letters lines that are not header words
+    def after(label_re: str) -> str | None:
+        for i, ln in enumerate(lines):
+            m = re.search(label_re, _norm(ln))
+            if m:
+                rest = _norm(ln)[m.end():].strip()
+                words = [w for w in rest.split() if w not in HEADER_WORDS and len(w) >= 2 and w.isalpha()]
+                if not words and i + 1 < len(lines):
+                    words = [w for w in nlines[i + 1].split() if w not in HEADER_WORDS and len(w) >= 2 and w.isalpha()]
+                if words:
+                    return " ".join(words)
+        return None
+    last = after(r"\bNOM\b|\bSIYATI\b")
+    first = after(r"\bPRENOMS?\b|\bPRENM\b")
+    if first or last:
+        out["name"] = " ".join(x for x in (first, last) if x)
+    else:
+        cand = [" ".join(w for w in n.split() if w not in HEADER_WORDS and w.isalpha() and len(w) >= 2) for n in nlines]
+        cand = [c for c in cand if len(c.split()) >= 2]
+        if cand:
+            out["name"] = max(cand, key=len)
+    ds = _dates(text)
+    birth = [d for d, ln in ds if re.search(r"NAISS|NESANS|BORN|BIRTH|NE LE|NEE", _norm(ln)) and 1900 <= d.year <= today.year - 14]
+    if not birth:
+        birth = [d for d, _ in ds if 1900 <= d.year <= today.year - 14 and d < today]
+    if birth:
+        out["birth_date"] = min(birth).isoformat() if len(birth) > 1 and not any(re.search(r"NAISS|NESANS", _norm(ln)) for _, ln in ds) else birth[0].isoformat()
+    exp = [d for d, ln in ds if re.search(r"EXPIR|VALABLE|VALID|JUSQU", _norm(ln))] or [d for d, _ in ds if d > today]
+    if exp:
+        out["expiry_date"] = max(exp).isoformat()
+    nums = []
+    for ln in lines:
+        n = ln.upper()
+        for m in _NUM.finditer(n):
+            raw = re.sub(r"[ \-]", "", m.group(1))
+            if len(raw) >= 8 and sum(c.isdigit() for c in raw) >= 6 and not _DATE.fullmatch(m.group(1).strip()):
+                nums.append((bool(re.search(r"NIF|NUMERO|CIN|N°|NO\b", n)), raw))
+    if nums:
+        out["document_number"] = sorted(nums, key=lambda t: (not t[0], -len(t[1])))[0][1]
+    return out
+
+
+def plausible(fields: dict, today: date | None = None) -> dict:
+    """Checks on the extracted fields themselves (not a verification against any registry)."""
+    today = today or date.today()
+    name_words = [w for w in _norm(fields.get("name", "")).split() if len(w) >= 2]
+    ok_name = len(name_words) >= 2
+    ok_birth = False
+    if fields.get("birth_date"):
+        try:
+            b = date.fromisoformat(fields["birth_date"])
+            age = (today - b).days / 365.25
+            ok_birth = 18 <= age <= 110
+        except ValueError:
+            pass
+    ok_number = len(re.sub(r"[^A-Z0-9]", "", fields.get("document_number", "").upper())) >= 8
+    expired = False
+    if fields.get("expiry_date"):
+        try:
+            expired = date.fromisoformat(fields["expiry_date"]) < today
+        except ValueError:
+            pass
+    return {"name": ok_name, "birth_date": ok_birth, "document_number": ok_number, "expired": expired}

@@ -17,7 +17,7 @@ class Verdict:
 
 
 def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | None, agreeing: int, face: dict | None, pad: dict | None, doc_type: str | None,
-           id_cards: str = "review", idtext: dict | None = None) -> Verdict:
+           id_cards: str = "face_and_extracted", idtext: dict | None = None, idfields: dict | None = None, duplicate: bool = False) -> Verdict:
     hard: list[str] = []
     unc: list[str] = []
     is_card = doc_type in ("id", "license")
@@ -26,6 +26,17 @@ def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | No
         # the customer declared (>= 2 declared fields, name among them). Anything else goes to a person.
         if id_cards == "face_only":
             pass
+        elif id_cards == "face_and_extracted":
+            # the identity is READ from the card itself (no declared data needed) and must look like a real identity: a name of 2+ words, a birth date for an adult, a number of 8+ characters
+            if not idfields or idfields.get("status") != "extracted":
+                unc.append("id_unreadable")
+            else:
+                pl = idfields.get("plausible") or {}
+                unc += [f"id_{k}" for k, okk in (("name", pl.get("name")), ("birth", pl.get("birth_date")), ("number", pl.get("document_number"))) if not okk]
+                if pl.get("expired"):
+                    unc.append("id_expired_printed")
+            if idtext and idtext.get("status") == "compared" and idtext.get("fields", 0) >= 1 and idtext.get("matched", 0) < idtext.get("fields", 0):
+                unc.append("id_data_mismatch")                       # the business ALSO declared data and the card disagrees: a person looks
         elif id_cards == "face_and_data":
             ok = bool(idtext) and idtext.get("status") == "compared" and idtext.get("fields", 0) >= 2 and idtext.get("matched", 0) >= 2 and idtext.get("name", 0) >= 0.8
             if not ok:
@@ -54,6 +65,8 @@ def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | No
             unc.append("pad_" + (pad.get("status", "missing") if pad else "missing"))
         elif pad.get("band") == "low" or pad["real_probability"] < 0.5:
             unc.append("pad_low")
+    if duplicate:
+        unc.append("duplicate_document")                             # the same document number was already submitted in this organization
     if hard:
         return Verdict("REJECTED", hard)
     if not unc:

@@ -1,0 +1,37 @@
+from datetime import date
+
+from app.services import idtext
+
+TODAY = date(2026, 11, 20)
+CIN = """REPIBLIK AYITI  REPUBLIQUE D'HAITI
+CARTE D'IDENTIFICATION NATIONALE
+NOM / SIYATI: WIDEMAYEUR
+PRENOM(S): SAINT JULIEN
+DATE DE NAISSANCE / DAT NESANS: 01/11/2003   SEXE: M
+NIF: 00-89-06-2024-5
+DATE D'EXPIRATION: 15/03/2033
+"""
+
+
+def test_extracts_name_birth_number_and_expiry_from_labelled_text():
+    f = idtext.extract(CIN, TODAY)
+    assert f["name"] == "SAINT JULIEN WIDEMAYEUR" and f["birth_date"] == "2003-11-01" and f["document_number"] == "0089062024" + "5" and f["expiry_date"] == "2033-03-15"
+    assert idtext.plausible(f, TODAY) == {"name": True, "birth_date": True, "document_number": True, "expired": False}
+
+
+def test_month_name_dates_and_missing_labels():
+    f = idtext.extract("DUPONT MARIE CLAIRE\nNEE LE 05 MARS 1990\nNO 1234567890", TODAY)
+    assert f["birth_date"] == "1990-03-05" and f["document_number"] == "1234567890" and "DUPONT" in f["name"]
+
+
+def test_implausible_or_empty_readings_are_flagged():
+    assert idtext.extract("", TODAY) == {}
+    p = idtext.plausible(idtext.extract("NOM: DUPONT\nNAISSANCE 01/01/2015\nNUMERO 12", TODAY), TODAY)
+    assert p["birth_date"] is False and p["document_number"] is False and p["name"] is False         # a child, a short number, a one-word name
+    old = idtext.plausible({"name": "A B", "birth_date": "1980-01-01", "document_number": "12345678", "expiry_date": "2020-01-01"}, TODAY)
+    assert old["expired"] is True
+
+
+def test_random_ocr_garbage_does_not_look_like_an_identity():
+    f = idtext.extract("lorem ipsum dolor sit\n%%% ??? 12 34\n.", TODAY)
+    assert not idtext.plausible(f, TODAY)["birth_date"] and not idtext.plausible(f, TODAY)["document_number"]

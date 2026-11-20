@@ -24,7 +24,7 @@ def test_approves_only_when_every_check_is_strong():
     assert d(face={"status": "compared", "score": 0.30, "band": "low"}).codes == ["face_low"]
     assert d(face={"status": "ambiguous", "score": None}).codes == ["face_ambiguous"]
     assert d(face=None).codes == ["face_missing"]
-    assert d(mrz=None).codes == ["mrz_unreadable"] and d(mrz=None, doc_type="id").codes == ["no_mrz_for_id"]
+    assert d(mrz=None).codes == ["mrz_unreadable"] and d(mrz=None, doc_type="id", id_cards="review").codes == ["no_mrz_for_id"]
     assert d(mrz={**GOOD_MRZ, "all_checks_passed": False, "checks": {"document_number": True, "birth_date": True, "expiry_date": True, "composite": False}}).codes == ["mrz_partial"]
     assert d(mrz={**GOOD_MRZ, "all_checks_passed": False, "checks": {"document_number": False, "birth_date": True, "expiry_date": True}}).codes == ["mrz_invalid"]
 
@@ -50,7 +50,7 @@ def put_policy(client, t, org, **kw):
 
 def test_default_is_automatic_and_only_admins_change_the_policy(client):
     t, org, key, v = media_setup(client)
-    assert client.get(f"/api/v1/organizations/{org['id']}/decision-policy", headers=auth(t)).json() == {"mode": "auto", "uncertain": "review", "face_min": 0.363, "require_pad": False, "id_cards": "face_and_data"}
+    assert client.get(f"/api/v1/organizations/{org['id']}/decision-policy", headers=auth(t)).json() == {"mode": "auto", "uncertain": "review", "face_min": 0.363, "require_pad": False, "id_cards": "face_and_extracted"}
     assert submit_all(client, v["session_token"]).status_code == 204
     assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "REJECTED"            # default is automatic: the ICAO specimen passport used here expired in 2012 (expiry digit valid), an objective failure
     assert put_policy(client, t, org, face_min=0.95).status_code == 422 and put_policy(client, t, org, mode="x").status_code == 422
@@ -94,7 +94,7 @@ def card(**over):
     return decide(**{**KW, "mrz": None, "doc_type": "id", "face": FACE_OK, **over})
 
 
-def test_id_cards_follow_the_organizations_rule():
+    assert card(id_cards="review").decision is None and card(id_cards="review").codes == ["no_mrz_for_id"]     # a person decides
     assert card().decision is None and card().codes == ["no_mrz_for_id"]                                     # default: a person
     assert card(id_cards="face_only").decision == "APPROVED"                                                  # explicit risk choice: no document check
     assert card(id_cards="face_only", face={"status": "compared", "score": 0.2, "band": "low"}).decision is None
@@ -157,3 +157,46 @@ def test_platform_default_applies_without_a_saved_policy_and_can_be_overridden_b
     finally:
         monkeypatch.delenv("FV_DECISION_DEFAULT_MODE")
         get_settings.cache_clear()
+
+
+IDF_OK = {"status": "extracted", "fields": {"name": "A B"}, "plausible": {"name": True, "birth_date": True, "document_number": True, "expired": False}}
+
+
+def test_face_and_extracted_reads_the_identity_from_the_card_itself():
+    assert card(idfields=IDF_OK).decision == "APPROVED"                                            # default rule: no declared data needed
+    assert card(idfields=None).codes == ["id_unreadable"]
+    assert card(idfields={**IDF_OK, "plausible": {**IDF_OK["plausible"], "birth_date": False}}).codes == ["id_birth"]
+    assert card(idfields={**IDF_OK, "plausible": {"name": False, "birth_date": True, "document_number": False}}).codes == ["id_name", "id_number"]
+    assert card(idfields={**IDF_OK, "plausible": {**IDF_OK["plausible"], "expired": True}}).codes == ["id_expired_printed"]
+    assert card(idfields=IDF_OK, face={"status": "compared", "score": 0.2, "band": "low"}).decision is None
+    assert card(idfields=IDF_OK, duplicate=True).codes == ["duplicate_document"]
+    # if the business ALSO declared data and the card disagrees, a person looks
+    assert card(idfields=IDF_OK, idtext={"status": "compared", "fields": 2, "matched": 1}).codes == ["id_data_mismatch"]
+    assert card(idfields=IDF_OK, idtext={"status": "compared", "fields": 2, "matched": 2}).decision == "APPROVED"
+    assert d(duplicate=True).codes == ["duplicate_document"]                                        # also for passports
+
+
+CIN_TEXT = "NOM: WIDEMAYEUR\nPRENOM(S): SAINT JULIEN\nDATE DE NAISSANCE: 01/11/2003\nNIF: 00-89-06-2024-5\n"
+
+
+def test_id_card_identity_is_read_from_the_card_without_any_declared_data_and_duplicates_are_flagged(client, monkeypatch):
+    from app.services import idtext as it
+    from tests.test_media import JPG, up
+    monkeypatch.setattr(it, "read_text", lambda image: CIN_TEXT)
+    t, org, key, _ = media_setup(client)
+    ids = []
+    for _ in range(2):
+        r = client.post("/api/v1/verifications", json={}, headers={"Authorization": f"Bearer {key}"}).json()           # NO declared data
+        tok = r["session_token"]
+        client.post("/api/v1/session/consent", headers=bearer(tok))
+        for k, q in (("document_front", "?doc_type=id&country=HT"), ("document_back", "?doc_type=id&country=HT"), ("selfie", "")):
+            assert up(client, tok, k, JPG, q=q).status_code == 204
+        assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 204
+        ids.append(r["id"])
+    res = client.get(f"/api/v1/verifications/{ids[0]}/result", headers={"Authorization": f"Bearer {key}"}).json()
+    assert res["identity"]["source"] == "printed_text" and res["identity"]["full_name"] == "SAINT JULIEN WIDEMAYEUR" and res["identity"]["birth_date"] == "2003-11-01"
+    assert res["identity"]["document_number"] == "00890620245" and res["identity"]["unverified"] is True
+    c = client.get(f"/api/v1/organizations/{org['id']}/verifications/{ids[1]}/checks", headers=auth(t)).json()
+    assert c["idfields"]["status"] == "extracted" and c["idtext"]["status"] == "no_expected"
+    r2 = client.get(f"/api/v1/verifications/{ids[1]}/result", headers={"Authorization": f"Bearer {key}"}).json()
+    assert r2["status"] == "MANUAL_REVIEW"                                           # face comparison fails on the fake photos, so a person decides; the second use of the same number is flagged too

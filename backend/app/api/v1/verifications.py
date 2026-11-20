@@ -113,6 +113,24 @@ def get_verification(verification_id: uuid.UUID, request: Request, organization_
     return _out(v, _counts(db, [v.id]).get(v.id, 0))
 
 
+def _identity(db: Session, v: Verification) -> dict | None:
+    """The identity data the system READ from the document (passport MRZ, or the printed text of an ID card). Personal data for the business that asked for the KYC (API key / dashboard);
+    never in webhooks. `source` tells how reliable it is: `mrz` (check digits) or `printed_text` (OCR, unverified)."""
+    rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind.in_(("mrz", "idfields"))))}
+    if "mrz" in rows and rows["mrz"].status == "read":
+        res = (json.loads(decrypt_bytes(rows["mrz"].data)).get("result") or {})
+        if res:
+            return {"source": "mrz", "document_type": "passport", "full_name": f'{res.get("given_names", "")} {res.get("surname", "")}'.strip(), "birth_date": res.get("birth_date"),
+                    "sex": res.get("sex"), "document_number": res.get("document_number"), "expiry_date": res.get("expiry_date"), "issuing_country": res.get("issuing_country"),
+                    "nationality": res.get("nationality"), "check_digits_valid": bool(res.get("all_checks_passed"))}
+    if "idfields" in rows and rows["idfields"].status == "extracted":
+        d = json.loads(decrypt_bytes(rows["idfields"].data))
+        f = d.get("fields", {})
+        return {"source": "printed_text", "document_type": "id_card", "full_name": f.get("name"), "birth_date": f.get("birth_date"), "document_number": f.get("document_number"),
+                "expiry_date": f.get("expiry_date"), "issuing_country": d.get("country"), "plausible": d.get("plausible"), "unverified": True}
+    return None
+
+
 def _advisory(db: Session, v: Verification) -> dict:
     """Machine-readable summary of the advisory checks WITHOUT any personal data (no names, numbers, dates or scores). The human decision is the `decision` field."""
     rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
@@ -150,7 +168,8 @@ def get_result(verification_id: uuid.UUID, request: Request, organization_id: uu
     reasons = [c for c in (v.decision_reason or "")[len("auto: "):].split(",") if c] if auto and (v.decision_reason or "").startswith("auto: ") else None
     return {"id": v.id, "reference": v.reference, "env": v.env, "status": st, "decision": st if st in ("APPROVED", "REJECTED") else None,
             "decision_source": ("automatic" if auto else "human") if st in ("APPROVED", "REJECTED") else None, "reason_codes": reasons,
-            "submitted_at": v.submitted_at, "decided_at": v.decided_at, "advisory": _advisory(db, v) if v.submitted_at else None}
+            "submitted_at": v.submitted_at, "decided_at": v.decided_at, "identity": _identity(db, v) if v.submitted_at else None,
+            "advisory": _advisory(db, v) if v.submitted_at else None}
 
 
 # ───────── end-user side: authenticated by the session token only ─────────
@@ -317,24 +336,35 @@ def run_pad_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
             db.close()
 
 
+def _doc_hash(org_id: uuid.UUID, number: str) -> str | None:
+    n = "".join(ch for ch in number.upper() if ch.isalnum())
+    return sha256(f"{org_id}:{n}") if len(n) >= 6 else None
+
+
 def run_idtext_check(verification_id: uuid.UUID) -> None:
-    """ID card / licence only: compares the DECLARED data (if the business supplied it) with the printed text. Stores match results only, never the OCR text. Never raises."""
+    """ID card / licence only: reads the printed text once, EXTRACTS the identity (name, birth date, number, expiry: no declared data needed), checks it for plausibility, stores a hash of the
+    document number (duplicate detection) and, when the business also declared data, compares it. Stores extracted fields encrypted; never the OCR text. Never raises."""
     try:
         with SessionLocal() as db:
             v = db.get(Verification, verification_id)
             front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front")) if v else None
             if not v or not front or front.doc_type not in ("id", "license"):
                 return
-            if not v.expected_enc:
-                status, payload = "no_expected", {}
+            text = idtext.read_text(decrypt_bytes(front.data))
+            if not text:
+                cmp_status, cmp_payload, fields = "unreadable", {}, {}
             else:
-                text = idtext.read_text(decrypt_bytes(front.data))
-                status, payload = ("unreadable", {}) if not text else ("compared", idtext.compare(json.loads(decrypt_bytes(v.expected_enc)), text))
-            row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext")) or VerificationCheck(
-                verification_id=v.id, organization_id=v.organization_id, kind="idtext")
-            row.status, row.source, row.data, row.created_at = status, "document_front", encrypt_bytes(json.dumps(payload).encode()), now()
-            db.add(row)
-            audit.record(db, None, "verification.idtext_checked", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": status})
+                fields = idtext.extract(text)
+                cmp_status, cmp_payload = ("compared", idtext.compare(json.loads(decrypt_bytes(v.expected_enc)), text)) if v.expected_enc else ("no_expected", {})
+            ext_payload = {"fields": fields, "plausible": idtext.plausible(fields) if fields else None, "country": front.country}
+            if fields.get("document_number"):
+                v.doc_hash = _doc_hash(v.organization_id, fields["document_number"])
+            for kind, status, payload in (("idtext", cmp_status, cmp_payload), ("idfields", "extracted" if fields else "unreadable", ext_payload)):
+                row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == kind)) or VerificationCheck(
+                    verification_id=v.id, organization_id=v.organization_id, kind=kind)
+                row.status, row.source, row.data, row.created_at = status, "document_front", encrypt_bytes(json.dumps(payload).encode()), now()
+                db.add(row)
+            audit.record(db, None, "verification.idtext_checked", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": cmp_status, "extracted": bool(fields)})
             db.commit()
     except Exception:  # noqa: BLE001
         return
@@ -366,7 +396,13 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
             rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
             front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
             mrz_row = _load(rows.get("mrz")) or {}
-            verdict = decision.decide(face_min=pol["face_min"], require_pad=pol["require_pad"], uncertain=pol["uncertain"], id_cards=pol["id_cards"],
+            if mrz_row.get("result") and rows["mrz"].status == "read" and not v.doc_hash:
+                v.doc_hash = _doc_hash(v.organization_id, mrz_row["result"].get("document_number", ""))
+            dup = bool(v.doc_hash and db.scalar(select(func.count()).select_from(Verification).where(
+                Verification.organization_id == v.organization_id, Verification.doc_hash == v.doc_hash, Verification.id != v.id,
+                Verification.status.in_(("APPROVED", "MANUAL_REVIEW", "REJECTED")))))
+            idf = {"status": rows["idfields"].status, **_load(rows["idfields"])} if rows.get("idfields") else None
+            verdict = decision.decide(duplicate=dup, idfields=idf, face_min=pol["face_min"], require_pad=pol["require_pad"], uncertain=pol["uncertain"], id_cards=pol["id_cards"],
                                       idtext=({"status": rows["idtext"].status, **_load(rows["idtext"])} if rows.get("idtext") else None), mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,
                                       agreeing=int(mrz_row.get("agreeing", 0)), face=({"status": rows["face"].status, **_load(rows["face"])} if rows.get("face") else None),
                                       pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None)
@@ -536,7 +572,8 @@ def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
     lrow = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "liveness"))
     return {"engine_available": ocr.available(), "mrz": _check_out(row), "face_available": face.available(), "face": _face_out(frow),
             "pad_available": pad.available(), "pad": _face_out(lrow),
-            "idtext": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext")))}
+            "idtext": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext"))),
+            "idfields": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idfields")))}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/face")
@@ -593,7 +630,7 @@ class PolicyIn(BaseModel):
     uncertain: str = Field(pattern=r"^(review|reject)$")
     face_min: float = Field(ge=0.2, le=0.9)
     require_pad: bool
-    id_cards: str = Field(default="review", pattern=r"^(review|face_and_data|face_only)$")
+    id_cards: str = Field(default="face_and_extracted", pattern=r"^(review|face_and_extracted|face_and_data|face_only)$")
 
 
 def _policy_values(p: DecisionPolicy | None) -> dict:

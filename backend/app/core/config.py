@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     media_retention_days: int = 0           # 0 = photos are KEPT until a person deletes them (default). > 0 = auto-delete that many days after upload
     media_max_bytes: int = 2 * 1024 * 1024  # per photo
     decision_default_mode: str = "auto"                 # decision mode of an organization that never saved a policy (manual | auto)
-    decision_default_id_cards: str = "face_and_data"   # review | face_and_data | face_only
+    decision_default_id_cards: str = "face_and_extracted"   # review | face_and_extracted | face_and_data | face_only
     media_video_max_bytes: int = 8 * 1024 * 1024  # per challenge video (a few seconds, low bitrate)
     brevo_api_key: str | None = None        # Brevo (Sendinblue) transactional e-mail API key; mail is disabled when unset. Secret: environment variable only
     mail_from_email: str = "no-reply@fredaverify.com"   # must be a sender/domain verified in Brevo (SPF/DKIM)
