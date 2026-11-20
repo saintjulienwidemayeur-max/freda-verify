@@ -31,6 +31,17 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
     })();
     return () => { live = false; made.forEach((u) => URL.revokeObjectURL(u)); };
   }, [base, admin, v.media_count]);
+  // The readings run in the background a few seconds after the customer submits: poll (max ~2 min) until both results exist, so the reviewer does not see a stale "Not read yet".
+  const waiting = admin && !!media && media.length > 0 && v.status === "MANUAL_REVIEW" && (!checks || !checks.mrz || (checks.face_available !== false && !checks.face));
+  useEffect(() => {
+    if (!waiting) return;
+    let live = true, tries = 0;
+    const t = setInterval(() => {
+      if (++tries > 30) { clearInterval(t); return; }
+      api<Checks>(`${base}/checks`).then((c) => { if (live) setChecks(c); }).catch(() => {});
+    }, 4000);
+    return () => { live = false; clearInterval(t); };
+  }, [waiting, base]);
   const act = async (fn: () => Promise<unknown>) => { setBusy(true); setErr(""); try { await fn(); onChange(); } catch (e) { setErr(e instanceof ApiError ? e.message : "Action failed"); } finally { setBusy(false); } };
   return (
     <section className="mt-4 rounded-2xl border border-[#e3eaf8] bg-white p-5" aria-label="Verification review">
@@ -58,7 +69,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
             <button disabled={busy} onClick={() => void act(async () => setChecks(await api<Checks>(`${base}/checks/mrz`, { method: "POST" })))} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Read again</button>
           </div>
           {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
-          {checks && !checks.mrz && <p className="mt-2 text-sm text-navy/55">Not read yet. It runs a few seconds after the customer submits; use “Read again”.</p>}
+          {checks && !checks.mrz && <p className="mt-2 text-sm text-navy/55">Not read yet. It runs a few seconds after the customer submits and this panel refreshes by itself; you can also use “Read again”.</p>}
           {checks?.mrz?.status === "unavailable" && <p className="mt-2 text-sm text-[#B54708]">The reading engine is not installed on the server.</p>}
           {checks?.mrz?.status === "unreadable" && <p className="mt-2 text-sm text-navy/60">No machine-readable zone could be read from the document photos (the document may have none, or the photo is unclear). Check the photos yourself.</p>}
           {checks?.mrz?.result && (() => { const r = checks.mrz!.result!; return (
@@ -85,7 +96,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           </div>
           {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
           {checks && checks.face_available === false && <p className="mt-2 text-sm text-[#B54708]">The comparison engine is not installed on the server.</p>}
-          {checks && checks.face_available !== false && !checks.face && <p className="mt-2 text-sm text-navy/55">Not computed yet (it needs the document front and the selfie). Use “Compare again”.</p>}
+          {checks && checks.face_available !== false && !checks.face && <p className="mt-2 text-sm text-navy/55">Not computed yet (it needs the document front and the selfie). It refreshes by itself; you can also use “Compare again”.</p>}
           {checks?.face?.status === "no_doc_face" && <p className="mt-2 text-sm text-navy/60">No face could be found on the document photo. Look at the photos yourself.</p>}
           {checks?.face?.status === "no_selfie" && <p className="mt-2 text-sm text-navy/60">No face could be found on the selfie. Look at the photos yourself.</p>}
           {checks?.face?.status === "ambiguous" && <p className="mt-2 text-sm text-[#B54708]">The selfie shows several faces of similar size (for example the person and the ID portrait), so no score was computed. Look at the photos yourself.</p>}

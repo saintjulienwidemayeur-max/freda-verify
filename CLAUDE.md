@@ -552,6 +552,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-20 — Review panel polls `.../checks` every 4 s (max ~2 min) after a submission until the MRZ and face results exist (owner saw 'Not read yet' because the background tasks had not finished). Type-check + build pass; not browser-tested against a live submission.
 - 2026-11-20 — Brevo e-mails redesigned (`mailer.render_html`): branded table layout with the logo (`{FV_HOSTED_URL}/logo.png`), title, button + copy-paste link, footer; all dynamic text escaped; checked in a headless browser render only, NOT in real mail clients (Gmail/Outlook). Real sending hit HTTP 401 first (wrong Brevo key type); the owner replaced the key.
 - 2026-11-20 — Face evaluation enlarged to 39 usable people: FRR 12.8 % and FAR 1.35 % at 0.363 (details in 3.8); threshold unchanged; data deleted.
 - 2026-11-20 — First real face-comparison evaluation on 17 people (owner-supplied merchant onboarding files, deleted afterwards): at threshold 0.363 FRR 11.8 % (3–34 %), FAR 0.37 % (0.06–2.1 %), AUC 0.95; 19 % of files had no detectable face; 'selfie holding the ID' contains the ID portrait which would match trivially, so a dominance guard (`ambiguous` status, 134 tests) was added; band labels made descriptive. Details in 3.8.
