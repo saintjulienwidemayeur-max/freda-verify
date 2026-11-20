@@ -288,11 +288,13 @@ def run_pad_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
         v = db.get(Verification, verification_id)
         if not v:
             return None
-        m = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "selfie"))
-        if not m:
+        frames = db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(SELFIE_KINDS)).order_by(VerificationMedia.kind)).all()
+        if not frames:
             return None
-        out = pad.score(decrypt_bytes(m.data))
-        payload = {"real_probability": out.real_probability, "band": out.band, "per_model": out.per_model, "models": list(out.per_model), "calibrated": False}
+        outs = [pad.score(decrypt_bytes(m.data)) for m in frames]
+        out = pad.aggregate(outs)
+        payload = {"real_probability": out.real_probability, "band": out.band, "per_model": out.per_model, "models": list(out.per_model), "calibrated": False,
+                   "frames": [{"status": o.status, "real_probability": o.real_probability} for o in outs], "min_frame": out.min_probability}
         row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "liveness")) or VerificationCheck(
             verification_id=v.id, organization_id=v.organization_id, kind="liveness")
         row.status, row.source, row.data, row.created_at = out.status, "selfie", encrypt_bytes(json.dumps(payload).encode()), now()
@@ -322,7 +324,8 @@ def _check_out(row: VerificationCheck | None) -> dict | None:
 
 
 # ───────── photos uploaded by the end user (session token) ─────────
-KINDS = ("document_front", "document_back", "selfie")
+KINDS = ("document_front", "document_back", "selfie", "selfie_2", "selfie_3")     # selfie_2/3: extra frontal frames for the experimental PAD score (optional)
+SELFIE_KINDS = ("selfie", "selfie_2", "selfie_3")
 DOC_TYPES = ("id", "passport", "license")
 
 
@@ -340,7 +343,7 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
     if kind not in KINDS:
         raise not_found("Unknown kind")
     _open_for_upload(v)
-    if kind != "selfie" and doc_type not in DOC_TYPES:
+    if kind not in SELFIE_KINDS and doc_type not in DOC_TYPES:
         raise AppError(422, "validation_error", "doc_type must be id, passport or license for documents")
     if kind == "document_back" and doc_type == "passport":
         raise AppError(422, "validation_error", "A passport has no back side")
@@ -357,8 +360,8 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
             raise AppError(422, "mrz_not_found", "The two lines of characters at the bottom of the passport page could not be read")
     purge_expired_media(db)
     db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
-    db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind != "selfie" else None,
-                             country=country if kind != "selfie" else None, content_type=ctype, size=len(data), sha256=__import__("hashlib").sha256(data).hexdigest(),
+    db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind not in SELFIE_KINDS else None,
+                             country=country if kind not in SELFIE_KINDS else None, content_type=ctype, size=len(data), sha256=__import__("hashlib").sha256(data).hexdigest(),
                              data=encrypt_bytes(data), purge_after=(now() + timedelta(days=s.media_retention_days)) if s.media_retention_days > 0 else None))
     audit.record(db, request, "verification.media_uploaded", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"kind": kind, "size": len(data)})
     db.commit()

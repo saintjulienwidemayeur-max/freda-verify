@@ -69,3 +69,41 @@ def test_pad_check_is_separate_stored_encrypted_and_never_decides(client, monkey
     assert r["status"] == "MANUAL_REVIEW" and r["decision"] is None                      # a good score decides nothing
     assert r["advisory"]["liveness"] == "experimental_not_certified" and "0.91" not in str(r)
     assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks/pad", headers=auth(t)).status_code == 200
+
+
+def test_aggregate_uses_the_worst_frame_to_downgrade():
+    from app.services.pad import PadOutcome, aggregate
+    good = PadOutcome("scored", 0.95, {"MiniFASNetV2": 0.95}, "high")
+    bad = PadOutcome("scored", 0.1, {"MiniFASNetV2": 0.1}, "low")
+    nof = PadOutcome("no_face")
+    a = aggregate([good, good, bad])                      # mean 0.667 -> uncertain anyway
+    assert a.min_probability == 0.1 and a.band == "uncertain"
+    b = aggregate([good, good, good, bad, nof])           # mean 0.76 would be 'high', one bad frame downgrades it
+    assert b.real_probability > 0.7 and b.band == "uncertain" and b.status == "scored"
+    assert aggregate([nof, nof]).status == "no_face"
+    assert aggregate([good]).band == "high"
+
+
+def test_extra_selfie_frames_are_stored_scored_together_and_do_not_touch_face_comparison(client, monkeypatch):
+    from app.services import pad as padmod
+    from tests.conftest import auth
+    from tests.test_media import PASSPORT_PAGE, bearer, up
+    from tests.test_media import setup as media_setup
+    seen = []
+    monkeypatch.setattr(padmod, "available", lambda: True)
+
+    def fake(data):
+        seen.append(data)
+        return padmod.PadOutcome("scored", 0.9, {"MiniFASNetV2": 0.9}, "high")
+    monkeypatch.setattr(padmod, "score", fake)
+    t, org, key, v = media_setup(client)
+    tok = v["session_token"]
+    client.post("/api/v1/session/consent", headers=bearer(tok))
+    assert up(client, tok, "document_front", PASSPORT_PAGE, q="?doc_type=passport&country=HT").status_code == 204
+    for k in ("selfie", "selfie_2", "selfie_3"):
+        assert up(client, tok, k).status_code == 204
+    assert up(client, tok, "selfie_4").status_code == 404
+    assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 204
+    assert len(seen) == 3
+    c = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks", headers=auth(t)).json()
+    assert len(c["pad"]["frames"]) == 3 and c["face"]["status"] in ("compared", "no_doc_face", "no_selfie", "ambiguous", "unavailable", "error")

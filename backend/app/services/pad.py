@@ -27,6 +27,7 @@ class PadOutcome:
     real_probability: float | None = None
     per_model: dict[str, float] = field(default_factory=dict)
     band: str | None = None           # high | uncertain | low (probability of a live capture)
+    min_probability: float | None = None     # worst frame when several frames were scored
 
 
 def model_dir() -> Path:
@@ -102,3 +103,19 @@ def score(data: bytes) -> PadOutcome:
         return PadOutcome("scored", mean, per, band(mean))
     except Exception:  # noqa: BLE001  a bad model file or image must not break anything else
         return PadOutcome("error")
+
+
+def aggregate(outs: list["PadOutcome"]) -> "PadOutcome":
+    """Several frontal frames of the same capture (taken at different moments). Score = mean over the frames that were scored; the WORST frame is kept too and
+    a good mean with one bad frame is downgraded to 'uncertain' (a replayed screen often flickers between frames). Frames without a face are ignored; none scored -> first status."""
+    ok = [o for o in outs if o.status == "scored" and o.real_probability is not None]
+    if not ok:
+        return outs[0] if outs else PadOutcome("unavailable")
+    mean = sum(o.real_probability for o in ok) / len(ok)
+    low = min(o.real_probability for o in ok)
+    names = {k for o in ok for k in o.per_model}
+    per = {k: sum(o.per_model[k] for o in ok if k in o.per_model) / sum(1 for o in ok if k in o.per_model) for k in names}
+    b = band(mean)
+    if b == "high" and low < LOW:
+        b = "uncertain"
+    return PadOutcome("scored", mean, per, b, low)

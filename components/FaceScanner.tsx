@@ -77,7 +77,7 @@ function BlinkGuide({ accent }: { accent: string }) {
  *  2. task 1: turn the head LEFT or RIGHT (random);  task 2: turn the OTHER way, or blink (random). Between tasks the user must look straight again.
  * Basic challenge only: NOT certified liveness (a good replay/deepfake or a mask can still pass). If MediaPipe cannot load it FAILS CLOSED (error + retry).
  */
-export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debug, blink: allowBlink = false }: { onShot: (b: Blob) => void; onCancel: () => void; tx: FaceText; accent: string; radius: number; debug?: boolean; blink?: boolean }) {
+export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debug, blink: allowBlink = false }: { onShot: (b: Blob, extra?: Blob[]) => void; onCancel: () => void; tx: FaceText; accent: string; radius: number; debug?: boolean; blink?: boolean }) {
   const wrap = useRef<HTMLDivElement>(null), vid = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState(false), [engine, setEngine] = useState<"loading" | "mp" | "fail">("loading"), [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<"align" | "task" | "done">("align");
@@ -104,7 +104,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
   useEffect(() => {
     if (err || engine !== "mp") return;
     let stop = false, timer: ReturnType<typeof setTimeout>;
-    let goodMs = 0, miss = 0, hold = 0, taskStart = 0, still: Blob | null = null, cur: "align" | "task" | "done" = "align", idx = 0, baseline = 0, sawOpen = false, needFront = false, frontHold = 0;
+    let goodMs = 0, miss = 0, hold = 0, taskStart = 0, still: Blob | null = null, extras: Blob[] = [], midTaken = false, cur: "align" | "task" | "done" = "align", idx = 0, baseline = 0, sawOpen = false, needFront = false, frontHold = 0;
     let seq: [Task, Task] = pickTasks(allowBlink); setTasks(seq);
     let bl: [number, number] = [0, 0], blN = 0;   // open-eye blink baseline learnt while the user looks straight
     let frames = 0, fpsT = performance.now(), fps = 0;
@@ -139,6 +139,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
           else ok = true;
         }
         if (ok) { goodMs += TICK; miss = 0; if (f.blink) { blN++; bl = [bl[0] + (f.blink[0] - bl[0]) / blN, bl[1] + (f.blink[1] - bl[1]) / blN]; } } else if (++miss > 1) goodMs = 0;
+        if (ok && !midTaken && goodMs >= ALIGN_MS / 2) { midTaken = true; const b = await snap(); if (b) extras.push(b); }   // 2nd frontal frame (experimental PAD score uses several frames)
         setGood(goodMs > 0); setProg(Math.min(1, goodMs / ALIGN_MS)); setHint(ok ? tx.faceFront : msg || tx.faceCenter);
         if (goodMs >= ALIGN_MS) {
           still = await snap(); if (!still) { goodMs = 0; return; }
@@ -157,7 +158,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
       if (needFront) {                                   // between the two tasks: look straight again
         if (Math.abs(yaw) <= FRONT_DEG) frontHold++; else frontHold = 0;
         setHint(tx.faceFront); setLookFront(true);
-        if (frontHold >= 3) { needFront = false; setLookFront(false); taskStart = performance.now(); hold = 0; sawOpen = false; setWrong(false); setHint(promptFor(task)); }
+        if (frontHold >= 3) { if (extras.length < 2) { const b = await snap(); if (b) extras.push(b); } needFront = false; setLookFront(false); taskStart = performance.now(); hold = 0; sawOpen = false; setWrong(false); setHint(promptFor(task)); }
         return;
       }
 
@@ -185,7 +186,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
       if (achieved) {
         if (idx === 0) { idx = 1; setTaskIdx(1); needFront = true; frontHold = 0; setProg(0); setWrong(false); setHint(tx.faceFront); setLookFront(true); return; }
         fired.current = true; cur = "done"; setPhase("done"); setFlash(true); setHint(tx.turnOk); setGood(true); setProg(1);
-        setTimeout(() => onShot(still!), 450);
+        setTimeout(() => onShot(still!, extras.slice(0, 2)), 450);
         return;
       }
       if (elapsed > TASK_TIMEOUT) {                      // time out: new random content for the current step

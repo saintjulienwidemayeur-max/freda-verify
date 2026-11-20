@@ -7,10 +7,10 @@ type V = { id: string; status: string; env: string; reference: string | null; co
 type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string | null };
 type Mrz = { format: string; document_type: string; issuing_country: string; surname: string; given_names: string; document_number: string; nationality: string; birth_date: string | null; sex: string; expiry_date: string | null; checks: Record<string, boolean>; all_checks_passed: boolean; expired: boolean | null; ocr_corrections: number; warnings: string[] };
 type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string };
-type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number> };
+type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number>; min_frame?: number | null; frames?: { status: string; real_probability: number | null }[] };
 type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
-const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie" };
+const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie", selfie_2: "Selfie · frame 2", selfie_3: "Selfie · frame 3" };
 
 type Verdict = { level: "pass" | "review" | "fail"; title: string; reasons: { ok: boolean; text: string }[] };
 /** Recommendation shown to the reviewer ONLY. It never decides: a person presses Approve or Reject. It is built from the two advisory checks, so it says nothing about liveness, authenticity or AML. */
@@ -167,7 +167,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
               <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${checks.pad.band === "high" ? "bg-[#E7F7EF] text-[#067647]" : checks.pad.band === "low" ? "bg-[#FDECEA] text-[#B42318]" : "bg-[#FEF3E2] text-[#B54708]"}`}>
                 {checks.pad.band === "high" ? "Looks like a live capture" : checks.pad.band === "low" ? "Looks like a photo or a screen" : "Uncertain"} · {Math.round(checks.pad.real_probability * 100)} %
               </span>
-              <span className="ml-2 text-xs text-navy/50">{Object.entries(checks.pad.per_model).map(([k, x]) => `${k} ${Math.round(x * 100)} %`).join(" · ")}</span>
+              <span className="ml-2 text-xs text-navy/50">{Object.entries(checks.pad.per_model).map(([k, x]) => `${k} ${Math.round(x * 100)} %`).join(" · ")}{checks.pad.frames && checks.pad.frames.length > 1 ? ` · ${checks.pad.frames.filter((f) => f.status === "scored").length}/${checks.pad.frames.length} frames, worst ${checks.pad.min_frame != null ? Math.round(checks.pad.min_frame * 100) : "-"} %` : ""}</span>
             </div>)}
           <p className="mt-3 text-xs leading-relaxed text-navy/50">Experimental and advisory: a person decides. It is NOT certified liveness. It looks at one still image for signs of a printed photo or a screen; it has not been tested on masks, deepfakes or a virtual camera, nor measured on our users (skin tones, phones, lighting), and its thresholds are not calibrated. A good score does not prove the person was present. This is separate from the face comparison above.</p>
         </div>
