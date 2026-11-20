@@ -14,6 +14,7 @@ import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -24,9 +25,9 @@ from app.core.deps import PERMS, OrgCtx, Principal, get_principal, org_access
 from app.core.errors import AppError, forbidden, not_found, unauthorized
 from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
-from app.models import Branding, BrandingLogo, Membership, User, Verification, VerificationCheck, VerificationMedia, now
+from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, face, mailer, ocr, pad, webhooks
+from app.services import audit, decision, face, mailer, ocr, pad, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -142,7 +143,10 @@ def get_result(verification_id: uuid.UUID, request: Request, organization_id: uu
     if not v:
         raise not_found("Verification not found")
     st = _status(v)
+    auto = st in ("APPROVED", "REJECTED") and v.decided_by is None
+    reasons = [c for c in (v.decision_reason or "")[len("auto: "):].split(",") if c] if auto and (v.decision_reason or "").startswith("auto: ") else None
     return {"id": v.id, "reference": v.reference, "env": v.env, "status": st, "decision": st if st in ("APPROVED", "REJECTED") else None,
+            "decision_source": ("automatic" if auto else "human") if st in ("APPROVED", "REJECTED") else None, "reason_codes": reasons,
             "submitted_at": v.submitted_at, "decided_at": v.decided_at, "advisory": _advisory(db, v) if v.submitted_at else None}
 
 
@@ -310,6 +314,49 @@ def run_pad_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
             db.close()
 
 
+def run_pipeline(verification_id: uuid.UUID) -> None:
+    """After submission: MRZ reading, face comparison and the experimental PAD score, one after the other (one process, little RAM), then the automatic decision if the organization enabled it."""
+    run_mrz_check(verification_id)
+    run_face_check(verification_id)
+    run_pad_check(verification_id)
+    auto_decide(verification_id)
+
+
+def _load(row) -> dict | None:
+    return json.loads(decrypt_bytes(row.data)) if row else None
+
+
+def auto_decide(verification_id: uuid.UUID) -> str | None:
+    """Applies the organization's decision policy to a submitted verification. Does nothing in `manual` mode. Never raises. Returns the new status or None."""
+    try:
+        with SessionLocal() as db:
+            v = db.get(Verification, verification_id)
+            pol = db.get(DecisionPolicy, v.organization_id) if v else None
+            if not v or not pol or pol.mode != "auto" or v.status != "MANUAL_REVIEW":
+                return None
+            rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
+            front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
+            mrz_row = _load(rows.get("mrz")) or {}
+            verdict = decision.decide(face_min=pol.face_min, require_pad=pol.require_pad, uncertain=pol.uncertain, mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,
+                                      agreeing=int(mrz_row.get("agreeing", 0)), face=({"status": rows["face"].status, **_load(rows["face"])} if rows.get("face") else None),
+                                      pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None)
+            reason = ("auto: " + ",".join(verdict.codes))[:200]
+            hooks: list[uuid.UUID] = []
+            if verdict.decision:
+                v.status, v.decided_at, v.decided_by, v.decision_reason = verdict.decision, now(), None, reason
+                hooks = webhooks.queue(db, v.organization_id, f"verification.{verdict.decision.lower()}", v)
+            else:
+                v.decision_reason = ("auto: needs review (" + ",".join(verdict.codes) + ")")[:200]
+            audit.record(db, None, "verification.auto_decided" if verdict.decision else "verification.auto_review", org_id=v.organization_id, target_type="verification", target_id=v.id,
+                         meta={"decision": verdict.decision, "codes": verdict.codes})
+            db.commit()
+        for h in hooks:
+            webhooks.deliver(h)
+        return verdict.decision
+    except Exception:  # noqa: BLE001  a decision problem must never break the submission: the verification simply stays in manual review
+        return None
+
+
 def _face_out(row: VerificationCheck | None) -> dict | None:
     if not row:
         return None
@@ -390,9 +437,7 @@ def complete_session(request: Request, background: BackgroundTasks, v: Verificat
     db.commit()
     for h in hooks:
         background.add_task(webhooks.deliver, h)
-    background.add_task(run_mrz_check, v.id)                  # after the response: the end user never waits for OCR
-    background.add_task(run_face_check, v.id)
-    background.add_task(run_pad_check, v.id)
+    background.add_task(run_pipeline, v.id)                   # after the response: the end user never waits for OCR / face / PAD; then the automatic decision if enabled
     background.add_task(notify_submission, v.id)
     return Response(status_code=204)
 
@@ -438,10 +483,11 @@ def delete_media(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Dep
 def decide(verification_id: uuid.UUID, body: DecisionIn, request: Request, background: BackgroundTasks, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
     """Manual decision by an owner/admin on a submitted verification. This is a human decision, not an automated result."""
     v = _owned(db, ctx, verification_id)
-    if v.status != "MANUAL_REVIEW":
-        raise AppError(409, "not_reviewable", "Only submitted verifications awaiting review can be decided")
+    automatic = v.status in ("APPROVED", "REJECTED") and v.decided_by is None and v.decided_at is not None
+    if v.status != "MANUAL_REVIEW" and not automatic:
+        raise AppError(409, "not_reviewable", "Only submitted verifications awaiting review, or decided automatically, can be decided by a person")
     v.status, v.decided_at, v.decided_by, v.decision_reason = body.decision, now(), ctx.user.id, (body.reason or None)
-    audit.record(db, request, "verification.decided", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"decision": body.decision})
+    audit.record(db, request, "verification.decided", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"decision": body.decision, "override_of_automatic": automatic})
     hooks = webhooks.queue(db, ctx.org.id, f"verification.{body.decision.lower()}", v)
     db.commit()
     for h in hooks:
@@ -496,3 +542,31 @@ def rerun_mrz(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depend
     db.commit()
     row = run_mrz_check(v.id, db)
     return {"engine_available": ocr.available(), "mrz": _check_out(row)}
+
+
+class PolicyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: str = Field(pattern=r"^(manual|auto)$")
+    uncertain: str = Field(pattern=r"^(review|reject)$")
+    face_min: float = Field(ge=0.2, le=0.9)
+    require_pad: bool
+
+
+def _policy_out(p: DecisionPolicy | None) -> dict:
+    return {"mode": p.mode if p else "manual", "uncertain": p.uncertain if p else "review", "face_min": p.face_min if p else 0.363, "require_pad": p.require_pad if p else False}
+
+
+@router.get("/organizations/{org_id}/decision-policy")
+def get_policy(ctx: OrgCtx = Depends(org_access("verifications:read")), db: Session = Depends(get_db)):
+    return _policy_out(db.get(DecisionPolicy, ctx.org.id))
+
+
+@router.put("/organizations/{org_id}/decision-policy")
+def put_policy(body: PolicyIn, request: Request, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
+    """Owner/admin. `auto` makes the SYSTEM approve/reject submitted verifications by the rules in app.services.decision; every automatic decision is audited and can be overridden by a person."""
+    p = db.get(DecisionPolicy, ctx.org.id) or DecisionPolicy(organization_id=ctx.org.id)
+    p.mode, p.uncertain, p.face_min, p.require_pad, p.updated_at = body.mode, body.uncertain, round(body.face_min, 3), body.require_pad, now()
+    db.add(p)
+    audit.record(db, request, "decision_policy.updated", org_id=ctx.org.id, user_id=ctx.user.id, meta={"mode": p.mode, "uncertain": p.uncertain, "face_min": p.face_min, "require_pad": p.require_pad})
+    db.commit()
+    return _policy_out(p)

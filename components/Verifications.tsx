@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import DecisionPolicy from "./DecisionPolicy";
 import { api, apiBlob, ApiError } from "@/lib/api";
 import { can, useAuth } from "@/lib/auth";
 
@@ -174,7 +175,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
       )}
 
       {v.decision_reason && <p className="mt-3 text-sm">Decision note: {v.decision_reason}</p>}
-      {admin && v.status === "MANUAL_REVIEW" && (
+      {admin && (v.status === "MANUAL_REVIEW" || (v.decision_reason ?? "").startsWith("auto:")) && (
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[#e3eaf8] pt-4">
           <label className="min-w-[14rem] flex-1 text-sm font-medium">Note (optional)<input value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} className="mt-1.5 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
           <button disabled={busy} onClick={() => void act(() => api(`${base}/decision`, { method: "POST", json: { decision: "APPROVED", reason: reason.trim() || undefined } }))} className="rounded-full bg-[#12B76A] px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Approve</button>
@@ -218,8 +219,10 @@ export default function Verifications() {
       <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">Verifications</h1>
       <p className="mt-1 text-sm text-navy/60">Create a verification link for one of your customers and follow its status.</p>
       <p className="mt-3 rounded-xl border border-[#d6e2ff] bg-ice p-3 text-sm text-navy/70">
-        Customers send their ID photos and selfie through the link; photos are stored encrypted and kept until you delete them. The server reads the passport/ID MRZ with OCR and checks its check digits, but there is no automated decision: submitted verifications wait in <b>MANUAL_REVIEW</b> for a person to approve or reject them.
+        Customers send their ID photos and selfie through the link; photos are stored encrypted and kept until you delete them. The server reads the passport/ID MRZ with OCR and checks its check digits, and, in Manual mode, submitted verifications wait in <b>MANUAL_REVIEW</b> for a person to approve or reject them.
       </p>
+
+      <DecisionPolicy />
 
       {writable && (
         <form onSubmit={create} className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-[#e3eaf8] bg-white p-4">

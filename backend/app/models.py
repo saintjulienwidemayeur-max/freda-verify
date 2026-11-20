@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -313,3 +313,15 @@ class PadSample(Base):
     size: Mapped[int] = mapped_column(Integer)
     data: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class DecisionPolicy(Base):
+    """Per-organization decision mode. `manual` (default): only a person decides. `auto`: the system approves when every configured check is strong and rejects only for objective
+    failures; what is left is `uncertain` and goes to a person (`review`) or is rejected (`reject`, the organization's explicit choice)."""
+    __tablename__ = "decision_policies"
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"), primary_key=True)
+    mode: Mapped[str] = mapped_column(String(8), default="manual")
+    uncertain: Mapped[str] = mapped_column(String(8), default="review")
+    face_min: Mapped[float] = mapped_column(Float, default=0.363)
+    require_pad: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
