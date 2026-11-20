@@ -9,7 +9,7 @@ Folder layout (photos you lawfully collected, with consent; never commit them):
       attack_replay/      *.jpg   photos of a phone/laptop SCREEN showing the person (photo or video frame)
       attack_mask/        *.jpg   3D / silicone / paper mask ...  (any folder starting with "attack_" is one attack type)
 
-Run (needs FV_PAD_MODEL_PATH and the face models):  python -m tools.pad_eval pad_set [--thresholds 0.3,0.5,0.7,0.9]
+Run (needs the PAD models in FV_PAD_MODEL_DIR and the face models):  python -m tools.pad_eval pad_set [--thresholds 0.3,0.5,0.7,0.9]
 
 BPCER = genuine captures classified as attacks (real probability < threshold).  APCER(type) = attacks of that type accepted as live (>= threshold).
 The headline APCER is the WORST attack type (APCER_PAIS). Captures where no face is found are counted separately, not hidden. 95 % Wilson intervals are shown;
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--thresholds", default="0.3,0.5,0.7,0.9")
     a = ap.parse_args(argv)
     if not pad.available():
-        print("PAD is not available: set FV_PAD_MODEL_PATH to an ONNX model and install the face models (FV_FACE_MODEL_DIR).")
+        print("PAD is not available: put MiniFASNetV2.onnx and/or MiniFASNetV1SE.onnx in FV_PAD_MODEL_DIR (default /opt/pad-models) and install the face models (FV_FACE_MODEL_DIR).")
         return 2
     root = Path(a.root)
     genuine, g_none = _scores(root / "genuine")

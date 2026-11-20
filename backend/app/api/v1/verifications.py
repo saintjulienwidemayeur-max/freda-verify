@@ -26,7 +26,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, face, mailer, ocr, webhooks
+from app.services import audit, face, mailer, ocr, pad, webhooks
 from app.services.images import read_limited, sniff_ok
 
 router = APIRouter(tags=["verifications"])
@@ -128,7 +128,8 @@ def _advisory(db: Session, v: Verification) -> dict:
     if "face" in rows:
         f = json.loads(decrypt_bytes(rows["face"].data))
         face_band = f.get("band") if rows["face"].status == "compared" else rows["face"].status
-    return {"document_checks": doc, "face_similarity": face_band, "liveness": "not_performed", "aml": "not_performed"}
+    # experimental, uncalibrated, not certified: only says that a score exists, never a verdict
+    return {"document_checks": doc, "face_similarity": face_band, "liveness": "experimental_not_certified" if "liveness" in rows and rows["liveness"].status == "scored" else "not_performed", "aml": "not_performed"}
 
 
 @router.get("/verifications/{verification_id}/result")
@@ -279,6 +280,34 @@ def run_face_check(verification_id: uuid.UUID, db: Session | None = None) -> Ver
             db.close()
 
 
+def run_pad_check(verification_id: uuid.UUID, db: Session | None = None) -> VerificationCheck | None:
+    """Experimental presentation-attack score on the SELFIE only (separate from face comparison). Advisory: it never decides anything and is not certified liveness."""
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        v = db.get(Verification, verification_id)
+        if not v:
+            return None
+        m = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "selfie"))
+        if not m:
+            return None
+        out = pad.score(decrypt_bytes(m.data))
+        payload = {"real_probability": out.real_probability, "band": out.band, "per_model": out.per_model, "models": list(out.per_model), "calibrated": False}
+        row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "liveness")) or VerificationCheck(
+            verification_id=v.id, organization_id=v.organization_id, kind="liveness")
+        row.status, row.source, row.data, row.created_at = out.status, "selfie", encrypt_bytes(json.dumps(payload).encode()), now()
+        db.add(row)
+        audit.record(db, None, "verification.pad_scored", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": out.status})
+        db.commit()
+        return row
+    except Exception:  # noqa: BLE001  never break the submission
+        db.rollback()
+        return None
+    finally:
+        if own:
+            db.close()
+
+
 def _face_out(row: VerificationCheck | None) -> dict | None:
     if not row:
         return None
@@ -354,6 +383,7 @@ def complete_session(request: Request, background: BackgroundTasks, v: Verificat
         background.add_task(webhooks.deliver, h)
     background.add_task(run_mrz_check, v.id)                  # after the response: the end user never waits for OCR
     background.add_task(run_face_check, v.id)
+    background.add_task(run_pad_check, v.id)
     background.add_task(notify_submission, v.id)
     return Response(status_code=204)
 
@@ -418,7 +448,9 @@ def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
     audit.record(db, request, "verification.checks_viewed", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
     frow = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face"))
-    return {"engine_available": ocr.available(), "mrz": _check_out(row), "face_available": face.available(), "face": _face_out(frow)}
+    lrow = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "liveness"))
+    return {"engine_available": ocr.available(), "mrz": _check_out(row), "face_available": face.available(), "face": _face_out(frow),
+            "pad_available": pad.available(), "pad": _face_out(lrow)}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/face")
@@ -432,6 +464,17 @@ def rerun_face(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
     db.commit()
     row = run_face_check(v.id, db)
     return {"face_available": face.available(), "face": _face_out(row)}
+
+
+@router.post("/organizations/{org_id}/verifications/{verification_id}/checks/pad")
+def rerun_pad(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """Re-runs the experimental presentation-attack score on the selfie."""
+    v = _owned(db, ctx, verification_id)
+    if "selfie" not in {k for (k,) in db.execute(select(VerificationMedia.kind).where(VerificationMedia.verification_id == v.id))}:
+        raise AppError(409, "missing_photos", "The selfie is needed")
+    audit.record(db, request, "verification.pad_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
+    db.commit()
+    return {"pad_available": pad.available(), "pad": _face_out(run_pad_check(v.id, db))}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/mrz")

@@ -1,52 +1,60 @@
-"""Presentation-attack detection (PAD, "liveness" from a single image) as an OPTIONAL, ADVISORY, MEASURABLE plug-in. DISABLED unless FV_PAD_MODEL_PATH points to an ONNX file.
+"""Presentation-attack detection (PAD) on the SELFIE, from a single image: Minivision MiniFASNetV2 + MiniFASNetV1SE (ONNX), run with OpenCV DNN, fully self-hosted.
 
-No model ships with the product, on purpose: no candidate has been licence-cleared (see CLAUDE.md, D7 / "Liveness"). This module only gives a place to plug one in, run it on
-the selfie with the same self-hosted OpenCV stack, and MEASURE it with tools/pad_eval.py. Until APCER/BPCER have been measured on a genuine set AND an attack set (printed photo,
-screen replay, masks) the score must not be shown as a verdict, and nothing here may approve or reject a person.
+ADVISORY and EXPERIMENTAL. Separate from face comparison (app.services.face) on purpose: liveness says "is this a live capture?", comparison says "is it the same person?". It never decides.
+What it is: a passive, single-frame 2D-attack detector (printed photo / screen replay). What it is NOT: certified (no iBeta/ISO 30107-3 result), tested against masks, deepfakes or camera
+injection, or measured on our users (skin tones, phones, lighting: APCER/BPCER unknown, measure with tools/pad_eval.py). Training-data origin and licence of the WEIGHTS are not stated by the
+publishers (the code is Apache-2.0): open question D7. Do not describe this as 'liveness detection' to customers.
 
-Config (environment): FV_PAD_MODEL_PATH (ONNX), FV_PAD_INPUT (square input size, default 80), FV_PAD_REAL_INDEX (index of the "real" class in the output, default 1),
-FV_PAD_CROP_SCALE (square crop = face box side x this, default 2.7), FV_PAD_THRESHOLD (default 0.5, NOT calibrated). Defaults follow the common MiniFASNet convention
-(3-class softmax, 80x80 BGR crop, class 1 = real); a different model needs different values, checked on its own documentation.
+Models live in FV_PAD_MODEL_DIR (default /opt/pad-models): MiniFASNetV2.onnx (crop scale 2.7) and MiniFASNetV1SE.onnx (crop scale 4.0), 80x80 BGR, 3-class softmax with class 1 = real
+(the convention of the Minivision repo). Disabled (status `unavailable`) when no model file is present. The result is the mean real-probability of the available models, with each model's value.
 """
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.services import face
+
+MODELS = (("MiniFASNetV2.onnx", 2.7), ("MiniFASNetV1SE.onnx", 4.0))      # (file, crop scale = square side / face box side)
+SIZE = 80
+REAL_INDEX = 1
+HIGH, LOW = 0.7, 0.3                                                      # bands on the mean real probability: NOT calibrated
 
 
 @dataclass
 class PadOutcome:
     status: str                       # scored | no_face | unavailable | error
     real_probability: float | None = None
+    per_model: dict[str, float] = field(default_factory=dict)
+    band: str | None = None           # high | uncertain | low (probability of a live capture)
 
 
-def model_path() -> Path | None:
-    p = os.environ.get("FV_PAD_MODEL_PATH", "").strip()
-    return Path(p) if p else None
+def model_dir() -> Path:
+    return Path(os.environ.get("FV_PAD_MODEL_DIR", "/opt/pad-models"))
 
 
-def threshold() -> float:
-    return float(os.environ.get("FV_PAD_THRESHOLD", "0.5"))
+def _present() -> list[tuple[Path, float]]:
+    return [(model_dir() / f, sc) for f, sc in MODELS if (model_dir() / f).is_file()]
 
 
 def available() -> bool:
-    p = model_path()
-    return bool(p and p.is_file() and face.available())
+    return bool(_present()) and face.available()
+
+
+def band(p: float) -> str:
+    return "high" if p >= HIGH else "low" if p < LOW else "uncertain"
 
 
 _lock = threading.Lock()
-_net_cache: tuple[str, object] | None = None
+_nets: dict[str, object] = {}
 
 
-def _net():
-    global _net_cache
+def _net(path: Path):
     import cv2
-    p = str(model_path())
-    if _net_cache is None or _net_cache[0] != p:
-        _net_cache = (p, cv2.dnn.readNetFromONNX(p))
-    return _net_cache[1]
+    k = str(path)
+    if k not in _nets:
+        _nets[k] = cv2.dnn.readNetFromONNX(k)
+    return _nets[k]
 
 
 def _crop(img, box, scale: float, size: int):
@@ -56,10 +64,8 @@ def _crop(img, box, scale: float, size: int):
     cx, cy = x + w / 2, y + h / 2
     x0, y0 = int(round(cx - side / 2)), int(round(cy - side / 2))
     s = max(2, int(round(side)))
-    pad = s
-    padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_REPLICATE)
-    c = padded[y0 + pad:y0 + pad + s, x0 + pad:x0 + pad + s]
-    return cv2.resize(c, (size, size))
+    padded = cv2.copyMakeBorder(img, s, s, s, s, cv2.BORDER_REPLICATE)
+    return cv2.resize(padded[y0 + s:y0 + s + s, x0 + s:x0 + s + s], (size, size))
 
 
 def _softmax(v):
@@ -69,8 +75,9 @@ def _softmax(v):
 
 
 def score(data: bytes) -> PadOutcome:
-    """Probability that the selfie is a LIVE capture according to the plug-in model (not calibrated, not a decision)."""
-    if not available():
+    """Probability that the selfie is a LIVE capture according to the models (not calibrated, not a decision)."""
+    present = _present()
+    if not present or not face.available():
         return PadOutcome("unavailable")
     try:
         import cv2
@@ -78,18 +85,20 @@ def score(data: bytes) -> PadOutcome:
         if img is None:
             return PadOutcome("error")
         with face._lock:
-            det = face._models()[0]
-            faces = face._faces(det, img)
+            faces = face._faces(face._models()[0], img)
         if not faces:
             return PadOutcome("no_face")
-        size = int(os.environ.get("FV_PAD_INPUT", "80"))
-        crop = _crop(img, face._largest(faces), float(os.environ.get("FV_PAD_CROP_SCALE", "2.7")), size)
-        blob = cv2.dnn.blobFromImage(crop, 1.0, (size, size), (0, 0, 0), swapRB=False, crop=False)
-        with _lock:
-            net = _net()
-            net.setInput(blob)
-            out = net.forward().reshape(-1)
-        probs = out if abs(float(out.sum()) - 1.0) < 1e-3 and float(out.min()) >= 0 else _softmax(out)
-        return PadOutcome("scored", float(probs[int(os.environ.get("FV_PAD_REAL_INDEX", "1"))]))
+        box = face._largest(faces)
+        per: dict[str, float] = {}
+        for path, scale in present:
+            blob = cv2.dnn.blobFromImage(_crop(img, box, scale, SIZE), 1.0, (SIZE, SIZE), (0, 0, 0), swapRB=False, crop=False)
+            with _lock:
+                net = _net(path)
+                net.setInput(blob)
+                out = net.forward().reshape(-1)
+            probs = out if abs(float(out.sum()) - 1.0) < 1e-3 and float(out.min()) >= 0 else _softmax(out)
+            per[path.stem] = float(probs[REAL_INDEX])
+        mean = sum(per.values()) / len(per)
+        return PadOutcome("scored", mean, per, band(mean))
     except Exception:  # noqa: BLE001  a bad model file or image must not break anything else
         return PadOutcome("error")

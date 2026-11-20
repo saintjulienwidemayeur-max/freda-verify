@@ -1,10 +1,11 @@
+import pytest
 
 from app.services import pad
 from tools import pad_eval
 
 
 def test_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("FV_PAD_MODEL_PATH", raising=False)
+    monkeypatch.setenv("FV_PAD_MODEL_DIR", "/nonexistent")
     assert not pad.available() and pad.score(b"x").status == "unavailable"
 
 
@@ -14,7 +15,7 @@ def test_rates_use_threshold_per_attack_type():
 
 
 def test_eval_refuses_without_a_model(monkeypatch, capsys, tmp_path):
-    monkeypatch.delenv("FV_PAD_MODEL_PATH", raising=False)
+    monkeypatch.setenv("FV_PAD_MODEL_DIR", "/nonexistent")
     assert pad_eval.main([str(tmp_path)]) == 2
     assert "not available" in capsys.readouterr().out
 
@@ -29,3 +30,42 @@ def test_eval_reports_and_warns_when_samples_are_few(monkeypatch, capsys, tmp_pa
     assert pad_eval.main([str(tmp_path), "--thresholds", "0.5"]) == 0
     out = capsys.readouterr().out
     assert "INDICATIVE" in out and "print" in out and "0/3" in out and "2/2" in out
+
+
+REAL = pad.model_dir() / "MiniFASNetV2.onnx"
+
+
+@pytest.mark.skipif(not (REAL.is_file() and pad.face.available()), reason="PAD and face models not installed")
+def test_real_models_score_a_portrait_and_a_photo_of_a_photo(tmp_path):
+    import io
+
+    import cv2
+    import numpy as np
+    from PIL import Image
+    portrait = Image.open("../public/faces/woman-selfie.webp").convert("RGB")
+    b = io.BytesIO()
+    portrait.save(b, "JPEG")
+    live = pad.score(b.getvalue())
+    assert live.status == "scored" and live.band is not None and 0 <= live.real_probability <= 1 and set(live.per_model) <= {"MiniFASNetV2", "MiniFASNetV1SE"}
+    # a degraded re-photograph (blur + moire-like lines + colour cast) must at least run through the same path; no accuracy claim is made here
+    a = np.array(portrait)[:, :, ::-1].copy()
+    a[::6, :, 2] = np.clip(a[::6, :, 2].astype(int) + 40, 0, 255)
+    ok, buf = cv2.imencode(".jpg", cv2.GaussianBlur(a, (5, 5), 0))
+    assert ok and pad.score(buf.tobytes()).status in ("scored", "no_face")
+
+
+def test_pad_check_is_separate_stored_encrypted_and_never_decides(client, monkeypatch):
+    from app.services import pad as padmod
+    from tests.conftest import auth
+    from tests.test_media import setup as media_setup
+    from tests.test_media import submit_all
+    monkeypatch.setattr(padmod, "available", lambda: True)
+    monkeypatch.setattr(padmod, "score", lambda data: padmod.PadOutcome("scored", 0.91, {"MiniFASNetV2": 0.9, "MiniFASNetV1SE": 0.92}, "high"))
+    t, org, key, v = media_setup(client)
+    assert submit_all(client, v["session_token"]).status_code == 204
+    c = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks", headers=auth(t)).json()
+    assert c["pad_available"] is True and c["pad"]["status"] == "scored" and c["pad"]["band"] == "high" and c["face"] is not None   # face comparison untouched
+    r = client.get(f"/api/v1/verifications/{v['id']}/result", headers={"Authorization": f"Bearer {key}"}).json()
+    assert r["status"] == "MANUAL_REVIEW" and r["decision"] is None                      # a good score decides nothing
+    assert r["advisory"]["liveness"] == "experimental_not_certified" and "0.91" not in str(r)
+    assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks/pad", headers=auth(t)).status_code == 200
