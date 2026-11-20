@@ -61,7 +61,7 @@ Assets: `public/logo-mark.svg` (used), `public/logo.png`, `public/logo-white.png
 | Framework | **Next.js 15.5 (App Router)** + **React 19** + **TypeScript 5.9 (strict)** |
 | Styling | Tailwind CSS 3.4 (+ PostCSS, Autoprefixer); design tokens in `tailwind.config.ts` |
 | Animation | `framer-motion` 12 (v11 broke the build with React 19 types, see git history) |
-| Fonts | `next/font/google` (Inter, Plus Jakarta Sans, IBM Plex Mono). **Build needs network** to fetch them. |
+| Fonts | **Self-hosted** with `next/font/local` from npm packages `@fontsource-variable/inter`, `@fontsource-variable/plus-jakarta-sans`, `@fontsource/ibm-plex-mono` (latin subset, SIL OFL); the build no longer needs Google Fonts. |
 | Output | **Static export** (`output: "export"` in `next.config.mjs`) → `out/` |
 | Hosting | Render **Static Site**: build `npm install && npm run build`, publish dir `out` |
 | Backend | **Phase 1 only** (`backend/`, see 3.8): FastAPI + PostgreSQL + Alembic, auth, organizations, API keys, audit/request logs, MRZ validator. Connected to the frontend for auth, API keys, logs, team and MFA (see 3.9) |
@@ -372,7 +372,7 @@ Legal: identify applicable regimes for each market (data-protection law, AML/KYC
 4. Landing claims overstate capabilities (section 3.6).
 5. No CSP / security headers (static host; configure headers on Render or a CDN).
 6. No dependency auditing, no CI, no tests, no secret scanning in the pipeline.
-7. `next/font/google` makes builds depend on external network.
+7. (fixed 2026-11-20) fonts used to come from Google at build time and made CI fail intermittently; they are now self-hosted.
 8. The build output uses `output: "export"`; any future need for server-side session handling must live in the FastAPI service, not Next.
 
 ---
@@ -541,6 +541,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-20 — CI frontend job failed intermittently because `next/font/google` could not load Plus Jakarta Sans at build time (runs 7 and 11; the same code passed in other runs). Fonts are now self-hosted via `next/font/local` + @fontsource packages.
 - 2026-11-20 — Verification API started (sessions only): table `verifications` (migration 0006, RLS), `POST|GET /verifications`, public session endpoints (`/session`, `/session/logo`, `/session/consent`) with a hashed token carried in the URL fragment, expiry (410), per-token rate limit, tenant isolation, audit; hosted page `/verify` now serves the organization's saved branding and logo through the session; dashboard Verifications page is real (create link, list). 14 new backend tests (100 total) and a browser check (branding+logo → link → branded page, consent, invalid link). NOT built: document/selfie upload, engine, results, webhooks, `Idempotency-Key`, completion state.
 - 2026-11-20 — Logo storage: migration 0005 (`branding_logos`, RLS), raw-body upload/download/delete endpoints with strict validation (type, magic bytes, 512 KB streamed limit, SVG refused), frontend upload/remove/reload; 8 new tests (86 total) and a browser check (upload, reload, decode, SVG refused, remove). Stored in PostgreSQL rather than object storage: fine for small logos; move to S3/Supabase Storage + a separate public asset origin when `/verify` must serve it to end users.
 - 2026-11-20 — Landing copy corrected to match reality (see 3.6): unimplemented claims removed or labelled prévu/démo/illustration, fake API example replaced by the real `/usage` call, invented prices removed, placeholder contact e-mail removed.
