@@ -5,8 +5,10 @@ from sqlalchemy import text
 from app.api.v1.verifications import purge_expired_media
 from app.db.session import SessionLocal, get_engine
 from tests.conftest import PASSWORD, auth, first_org, register
+from tests.test_ocr import TD3, page  # noqa: E402
 
 JPG = b"\xff\xd8\xff\xe0" + b"SECRETPHOTOBYTES" * 8
+PASSPORT_PAGE = page(TD3)                 # a passport front must contain readable MRZ text (server gate)
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
 
@@ -28,7 +30,7 @@ def up(client, tok, kind, data=JPG, ctype="image/jpeg", q=""):
 
 def submit_all(client, tok, doc="passport"):
     client.post("/api/v1/session/consent", headers=bearer(tok))
-    assert up(client, tok, "document_front", q=f"?doc_type={doc}&country=HT").status_code == 204
+    assert up(client, tok, "document_front", PASSPORT_PAGE if doc == "passport" else JPG, q=f"?doc_type={doc}&country=HT").status_code == 204
     if doc != "passport":
         assert up(client, tok, "document_back", q=f"?doc_type={doc}&country=HT").status_code == 204
     assert up(client, tok, "selfie").status_code == 204
@@ -149,3 +151,22 @@ def test_photos_are_kept_by_default_and_only_purged_when_retention_is_enabled(cl
         assert purge_expired_media(db) == 0
     base = f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/media"
     assert all(m["purge_after"] is None for m in client.get(base, headers=auth(t)).json())
+
+
+def test_passport_front_without_mrz_text_is_refused_by_the_server(client):
+    import shutil
+
+    import pytest
+    if not shutil.which("tesseract"):
+        pytest.skip("tesseract is not installed")
+    from PIL import Image
+    t, org, _, v = setup(client)
+    tok = v["session_token"]
+    client.post("/api/v1/session/consent", headers=bearer(tok))
+    import io
+    blank = io.BytesIO()
+    Image.new("RGB", (900, 640), "white").save(blank, "JPEG")
+    r = up(client, tok, "document_front", blank.getvalue(), q="?doc_type=passport&country=HT")
+    assert r.status_code == 422 and "mrz_not_found" in r.text                 # e.g. a national ID card held as a passport
+    assert up(client, tok, "document_front", PASSPORT_PAGE, q="?doc_type=passport&country=HT").status_code == 204
+    assert up(client, tok, "document_front", blank.getvalue(), q="?doc_type=id&country=HT").status_code == 204   # ID cards are not gated (no MRZ on the front)

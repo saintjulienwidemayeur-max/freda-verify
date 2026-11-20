@@ -146,7 +146,7 @@ export default function HostedPage() {
   const custom = c.name.trim().length > 0;
   const name = c.name.trim() || "Freda Verify"; // default brand when the client has not filled the white label
 
-  const scanTx = useMemo(() => ({ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, found: t.scanFound,
+  const scanTx = useMemo(() => ({ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, fitFrame: t.scanFit, guideChecking: t.scanGuide, found: t.scanFound,
     scanFail: t.scanFail, retry: t.retry, showPassport: t.showPassport, showId: t.showId, docRej: t.docRej, rejShape: t.rejShape, rejFace: t.rejFace, rejMrz: t.rejMrz, rejUnavail: t.rejUnavail, blinkNow: t.blinkNow, stepAction: t.stepAction, tipMore: t.tipMore,
     faceLoading: t.faceLoading, faceNone: t.faceNone, faceMulti: t.faceMulti, faceSmall: t.faceSmall, faceBig: t.faceBig, faceCenter: t.faceCenter, faceFront: t.faceFront, turnL: t.turnL, turnR: t.turnR, turnWrong: t.turnWrong, turnOk: t.turnOk, turnAgain: t.turnAgain, dirL: t.dirL, dirR: t.dirR, stepFace: t.stepFace, stepTurn: t.stepTurn }), [t]);
   const names = useMemo(() => {
@@ -167,7 +167,11 @@ export default function HostedPage() {
       try {
         const q = key === "selfie" ? "" : `?doc_type=${kind ?? "id"}&country=${country}`;
         const r = await sessionFetch(`/session/media/${key === "selfie" ? "selfie" : `document_${key}`}${q}`, token, { method: "PUT", headers: { "Content-Type": blob.type }, body: blob });
-        if (!r.ok) throw new Error(String(r.status));
+        if (!r.ok) {
+          const code = ((await r.json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
+          if (code === "mrz_not_found") { setUpErr("mrz"); setBusy(false); setCam(false); return; }   // the server could not read the passport's two bottom lines
+          throw new Error(String(r.status));
+        }
       } catch { setSendErr(true); setBusy(false); setCam(false); return; }
     }
     const url = URL.createObjectURL(blob); urls.current.add(url); fresh.current = url;

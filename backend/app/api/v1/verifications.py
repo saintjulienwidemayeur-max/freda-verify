@@ -16,6 +16,7 @@ from datetime import timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core import ratelimit
 from app.core.config import get_settings
@@ -227,6 +228,12 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
     data = await read_limited(request, s.media_max_bytes)
     if not sniff_ok(ctype, data):
         raise AppError(422, "invalid_image", "Use a JPEG, PNG or WebP photo")
+    if kind == "document_front" and doc_type == "passport" and ocr.available():
+        # authoritative content gate: a passport photo page must contain machine-readable-zone text. The in-browser check is only a heuristic (a real national ID card
+        # passed it in testing), so the server refuses a photo in which no MRZ-shaped text can be read (the check digits are NOT required here: OCR may be imperfect).
+        found = await run_in_threadpool(ocr.read_mrz, data, True)
+        if found.status != "read":
+            raise AppError(422, "mrz_not_found", "The two lines of characters at the bottom of the passport page could not be read")
     purge_expired_media(db)
     db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
     db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind != "selfie" else None,

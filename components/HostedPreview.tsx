@@ -32,7 +32,7 @@ type Dict = {
   turnL: string; turnR: string; turnWrong: string; turnOk: string; turnAgain: string; dirL: string; dirR: string; stepFace: string; stepTurn: string;
   scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string;
   blinkNow: string; stepAction: string; tipMore: string;
-  sendNote: string; sendFail: string; demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
+  scanFit: string; scanGuide: string; sendNote: string; sendFail: string; demoBanner: string; demoDone: string; demoDoneT: string; lblFront: string; lblBack: string; lblSelfie: string; lblPage: string;
 };
 
 export const T: Record<Lang, Dict> = {
@@ -57,7 +57,7 @@ export const T: Record<Lang, Dict> = {
     scanFail: "The scanner could not be loaded. Check your connection and try again.", retry: "Try again", showPassport: "Show the passport photo page (the page with your photo)", showId: "Show your ID card inside the frame",
     docRej: "Document not recognised", rejShape: "This does not look like the right document. Show it flat, fully inside the frame.", rejFace: "We cannot see the photo on the document. Make sure it is visible and well lit.", rejMrz: "The two lines of characters at the bottom of the passport page are not visible.", rejUnavail: "We cannot check this document right now. Please try again.",
     blinkNow: "Now blink your eyes slowly", stepAction: "Action", tipMore: "Turn a little more",
-    sendNote: "Your photos are sent securely to {n} and reviewed by a person. They are stored encrypted.", sendFail: "We could not send your photo. Check your connection and try again.", demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
+    scanFit: "Fit the photo page inside the frame: your photo on the left, the two lines of characters at the bottom. Lay it flat, good light.", scanGuide: "Checking the page… hold still.", sendNote: "Your photos are sent securely to {n} and reviewed by a person. They are stored encrypted.", sendFail: "We could not send your photo. Check your connection and try again.", demoBanner: "Demo mode · nothing is uploaded", demoDone: "This is a demo. Your photos stayed on your device and were deleted from this page. No verification was performed.", demoDoneT: "Demo complete", lblFront: "Front", lblBack: "Back", lblSelfie: "Selfie", lblPage: "Photo page",
   },
   fr: {
     titleFor: "Vérification pour", sub: "Suivez ces étapes rapides pour confirmer votre identité", step: "Étape", idv: "Vérification de la pièce", facev: "Vérification du visage",
@@ -80,7 +80,7 @@ export const T: Record<Lang, Dict> = {
     scanFail: "Le scanner n'a pas pu être chargé. Vérifiez votre connexion et réessayez.", retry: "Réessayer", showPassport: "Montrez la page photo du passeport (la page avec votre photo)", showId: "Montrez votre carte d'identité dans le cadre",
     docRej: "Document non reconnu", rejShape: "Ce n'est pas le bon document. Présentez-le à plat, entièrement dans le cadre.", rejFace: "Nous ne voyons pas la photo du document. Assurez-vous qu'elle est visible et bien éclairée.", rejMrz: "Les deux lignes de caractères en bas de la page du passeport ne sont pas visibles.", rejUnavail: "Nous ne pouvons pas vérifier ce document pour le moment. Veuillez réessayer.",
     blinkNow: "Maintenant, clignez lentement des yeux", stepAction: "Action", tipMore: "Tournez un peu plus",
-    sendNote: "Vos photos sont envoyées de façon sécurisée à {n} et examinées par une personne. Elles sont conservées chiffrées.", sendFail: "Impossible d'envoyer votre photo. Vérifiez votre connexion et réessayez.", demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
+    scanFit: "Placez la page photo dans le cadre : votre photo à gauche, les deux lignes de caractères en bas. À plat, bonne lumière.", scanGuide: "Vérification de la page… ne bougez pas.", sendNote: "Vos photos sont envoyées de façon sécurisée à {n} et examinées par une personne. Elles sont conservées chiffrées.", sendFail: "Impossible d'envoyer votre photo. Vérifiez votre connexion et réessayez.", demoBanner: "Mode démo · rien n'est envoyé", demoDone: "Ceci est une démo. Vos photos sont restées sur votre appareil et ont été supprimées de cette page. Aucune vérification n'a été effectuée.", demoDoneT: "Démo terminée", lblFront: "Recto", lblBack: "Verso", lblSelfie: "Selfie", lblPage: "Page photo",
   },
   ht: {
     titleFor: "Verifikasyon pou", sub: "Swiv etap rapid sa yo pou konfime idantite w", step: "Etap", idv: "Verifikasyon pyès", facev: "Verifikasyon vizaj",
@@ -103,7 +103,7 @@ export const T: Record<Lang, Dict> = {
     scanFail: "Pa t kapab chaje eskanè a. Verifye koneksyon w epi eseye ankò.", retry: "Eseye ankò", showPassport: "Montre paj foto paspò a (paj ki gen foto w la)", showId: "Montre kat idantite w andedan kadre a",
     docRej: "Pa rekonèt dokiman an", rejShape: "Sa pa sanble ak bon dokiman an. Montre l plat, tout antye andedan kadre a.", rejFace: "Nou pa wè foto a sou dokiman an. Asire w li vizib epi byen klere.", rejMrz: "De liy karaktè ki anba paj paspò a pa vizib.", rejUnavail: "Nou pa ka verifye dokiman sa a kounye a. Tanpri eseye ankò.",
     blinkNow: "Kounye a bat je w dousman", stepAction: "Aksyon", tipMore: "Vire yon ti jan plis",
-    sendNote: "Foto w yo voye an sekirite bay {n} epi yon moun egzamine yo. Yo konsève chifre.", sendFail: "Nou pa t ka voye foto w la. Verifye koneksyon w epi eseye ankò.", demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
+    scanFit: "Mete paj foto a nan kad la: foto w a agoch, de liy karaktè yo anba. Mete l plat, ak bon limyè.", scanGuide: "N ap tcheke paj la… pa bouje.", sendNote: "Foto w yo voye an sekirite bay {n} epi yon moun egzamine yo. Yo konsève chifre.", sendFail: "Nou pa t ka voye foto w la. Verifye koneksyon w epi eseye ankò.", demoBanner: "Mòd demo · anyen pa voye", demoDone: "Sa a se yon demo. Foto w yo rete sou aparèy ou epi yo efase nan paj la. Pa gen verifikasyon ki fèt.", demoDoneT: "Demo fini", lblFront: "Devan", lblBack: "Dèyè", lblSelfie: "Selfi", lblPage: "Paj foto",
   },
 };
 

@@ -6,7 +6,7 @@ import { loadFace } from "./faceDetect";
 
 export type ScanText = {
   place: string; face: string; hold: string; dark: string; glare: string; blur: string; auto: string; done: string; capNow: string; denied: string; cancel: string;
-  loading: string; closer: string; far: string; center: string; found: string;
+  loading: string; closer: string; far: string; center: string; found: string; fitFrame: string; guideChecking: string;
   scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string;
 };
 
@@ -50,6 +50,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
     if (err || engine !== "ready") return;
     const work = document.createElement("canvas"), det = document.createElement("canvas");
     let prev: Float32Array | null = null, prevQuad: Quad | null = null, goodMs = 0, miss = 0, stop = false, cooldown = 0, timer: ReturnType<typeof setTimeout>;
+    let lastGuide = 0, guideOk = 0, guideWhy: Reject | null = null;
 
     const capture = () => {
       const v = vid.current; if (!v || !v.videoWidth || fired.current || !lastQuad.current) return;
@@ -103,14 +104,35 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       prevQuad = q;
 
       const cooling = performance.now() < cooldown;
+      // PASSPORT fallback when no page outline is found (page held open, busy background, plastic sleeve...): the user aligns the photo page with the frame
+      // and we validate the frame area itself with the same strict checks (photo on the left + the two MRZ lines). Never used for ID cards (no content check on the back).
+      const quadGood = !!q && aspectOk(kind, q.ratio);
+      if (kind === "passport" && !quadGood && !dark && !glare && !blur && !cooling && !fired.current && performance.now() - lastGuide > 1300) {
+        lastGuide = performance.now();
+        const gc = document.createElement("canvas"); gc.width = Math.round(sw); gc.height = Math.round(sh);
+        gc.getContext("2d")!.drawImage(v, sx, sy, sw, sh, 0, 0, gc.width, gc.height);
+        let gv: ReturnType<typeof validateDoc>;
+        try { gv = validateDoc(cvRef.current, lmRef.current, kind, side, gc); } catch { gv = { ok: false, reject: "unavailable" }; }
+        if (gv.ok) {
+          guideOk++; guideWhy = null;
+          if (guideOk >= 2 && !fired.current) {
+            fired.current = true; setFlash(true); setRej(null);
+            gc.toBlob((b) => { if (b) onShot(b); else fired.current = false; }, "image/jpeg", 0.92);
+          }
+        } else { guideOk = 0; guideWhy = gv.reject; }
+      }
+      if (quadGood) { guideOk = 0; guideWhy = null; }
       const ok = placement === "ok" && !dark && !glare && !blur && stable && !cooling;
       if (ok) { goodMs += TICK; miss = 0; } else if (++miss > 1) { goodMs = 0; }
-      setGood(goodMs > 0); setProg(Math.min(1, goodMs / NEED));
+      setGood(goodMs > 0 || guideOk > 0); setProg(Math.min(1, Math.max(goodMs / NEED, guideOk / 2)));
       if (placement !== "ok" || goodMs === 0) { if (!cooling) setRej(null); }
+      const guideHint = kind === "passport" && !quadGood
+        ? (guideOk > 0 ? tx.guideChecking : guideWhy === "face" ? tx.rejFace : guideWhy === "mrz" ? tx.rejMrz : tx.fitFrame) : null;
       setHint(
-        placement === "none" ? tx.place : placement === "wrong" ? (kind === "passport" ? tx.showPassport : tx.showId) : placement === "small" ? tx.closer : placement === "big" ? tx.far : placement === "off" ? tx.center
+        guideHint && placement !== "ok" && (placement === "none" || placement === "wrong") ? guideHint
+        : placement === "none" ? tx.place : placement === "wrong" ? (kind === "passport" ? tx.showPassport : tx.showId) : placement === "small" ? tx.closer : placement === "big" ? tx.far : placement === "off" ? tx.center
         : dark ? tx.dark : glare ? tx.glare : blur ? tx.blur : !stable ? tx.hold : tx.found);
-      if (debug) setDbg(`cv ratio=${q ? (Math.max(q.ratio, 1 / q.ratio)).toFixed(2) : "-"} fill=${fill.toFixed(2)} mean=${mean.toFixed(0)} sharp=${sharp.toFixed(0)} stable=${stable} ${placement}`);
+      if (debug) setDbg(`guide ok=${guideOk} why=${guideWhy ?? "-"} cv ratio=${q ? (Math.max(q.ratio, 1 / q.ratio)).toFixed(2) : "-"} fill=${fill.toFixed(2)} mean=${mean.toFixed(0)} sharp=${sharp.toFixed(0)} stable=${stable} ${placement}`);
       if (goodMs >= NEED) capture();
     };
 

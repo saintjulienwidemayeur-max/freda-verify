@@ -145,10 +145,11 @@ def _key(res: MrzResult) -> tuple:
     return (res.document_number, res.birth_date, res.expiry_date, res.nationality, res.issuing_country, res.sex)
 
 
-def read_mrz(image: bytes) -> OcrOutcome:
+def read_mrz(image: bytes, quick: bool = False) -> OcrOutcome:
     """Several independent readings (two crops × two preprocessings, then small rotations). A reading counts as a VOTE only when every ICAO check
     digit passes; the outcome carries how many independent readings agree (`agreeing`). One check digit is just one digit (a wrong text passes it
-    about 1 time in 10), so a single valid reading is not proof; two agreeing readings are much stronger evidence."""
+    about 1 time in 10), so a single valid reading is not proof; two agreeing readings are much stronger evidence.
+    quick=True (used as an upload gate): one crop, two preprocessings, no rotations; the outcome says whether an MRZ-shaped text was found at all."""
     if not available():
         return OcrOutcome("unavailable")
     try:
@@ -193,7 +194,7 @@ def read_mrz(image: bytes) -> OcrOutcome:
 
     done = False
     with _one_at_a_time:
-        for top in (0.60, 0.45):                                        # MRZ sits in the bottom ~30 % of a passport page / ID back
+        for top in ((0.60,) if quick else (0.60, 0.45)):                # MRZ sits in the bottom ~30 % of a passport page / ID back
             base = prep(top)
             for variant in (base, base.point(lambda p: 255 if p > 140 else 0)):
                 if run(variant):
@@ -201,7 +202,7 @@ def read_mrz(image: bytes) -> OcrOutcome:
                     break
             if done:
                 break
-        if not done:                                                    # tilted upload (the in-browser crop is upright): small rotations
+        if not done and not quick:                                      # tilted upload (the in-browser crop is upright): small rotations
             wide = prep(0.45)
             for angle in (-2, 2, -4, 4, -6, 6):
                 if run(wide.rotate(angle, resample=Image.BICUBIC, expand=True, fillcolor=255)):
