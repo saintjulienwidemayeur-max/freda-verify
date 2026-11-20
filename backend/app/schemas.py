@@ -147,3 +147,47 @@ class BrandingIn(_In):
 class BrandingOut(BrandingIn):
     updated_at: datetime | None = None
     has_logo: bool = False
+
+
+class VerificationIn(_In):
+    reference: str | None = Field(default=None, max_length=100, pattern=r"^[A-Za-z0-9 ._:@/#-]*$")
+    organization_id: uuid.UUID | None = None          # dashboard users only; API keys always use their own organization
+    expires_in_minutes: int | None = Field(default=None, ge=5, le=10080)
+
+
+class VerificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    status: str
+    env: str
+    reference: str | None
+    consent_given: bool
+    created_at: datetime
+    expires_at: datetime
+
+
+class VerificationCreatedOut(VerificationOut):
+    session_token: str          # shown once
+    url: str                    # hosted page link; the token is in the URL fragment so it never reaches a server log
+
+
+class SessionBranding(BaseModel):
+    name: str
+    color: str
+    theme: str
+    shape: str
+    lang: str
+    title: str
+    subtitle: str
+    support_email: str
+    docs: list[str]
+    hide_powered: bool
+    has_logo: bool
+
+
+class SessionOut(BaseModel):
+    verification_id: uuid.UUID
+    status: str
+    expires_at: datetime
+    consent_given: bool
+    branding: SessionBranding

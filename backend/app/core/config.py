@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     auth_rate_limit: int = 10               # requests / minute / IP on credential endpoints
     api_rate_limit: int = 120               # requests / minute / API key
     issuer: str = "freda-verify"
+    hosted_url: str = "https://freda-verify.onrender.com"   # origin of the static site that serves /verify (used to build session links)
+    session_ttl_minutes: int = 1440         # default lifetime of a verification session link
+    session_rate_limit: int = 120           # requests / minute / session token
 
     @field_validator("database_url")
     @classmethod

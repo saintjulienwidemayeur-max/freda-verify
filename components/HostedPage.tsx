@@ -8,6 +8,7 @@ import { loadFace } from "./faceDetect";
 import { needsFace, validateFile, type Reject } from "./docValidate";
 import FaceScanner from "./FaceScanner";
 import qrcode from "qrcode-generator";
+import { API_URL } from "@/lib/api";
 
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
 const DEFAULTS: Cfg = {
@@ -35,6 +36,11 @@ function readConfig(search: string): Cfg {
     docs, support: isMail(support) ? support : "", hidePowered: false,
   };
 }
+
+/* ───────────── real session (token in the URL fragment, sent only to the API as a Bearer header) ───────────── */
+type SessionData = { status: string; consent_given: boolean; branding: { name: string; color: string; theme: Theme; shape: Shape; lang: Lang; title: string; subtitle: string; support_email: string; docs: string[]; hide_powered: boolean; has_logo: boolean } };
+const sessionFetch = (path: string, token: string, init?: RequestInit) => fetch(`${API_URL}/api/v1${path}`, { ...init, headers: { Authorization: `Bearer ${token}` }, credentials: "omit" });
+const tokenFromHash = (): string => { const m = /^#s=(fvs_[A-Za-z0-9_-]{20,100})$/.exec(window.location.hash); return m ? m[1] : ""; };
 
 /* ───────────── desktop detection + QR ───────────── */
 const isDesktop = () => {
@@ -98,14 +104,33 @@ export default function HostedPage() {
   const [blinkOn, setBlinkOn] = useState(false);
   const [upErr, setUpErr] = useState<Reject | null>(null);
   const [copied, setCopied] = useState(false);
+  const [token, setToken] = useState("");
+  const [sessErr, setSessErr] = useState(false);
   useEffect(() => {
-    setC(readConfig(window.location.search));
+    const tk = tokenFromHash();
+    setToken(tk);
+    if (tk && API_URL) {
+      // real session: branding (and logo) come from the organization's saved settings, not from the URL
+      void (async () => {
+        try {
+          const r = await sessionFetch("/session", tk);
+          if (!r.ok) throw new Error(String(r.status));
+          const d = (await r.json()) as SessionData; const b = d.branding;
+          let logo: string | null = null;
+          if (b.has_logo) { try { const lr = await sessionFetch("/session/logo", tk); if (lr.ok) { logo = URL.createObjectURL(await lr.blob()); urls.current.add(logo); } } catch { /* page works without the logo */ } }
+          const docs: Record<DocKey, boolean> = { id: b.docs.includes("id"), passport: b.docs.includes("passport"), license: b.docs.includes("license") };
+          setC({ ...DEFAULTS, name: b.name, logo, color: b.color.toUpperCase(), theme: b.theme, shape: b.shape, lang: b.lang, title: b.title, subtitle: b.subtitle, docs, support: b.support_email, hidePowered: b.hide_powered });
+        } catch { setSessErr(true); }
+        setReady(true);
+      })();
+    } else if (tk) { setSessErr(true); }
+    else setC(readConfig(window.location.search));
     setDebug(new URLSearchParams(window.location.search).get("debug") === "1");
     setBlinkOn(new URLSearchParams(window.location.search).get("blink") === "1");
-    const u = new URL(window.location.href); const stay = u.searchParams.get("desktop") === "1"; u.searchParams.delete("desktop"); u.hash = "";
+    const u = new URL(window.location.href); const stay = u.searchParams.get("desktop") === "1"; u.searchParams.delete("desktop"); u.hash = tk ? `#s=${tk}` : "";  // the phone needs the same session link
     setLink(u.toString());
     if (isDesktop() && !stay) setStep("qr");
-    setReady(true);
+    if (!(tk && API_URL)) setReady(true);
   }, []);
   // start loading the heavy engines as soon as the user reaches the document step, so the scanners open instantly
   useEffect(() => { if (step === "document" || step === "front" || step === "back") { loadCv().catch(() => {}); loadFace().catch(() => {}); } }, [step]);
@@ -160,7 +185,10 @@ export default function HostedPage() {
     <button type="button" onClick={onClick} disabled={disabled} className="w-full py-3.5 text-[15px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-40"
       style={ghost ? { border: `1px solid ${line}`, borderRadius: r } : { background: c.color, color: fg, borderRadius: r }}>{children}</button>
   );
-  const Logo = () => custom
+  const Logo = () => c.logo
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={c.logo} alt={name} className="h-12 max-w-[9rem] object-contain" />
+    : custom
     ? <span className="grid h-11 w-11 place-items-center rounded-xl text-lg font-bold" style={{ background: c.color, color: fg }}>{name[0]?.toUpperCase()}</span>
     // eslint-disable-next-line @next/next/no-img-element
     : <img src="/logo-mark.svg" alt="Freda Verify" className="h-12 w-12" />;
@@ -248,6 +276,7 @@ export default function HostedPage() {
   };
 
   if (!ready) return <div className="min-h-screen bg-white" />;
+  if (sessErr) return <main className="grid min-h-screen place-items-center bg-white p-6 text-center text-navy"><div><img src="/logo-mark.svg" alt="" className="mx-auto h-12 w-12" /><h1 className="mt-4 font-display text-2xl font-bold">This verification link is not valid</h1><p className="mt-2 max-w-sm text-sm text-navy/70">It may have expired or been mistyped. Ask the company that sent it for a new link.</p></div></main>;
 
   return (
     <main className="min-h-[100dvh] sm:py-6" style={{ background: dark ? "#050C2B" : "#F1F4FB", color: tx }}>
@@ -301,7 +330,7 @@ export default function HostedPage() {
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" style={{ accentColor: c.color }} />
             <span>{t.agreePre} <span className="font-medium" style={{ color: c.color }}>{termsLabel(c.lang, name)}</span> {t.agreePost}</span>
           </label>
-          <Btn onClick={() => setStep("country")} disabled={!agree}>{t.start}</Btn>
+          <Btn onClick={() => { if (token) void sessionFetch("/session/consent", token, { method: "POST" }).catch(() => {}); setStep("country"); }} disabled={!agree}>{t.start}</Btn>
           {c.support && <p className="mt-2 break-all text-center text-xs" style={{ color: mut }}>{t.help} {c.support}</p>}
           <Secured />
         </>)}

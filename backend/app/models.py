@@ -151,6 +151,24 @@ class BrandingLogo(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class Verification(Base):
+    """A verification session created by a business. The end user opens the hosted page with a one-time-visible session token (only its SHA-256 is stored).
+    There is NO verification engine yet: status stays PENDING (EXPIRED is derived from expires_at). No documents, selfies or results are stored."""
+    __tablename__ = "verifications"
+    __table_args__ = (Index("ix_verifications_org_created", "organization_id", "created_at"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    env: Mapped[str] = mapped_column(String(8))                                      # test | live (from the key; dashboard = test)
+    status: Mapped[str] = mapped_column(String(16), default="PENDING")
+    reference: Mapped[str | None] = mapped_column(String(100), nullable=True)        # the business's own identifier for its customer
+    session_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_key: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("api_keys.id"), ondelete="SET NULL"), nullable=True)
+    created_by_user: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class AuditLog(Base):
     """Append-only (a PostgreSQL trigger rejects UPDATE/DELETE). Never store secrets, tokens or document data here."""
     __tablename__ = "audit_logs"

@@ -71,7 +71,7 @@ export default function Overview() {
           <section className="rounded-2xl border border-[#e3eaf8] bg-white p-5" aria-label="Verifications">
             <h2 className="font-display text-lg font-bold">Verifications</h2>
             <p className="mt-3 rounded-xl border border-dashed border-[#d6e2ff] p-6 text-sm text-navy/60">
-              No verification results yet. The verification engine and API are not released, and the hosted page does not upload anything, so there is nothing to count. Results will appear here once verifications are created through the API.
+              No verification results: the verification engine is not released, so links you create stay pending and no photo is uploaded. <Link href="/dashboard/verifications" className="font-medium text-blue hover:underline">Create or review verification links →</Link>
             </p>
           </section>
         </div>

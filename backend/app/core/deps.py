@@ -23,6 +23,8 @@ PERMS: dict[str, set[str]] = {
     "keys:write": {Role.owner, Role.admin},
     "branding:read": {Role.owner, Role.admin, Role.member, Role.viewer},
     "branding:write": {Role.owner, Role.admin},
+    "verifications:read": {Role.owner, Role.admin, Role.member, Role.viewer},
+    "verifications:write": {Role.owner, Role.admin, Role.member},
     "audit:read": {Role.owner, Role.admin},
 }
 

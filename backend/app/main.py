@@ -4,7 +4,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.v1 import auth, orgs, tools
+from app.api.v1 import auth, orgs, tools, verifications
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
 from app.core.middleware import RequestContext
@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
     v1.include_router(auth.router)
     v1.include_router(orgs.router)
     v1.include_router(tools.router)
+    v1.include_router(verifications.router)
     app.include_router(v1)
 
     @app.get("/health", tags=["health"])
