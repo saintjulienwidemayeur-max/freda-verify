@@ -189,7 +189,21 @@ class VerificationMedia(Base):
     sha256: Mapped[str] = mapped_column(String(64))                    # of the plain image (integrity / duplicate detection later)
     data: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    purge_after: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    purge_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)      # None = keep until deleted
+
+
+class VerificationCheck(Base):
+    """Result of a server-side check on the uploaded photos. `data` is Fernet-encrypted JSON (it contains names, birth date and document number)."""
+    __tablename__ = "verification_checks"
+    __table_args__ = (UniqueConstraint("verification_id", "kind"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    verification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("verifications.id"), ondelete="CASCADE"), index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))                      # mrz
+    status: Mapped[str] = mapped_column(String(12))                    # read | unreadable | unavailable
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)   # which photo the text came from
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class AuditLog(Base):

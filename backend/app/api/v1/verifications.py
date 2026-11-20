@@ -5,11 +5,15 @@ End-user side (session token `fvs_…`, nothing else): read the branding of the 
 Photos: the end user uploads a document (front, back) and a selfie with the session token; they are stored ENCRYPTED, deleted after the retention
 period, and reviewed by a human in the dashboard (status MANUAL_REVIEW → APPROVED / REJECTED). There is NO automated analysis (no OCR, face match,
 liveness or AML), no results API and no webhooks.
+
+MRZ reading: after submission, a background task reads the machine-readable zone from the document photos with Tesseract and validates it with the
+ICAO 9303 check digits (app.services.mrz). The result is stored encrypted and shown to reviewers as advice; it never decides anything.
 """
+import json
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -18,10 +22,10 @@ from app.core.config import get_settings
 from app.core.deps import PERMS, OrgCtx, Principal, get_principal, org_access
 from app.core.errors import AppError, forbidden, not_found, unauthorized
 from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
-from app.db.session import get_db
-from app.models import Branding, BrandingLogo, Membership, Verification, VerificationMedia, now
+from app.db.session import SessionLocal, get_db
+from app.models import Branding, BrandingLogo, Membership, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit
+from app.services import audit, ocr
 from app.services.images import read_limited, sniff_ok
 
 router = APIRouter(tags=["verifications"])
@@ -46,8 +50,9 @@ def _counts(db: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
 
 
 def purge_expired_media(db: Session) -> int:
-    """Retention: photos are deleted once `purge_after` has passed. Called on every upload and at startup; the verification record itself stays."""
-    n = db.execute(delete(VerificationMedia).where(VerificationMedia.purge_after <= now())).rowcount
+    """Optional retention (FV_MEDIA_RETENTION_DAYS > 0): photos are deleted once `purge_after` has passed. With the default (0) nothing is ever purged automatically.
+    Called on every upload and at startup; the verification record itself stays."""
+    n = db.execute(delete(VerificationMedia).where(VerificationMedia.purge_after.is_not(None), VerificationMedia.purge_after <= now())).rowcount
     db.commit()
     return n or 0
 
@@ -149,6 +154,51 @@ def give_consent(request: Request, v: Verification = Depends(get_session), db: S
     return Response(status_code=204)
 
 
+# ───────── MRZ reading (server-side OCR) ─────────
+def run_mrz_check(verification_id: uuid.UUID, db: Session | None = None) -> VerificationCheck | None:
+    """Reads the MRZ from the document photos (every document photo is tried, the best reading wins) and stores the encrypted outcome."""
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        v = db.get(Verification, verification_id)
+        if not v:
+            return None
+        best: tuple[int, str, ocr.OcrOutcome] | None = None
+        outcome = ocr.OcrOutcome("unreadable")
+        source = None
+        for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "document_back")))):
+            o = ocr.read_mrz(decrypt_bytes(m.data))
+            if o.status == "unavailable":
+                outcome, source, best = o, None, None
+                break
+            sc = sum(o.result.checks.values()) if o.result else -1
+            if o.status == "read" and (best is None or sc > best[0]):
+                best = (sc, m.kind, o)
+        if best:
+            _, source, outcome = best
+        payload = {"result": outcome.result.to_dict() if outcome.result else None, "lines": outcome.lines}
+        row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz")) or VerificationCheck(
+            verification_id=v.id, organization_id=v.organization_id, kind="mrz")
+        row.status, row.source, row.data, row.created_at = outcome.status, source, encrypt_bytes(json.dumps(payload).encode()), now()
+        db.add(row)
+        audit.record(db, None, "verification.mrz_read", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": outcome.status})
+        db.commit()
+        return row
+    except Exception:  # noqa: BLE001  a failing reader must never break the submission; the reviewer can re-run it
+        db.rollback()
+        return None
+    finally:
+        if own:
+            db.close()
+
+
+def _check_out(row: VerificationCheck | None) -> dict | None:
+    if not row:
+        return None
+    payload = json.loads(decrypt_bytes(row.data))
+    return {"status": row.status, "source": row.source, "created_at": row.created_at, "result": payload.get("result"), "lines": payload.get("lines")}
+
+
 # ───────── photos uploaded by the end user (session token) ─────────
 KINDS = ("document_front", "document_back", "selfie")
 DOC_TYPES = ("id", "passport", "license")
@@ -181,14 +231,14 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
     db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
     db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind != "selfie" else None,
                              country=country if kind != "selfie" else None, content_type=ctype, size=len(data), sha256=__import__("hashlib").sha256(data).hexdigest(),
-                             data=encrypt_bytes(data), purge_after=now() + timedelta(days=s.media_retention_days)))
+                             data=encrypt_bytes(data), purge_after=(now() + timedelta(days=s.media_retention_days)) if s.media_retention_days > 0 else None))
     audit.record(db, request, "verification.media_uploaded", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"kind": kind, "size": len(data)})
     db.commit()
     return Response(status_code=204)
 
 
 @router.post("/session/complete", status_code=204)
-def complete_session(request: Request, v: Verification = Depends(get_session), db: Session = Depends(get_db)):
+def complete_session(request: Request, background: BackgroundTasks, v: Verification = Depends(get_session), db: Session = Depends(get_db)):
     """Submits the verification for HUMAN review (MANUAL_REVIEW). Requires the selfie and the document photo(s)."""
     _open_for_upload(v)
     rows = {m.kind: m for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id))}
@@ -200,6 +250,7 @@ def complete_session(request: Request, v: Verification = Depends(get_session), d
     v.status, v.submitted_at = "MANUAL_REVIEW", now()
     audit.record(db, request, "verification.submitted", org_id=v.organization_id, target_type="verification", target_id=v.id)
     db.commit()
+    background.add_task(run_mrz_check, v.id)                  # after the response: the end user never waits for OCR
     return Response(status_code=204)
 
 
@@ -250,3 +301,25 @@ def decide(verification_id: uuid.UUID, body: DecisionIn, request: Request, ctx: 
     audit.record(db, request, "verification.decided", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"decision": body.decision})
     db.commit()
     return _out(v, _counts(db, [v.id]).get(v.id, 0))
+
+
+@router.get("/organizations/{org_id}/verifications/{verification_id}/checks")
+def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """MRZ reading (names, birth date, document number): personal data, so owners/admins only and every read is audited."""
+    v = _owned(db, ctx, verification_id)
+    row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz"))
+    audit.record(db, request, "verification.checks_viewed", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
+    db.commit()
+    return {"engine_available": ocr.available(), "mrz": _check_out(row)}
+
+
+@router.post("/organizations/{org_id}/verifications/{verification_id}/checks/mrz")
+def rerun_mrz(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """Re-reads the MRZ now (e.g. after an engine upgrade). Needs at least one stored document photo."""
+    v = _owned(db, ctx, verification_id)
+    if not db.scalar(select(func.count()).select_from(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "document_back")))):
+        raise AppError(409, "no_document", "There is no document photo to read")
+    audit.record(db, request, "verification.mrz_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
+    db.commit()
+    row = run_mrz_check(v.id, db)
+    return {"engine_available": ocr.available(), "mrz": _check_out(row)}

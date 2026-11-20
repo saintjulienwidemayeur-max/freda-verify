@@ -4,14 +4,17 @@ import { api, apiBlob, ApiError } from "@/lib/api";
 import { can, useAuth } from "@/lib/auth";
 
 type V = { id: string; status: string; env: string; reference: string | null; consent_given: boolean; created_at: string; expires_at: string; submitted_at: string | null; decided_at: string | null; decision_reason: string | null; media_count: number };
-type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string };
+type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string | null };
+type Mrz = { format: string; document_type: string; issuing_country: string; surname: string; given_names: string; document_number: string; nationality: string; birth_date: string | null; sex: string; expiry_date: string | null; checks: Record<string, boolean>; all_checks_passed: boolean; expired: boolean | null; ocr_corrections: number; warnings: string[] };
+type Checks = { engine_available: boolean; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null } | null };
+const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie" };
 
 /** Review panel: photos are decrypted by the API only for owners/admins and every view is audited. No automated analysis exists: a person decides. */
 function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange: () => void; onClose: () => void }) {
   const { org } = useAuth();
   const admin = org?.role === "owner" || org?.role === "admin";
-  const [media, setMedia] = useState<Media[] | null>(null), [imgs, setImgs] = useState<Record<string, string>>({}), [err, setErr] = useState(""), [reason, setReason] = useState(""), [busy, setBusy] = useState(false);
+  const [checks, setChecks] = useState<Checks | null>(null), [media, setMedia] = useState<Media[] | null>(null), [imgs, setImgs] = useState<Record<string, string>>({}), [err, setErr] = useState(""), [reason, setReason] = useState(""), [busy, setBusy] = useState(false);
   const base = `/organizations/${orgId}/verifications/${v.id}`;
   useEffect(() => {
     let live = true; const made: string[] = [];
@@ -19,6 +22,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
       try {
         const m = await api<Media[]>(`${base}/media`); if (!live) return; setMedia(m);
         if (!admin) return;
+        api<Checks>(`${base}/checks`).then((c) => { if (live) setChecks(c); }).catch(() => {});
         const out: Record<string, string> = {};
         for (const x of m) { const b = await apiBlob(`${base}/media/${x.kind}`); if (b) { const u = URL.createObjectURL(b); made.push(u); out[x.kind] = u; } }
         if (live) setImgs(out);
@@ -42,10 +46,35 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
         {media?.map((m) => (
           <figure key={m.kind} className="rounded-xl border border-[#e3eaf8] p-2">
             {imgs[m.kind] ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={imgs[m.kind]} alt={LABEL[m.kind]} className="max-h-56 w-full rounded-lg object-contain bg-[#F6F8FC]" /> : <div className="grid h-32 place-items-center rounded-lg bg-[#F6F8FC] text-xs text-navy/40">{admin ? "Loading…" : "Hidden"}</div>}
-            <figcaption className="mt-1.5 text-xs text-navy/60"><b>{LABEL[m.kind]}</b>{m.doc_type ? ` · ${m.doc_type}` : ""}{m.country ? ` · ${m.country}` : ""}<br />Deleted automatically on {new Date(m.purge_after).toLocaleDateString()}</figcaption>
+            <figcaption className="mt-1.5 text-xs text-navy/60"><b>{LABEL[m.kind]}</b>{m.doc_type ? ` · ${m.doc_type}` : ""}{m.country ? ` · ${m.country}` : ""}<br />{m.purge_after ? `Deleted automatically on ${new Date(m.purge_after).toLocaleDateString()}` : "Kept until a person deletes it"}</figcaption>
           </figure>
         ))}
       </div>
+      {admin && media && media.length > 0 && (
+        <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="MRZ reading">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-display text-sm font-bold">Machine-readable zone (automatic reading)</h3>
+            <button disabled={busy} onClick={() => void act(async () => setChecks(await api<Checks>(`${base}/checks/mrz`, { method: "POST" })))} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Read again</button>
+          </div>
+          {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
+          {checks && !checks.mrz && <p className="mt-2 text-sm text-navy/55">Not read yet. It runs a few seconds after the customer submits; use “Read again”.</p>}
+          {checks?.mrz?.status === "unavailable" && <p className="mt-2 text-sm text-[#B54708]">The reading engine is not installed on the server.</p>}
+          {checks?.mrz?.status === "unreadable" && <p className="mt-2 text-sm text-navy/60">No machine-readable zone could be read from the document photos (the document may have none, or the photo is unclear). Check the photos yourself.</p>}
+          {checks?.mrz?.result && (() => { const r = checks.mrz!.result!; return (
+            <div className="mt-3 text-sm">
+              <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${r.all_checks_passed ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{r.all_checks_passed ? "All check digits valid" : "Check digits do NOT match"}</span>
+              {r.expired && <span className="ml-2 rounded-full bg-[#FDECEA] px-2.5 py-0.5 font-mono text-xs text-[#B42318]">EXPIRED</span>}
+              <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-xs">
+                {([["Format", r.format], ["Document type", r.document_type], ["Issuing country", r.issuing_country], ["Surname", r.surname], ["Given names", r.given_names], ["Document number", r.document_number], ["Nationality", r.nationality], ["Birth date", r.birth_date ?? "—"], ["Sex", r.sex], ["Expiry date", r.expiry_date ?? "—"]] as [string, string][]).map(([k, val]) => (<div key={k} className="contents"><dt className="text-navy/55">{k}</dt><dd className="font-mono">{val}</dd></div>))}
+              </dl>
+              <ul className="mt-3 flex flex-wrap gap-2 text-xs">{Object.entries(r.checks).map(([k, ok]) => <li key={k} className={`rounded-full px-2.5 py-0.5 ${ok ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{ok ? "✓" : "✗"} {CHECK_LABEL[k] ?? k}</li>)}</ul>
+              {r.ocr_corrections > 0 && <p className="mt-2 text-xs text-[#B54708]">{r.ocr_corrections} character(s) were auto-corrected (typical OCR confusions): compare with the photo.</p>}
+              {r.warnings.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-[#B54708]">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
+            </div>); })()}
+          <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. Valid check digits show the text is internally consistent, not that the document is genuine. Not tested on real passports yet.</p>
+        </div>
+      )}
+
       {v.decision_reason && <p className="mt-3 text-sm">Decision note: {v.decision_reason}</p>}
       {admin && v.status === "MANUAL_REVIEW" && (
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[#e3eaf8] pt-4">
@@ -91,7 +120,7 @@ export default function Verifications() {
       <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">Verifications</h1>
       <p className="mt-1 text-sm text-navy/60">Create a verification link for one of your customers and follow its status.</p>
       <p className="mt-3 rounded-xl border border-[#d6e2ff] bg-ice p-3 text-sm text-navy/70">
-        Customers send their ID photos and selfie through the link; photos are stored encrypted and deleted automatically after the retention period. There is no automated verification yet: submitted verifications wait in <b>MANUAL_REVIEW</b> for a person to approve or reject them.
+        Customers send their ID photos and selfie through the link; photos are stored encrypted and kept until you delete them. The server reads the passport/ID MRZ with OCR and checks its check digits, but there is no automated decision: submitted verifications wait in <b>MANUAL_REVIEW</b> for a person to approve or reject them.
       </p>
 
       {writable && (

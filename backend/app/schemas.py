@@ -210,4 +210,4 @@ class MediaOut(BaseModel):
     content_type: str
     size: int
     created_at: datetime
-    purge_after: datetime
+    purge_after: datetime | None = None

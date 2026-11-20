@@ -138,3 +138,14 @@ def test_api_keys_and_jwts_cannot_upload_as_a_session(client, path):
     t, _, key, _ = setup(client)
     assert client.put("/api/v1" + path, content=JPG, headers={**bearer(key), "Content-Type": "image/jpeg"}).status_code == 401
     assert client.put("/api/v1" + path, content=JPG, headers={**auth(t), "Content-Type": "image/jpeg"}).status_code == 401
+
+
+def test_photos_are_kept_by_default_and_only_purged_when_retention_is_enabled(client):
+    t, org, _, v = setup(client)
+    submit_all(client, v["session_token"])
+    with get_engine().connect() as c:
+        assert c.execute(text("select count(*) from freda_verify.verification_media where purge_after is not null")).scalar() == 0
+    with SessionLocal() as db:
+        assert purge_expired_media(db) == 0
+    base = f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/media"
+    assert all(m["purge_after"] is None for m in client.get(base, headers=auth(t)).json())
