@@ -88,17 +88,18 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           {checks && checks.face_available !== false && !checks.face && <p className="mt-2 text-sm text-navy/55">Not computed yet (it needs the document front and the selfie). Use “Compare again”.</p>}
           {checks?.face?.status === "no_doc_face" && <p className="mt-2 text-sm text-navy/60">No face could be found on the document photo. Look at the photos yourself.</p>}
           {checks?.face?.status === "no_selfie" && <p className="mt-2 text-sm text-navy/60">No face could be found on the selfie. Look at the photos yourself.</p>}
+          {checks?.face?.status === "ambiguous" && <p className="mt-2 text-sm text-[#B54708]">The selfie shows several faces of similar size (for example the person and the ID portrait), so no score was computed. Look at the photos yourself.</p>}
           {checks?.face?.status === "error" && <p className="mt-2 text-sm text-[#B54708]">The comparison failed on these images.</p>}
           {checks?.face?.status === "compared" && checks.face.score !== null && (
             <div className="mt-3 text-sm">
               <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${checks.face.band === "high" ? "bg-[#E7F7EF] text-[#067647]" : checks.face.band === "possible" ? "bg-[#FEF3E2] text-[#B54708]" : "bg-[#FDECEA] text-[#B42318]"}`}>
-                {checks.face.band === "high" ? "Similar" : checks.face.band === "possible" ? "Uncertain" : "Low similarity"} · score {checks.face.score.toFixed(2)}
+                {checks.face.band === "high" ? "Strong similarity" : checks.face.band === "possible" ? "Moderate similarity" : "Low similarity"} · score {checks.face.score.toFixed(2)}
               </span>
               <span className="ml-2 text-xs text-navy/50">threshold {checks.face.threshold} · {checks.face.model}</span>
               {checks.face.band === "low" && <p className="mt-2 text-xs text-[#B54708]">Below the model threshold. This does not prove it is another person: a small printed passport photo, lighting, angle or blur often lower the score for the same person. Compare the two photos yourself.</p>}
             </div>
           )}
-          <p className="mt-3 text-xs text-navy/45">Experimental and advisory only: a person decides. The model was not measured on our customers (skin tones, ages, photo quality), and a small printed photo is harder to match than a selfie. Always look at the two photos. No face template is stored, only this number.</p>
+          <p className="mt-3 text-xs text-navy/45">Experimental and advisory only: a person decides. In our first test on 17 real pairs, the same person typically scored 0.35 to 0.70 (median 0.49, so “Moderate” is normal) and different people mostly stayed below 0.30; indicative only. The model was not measured on our customers (skin tones, ages, photo quality), and a small printed photo is harder to match than a selfie. Always look at the two photos. No face template is stored, only this number.</p>
         </div>
       )}
 

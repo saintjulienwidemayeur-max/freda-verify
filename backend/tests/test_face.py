@@ -71,3 +71,20 @@ def test_other_tenants_cannot_read_or_rerun(client):
     base = f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks"
     assert client.get(base, headers=auth(other)).status_code == 404
     assert client.post(base + "/face", headers=auth(other)).status_code == 404
+
+
+def test_selfie_with_two_equal_faces_is_not_scored():
+    a = Image.open(FACES / "man-selfie.webp").convert("RGB")
+    two = Image.new("RGB", (a.width * 2, a.height), "white")
+    two.paste(a, (0, 0))
+    two.paste(a, (a.width, 0))                      # two faces of the same size: which one is the person?
+    b = io.BytesIO()
+    two.save(b, "JPEG", quality=92)
+    r = face.compare(jpg("man-doc"), b.getvalue())
+    assert r.status == "ambiguous" and r.score is None and r.selfie_faces == 2
+    big_and_small = Image.new("RGB", (a.width * 2, a.height * 2), "white")      # person large, ID portrait small (typical selfie-with-ID): scored
+    big_and_small.paste(a.resize((a.width * 2, a.height * 2)), (0, 0))
+    big_and_small.paste(a.resize((a.width // 4, a.height // 4)), (20, 20))
+    b2 = io.BytesIO()
+    big_and_small.save(b2, "JPEG", quality=92)
+    assert face.compare(jpg("man-doc"), b2.getvalue()).status in ("compared", "ambiguous")

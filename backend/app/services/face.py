@@ -14,12 +14,13 @@ DET = "face_detection_yunet_2023mar.onnx"
 REC = "face_recognition_sface_2021dec.onnx"
 COSINE_THRESHOLD = 0.363          # value recommended with the model by OpenCV (cosine similarity); NOT calibrated on our population
 HIGH = 0.50
+DOMINANCE = 4.0                   # in a selfie the person's face must be at least this many times larger (by area) than any other face
 MAX_SIDE = 1280
 
 
 @dataclass
 class FaceOutcome:
-    status: str                    # compared | no_doc_face | no_selfie | unavailable | error
+    status: str                    # compared | no_doc_face | no_selfie | ambiguous | unavailable | error
     score: float | None = None
     band: str | None = None        # low | possible | high
     doc_faces: int = 0
@@ -91,6 +92,15 @@ def embed(image: bytes, all_faces: bool = False) -> tuple[list, int]:
         return [rec.feature(rec.alignCrop(img, f)) for f in picked], len(faces)
 
 
+def _dominant(image: bytes) -> bool:
+    img = _decode(image)
+    if img is None:
+        return False
+    with _lock:
+        areas = sorted((float(f[2]) * float(f[3]) for f in _faces(_models()[0], img)), reverse=True)
+    return len(areas) < 2 or areas[0] >= DOMINANCE * areas[1]
+
+
 def cosine(a, b) -> float:
     import cv2
     with _lock:
@@ -105,6 +115,10 @@ def compare(document_image: bytes, selfie_image: bytes) -> FaceOutcome:
         # (a stricter reading would use only the main portrait; the reviewer sees the photos anyway)
         doc_feats, n_doc = embed(document_image, all_faces=True)
         self_feats, n_self = embed(selfie_image)
+        if n_self >= 2 and not _dominant(selfie_image):
+            # 'selfie holding the ID' photos contain two faces: the person and the ID portrait. The ID portrait matches the document trivially (same card),
+            # so if the person's face is not clearly the main one the score would be meaningless (or a spoof): refuse to score, let the reviewer look.
+            return FaceOutcome("ambiguous", doc_faces=n_doc, selfie_faces=n_self)
         if not doc_feats:
             return FaceOutcome("no_doc_face", selfie_faces=n_self)
         if not self_feats:
