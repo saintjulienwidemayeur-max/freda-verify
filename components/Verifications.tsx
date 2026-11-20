@@ -11,6 +11,34 @@ type Checks = { engine_available: boolean; face_available?: boolean; face?: Face
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie" };
 
+type Verdict = { level: "pass" | "review" | "fail"; title: string; reasons: { ok: boolean; text: string }[] };
+/** Recommendation shown to the reviewer ONLY. It never decides: a person presses Approve or Reject. It is built from the two advisory checks, so it says nothing about liveness, authenticity or AML. */
+function verdict(c: Checks | null): Verdict | null {
+  if (!c || !c.mrz) return null;
+  const reasons: Verdict["reasons"] = []; let fail = false, review = false;
+  const m = c.mrz.result;
+  if (!m) { review = true; reasons.push({ ok: false, text: "No machine-readable zone could be read: check the document yourself." }); }
+  else {
+    const core = !!m.checks.document_number && !!m.checks.birth_date && !!m.checks.expiry_date;
+    if (m.all_checks_passed) reasons.push({ ok: true, text: "Document check digits are all valid." });
+    else if (core) { review = true; reasons.push({ ok: false, text: "Main fields are valid but the overall check failed (the end of the line was probably cut off)." }); }
+    else { review = true; reasons.push({ ok: false, text: "Document check digits do not match (reading error or altered document)." }); }
+    if ((c.mrz.agreeing ?? 0) >= 2) reasons.push({ ok: true, text: `${c.mrz.agreeing} independent readings agree.` });
+    else if (m.all_checks_passed) { review = true; reasons.push({ ok: false, text: "Only one reading: compare the document number with the photo." }); }
+    if (m.expired) { fail = true; reasons.push({ ok: false, text: "The document is expired." }); } else if (m.expired === false) reasons.push({ ok: true, text: "The document is not expired." });
+  }
+  const f = c.face;
+  if (c.face_available === false) { review = true; reasons.push({ ok: false, text: "Face comparison is not available on the server." }); }
+  else if (!f) return null;
+  else if (f.status === "compared" && f.score !== null) {
+    if (f.band === "high" || f.band === "possible") reasons.push({ ok: true, text: `Face similarity ${f.score.toFixed(2)} (${f.band === "high" ? "strong" : "moderate"}).` });
+    else { review = true; reasons.push({ ok: false, text: `Face similarity is low (${f.score.toFixed(2)}): often a photo-quality issue, but it can be a different person.` }); }
+  } else { review = true; reasons.push({ ok: false, text: f.status === "ambiguous" ? "Several faces in the selfie: no score." : "No face could be compared." }); }
+  if (fail) return { level: "fail", title: "Recommendation: do NOT approve", reasons };
+  if (review) return { level: "review", title: "Recommendation: needs your review", reasons };
+  return { level: "pass", title: "Recommendation: looks consistent, you can approve", reasons };
+}
+
 /** Review panel: photos are decrypted by the API only for owners/admins and every view is audited. No automated analysis exists: a person decides. */
 function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange: () => void; onClose: () => void }) {
   const { org } = useAuth();
@@ -62,6 +90,13 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           </figure>
         ))}
       </div>
+      {admin && (() => { const vd = verdict(checks); if (!vd) return null; const tone = vd.level === "pass" ? "border-[#ABEFC6] bg-[#E7F7EF] text-[#067647]" : vd.level === "fail" ? "border-[#FDA29B] bg-[#FDECEA] text-[#B42318]" : "border-[#FEDF89] bg-[#FEF3E2] text-[#B54708]";
+        return (
+          <div className={`mt-4 rounded-xl border p-4 ${tone}`} aria-label="Recommendation">
+            <p className="font-display text-base font-bold">{vd.level === "pass" ? "✓ " : vd.level === "fail" ? "✗ " : "! "}{vd.title}</p>
+            <ul className="mt-2 space-y-1 text-sm">{vd.reasons.map((r) => <li key={r.text}>{r.ok ? "✓" : "•"} {r.text}</li>)}</ul>
+            <p className="mt-2 text-xs opacity-80">Advice only. These checks do NOT cover liveness (a replayed video or a mask can pass), whether the document is genuine, or sanctions/PEP screening. You decide with Approve or Reject.</p>
+          </div>); })()}
       {admin && media && media.length > 0 && (
         <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="MRZ reading">
           <div className="flex flex-wrap items-center justify-between gap-2">
