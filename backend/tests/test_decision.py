@@ -3,7 +3,11 @@ from app.api.v1 import verifications as V
 from app.services.decision import Verdict, decide
 from tests.conftest import auth
 from tests.test_media import bearer, submit_all
-from tests.test_media import setup as media_setup
+from tests.test_media import setup as _setup
+
+
+def media_setup(client, email="o@o.example", name="Org O"):
+    return _setup(client, email, name, manual=False)         # these tests exercise the platform default (automatic) and explicit policies
 
 GOOD_MRZ = {"all_checks_passed": True, "expired": False, "checks": {"document_number": True, "birth_date": True, "expiry_date": True, "composite": True}}
 FACE_OK = {"status": "compared", "score": 0.55, "band": "high"}
@@ -44,11 +48,11 @@ def put_policy(client, t, org, **kw):
     return client.put(f"/api/v1/organizations/{org['id']}/decision-policy", json=body, headers=auth(t))
 
 
-def test_default_is_manual_and_only_admins_change_the_policy(client):
+def test_default_is_automatic_and_only_admins_change_the_policy(client):
     t, org, key, v = media_setup(client)
-    assert client.get(f"/api/v1/organizations/{org['id']}/decision-policy", headers=auth(t)).json() == {"mode": "manual", "uncertain": "review", "face_min": 0.363, "require_pad": False, "id_cards": "review"}
+    assert client.get(f"/api/v1/organizations/{org['id']}/decision-policy", headers=auth(t)).json() == {"mode": "auto", "uncertain": "review", "face_min": 0.363, "require_pad": False, "id_cards": "face_and_data"}
     assert submit_all(client, v["session_token"]).status_code == 204
-    assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "MANUAL_REVIEW"            # manual: nobody decided
+    assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "REJECTED"            # default is automatic: the ICAO specimen passport used here expired in 2012 (expiry digit valid), an objective failure
     assert put_policy(client, t, org, face_min=0.95).status_code == 422 and put_policy(client, t, org, mode="x").status_code == 422
     assert put_policy(client, t, org).status_code == 200
 
@@ -128,10 +132,28 @@ def test_declared_data_is_encrypted_never_returned_and_checked_on_the_card(clien
 
 
 def test_recheck_runs_the_pipeline_again_and_decides_when_auto(client, monkeypatch):
-    t, org, key, v = media_setup(client)
+    t, org, key, v = _setup(client, manual=True)
     assert submit_all(client, v["session_token"]).status_code == 204                                  # manual mode: stays in review
     put_policy(client, t, org)
     monkeypatch.setattr(V.decision, "decide", lambda **kw: Verdict("APPROVED", ["all_checks_passed"]))
     assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/recheck", headers=auth(t)).status_code == 202
     assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "APPROVED"
     assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/recheck", headers=auth(t)).status_code == 409   # already decided
+
+
+def test_platform_default_applies_without_a_saved_policy_and_can_be_overridden_by_env(client, monkeypatch):
+    t, org, key, v = media_setup(client)
+    monkeypatch.setattr(V.decision, "decide", lambda **kw: Verdict("APPROVED", ["all_checks_passed"]))
+    assert submit_all(client, v["session_token"]).status_code == 204                     # no policy was ever saved: the automatic default decides
+    assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "APPROVED"
+    from app.core.config import get_settings
+    monkeypatch.setenv("FV_DECISION_DEFAULT_MODE", "manual")
+    get_settings.cache_clear()
+    try:
+        t2, org2, key2, v2 = media_setup(client, "m@m.example", "Org M")
+        assert submit_all(client, v2["session_token"]).status_code == 204
+        assert client.get("/api/v1/session", headers=bearer(v2["session_token"])).json()["status"] == "MANUAL_REVIEW"
+        assert client.get(f"/api/v1/organizations/{org2['id']}/decision-policy", headers=auth(t2)).json()["mode"] == "manual"
+    finally:
+        monkeypatch.delenv("FV_DECISION_DEFAULT_MODE")
+        get_settings.cache_clear()

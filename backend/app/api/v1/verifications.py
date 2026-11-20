@@ -358,13 +358,15 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
     try:
         with SessionLocal() as db:
             v = db.get(Verification, verification_id)
-            pol = db.get(DecisionPolicy, v.organization_id) if v else None
-            if not v or not pol or pol.mode != "auto" or v.status != "MANUAL_REVIEW":
+            if not v:
+                return None
+            pol = _policy_values(db.get(DecisionPolicy, v.organization_id))
+            if pol["mode"] != "auto" or v.status != "MANUAL_REVIEW":
                 return None
             rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
             front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
             mrz_row = _load(rows.get("mrz")) or {}
-            verdict = decision.decide(face_min=pol.face_min, require_pad=pol.require_pad, uncertain=pol.uncertain, id_cards=pol.id_cards,
+            verdict = decision.decide(face_min=pol["face_min"], require_pad=pol["require_pad"], uncertain=pol["uncertain"], id_cards=pol["id_cards"],
                                       idtext=({"status": rows["idtext"].status, **_load(rows["idtext"])} if rows.get("idtext") else None), mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,
                                       agreeing=int(mrz_row.get("agreeing", 0)), face=({"status": rows["face"].status, **_load(rows["face"])} if rows.get("face") else None),
                                       pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None)
@@ -594,8 +596,15 @@ class PolicyIn(BaseModel):
     id_cards: str = Field(default="review", pattern=r"^(review|face_and_data|face_only)$")
 
 
+def _policy_values(p: DecisionPolicy | None) -> dict:
+    """The organization's saved policy, or the platform defaults (FV_DECISION_DEFAULT_MODE / FV_DECISION_DEFAULT_ID_CARDS: automatic, ID cards need face + declared data) when it never saved one."""
+    st = get_settings()
+    return {"mode": p.mode if p else st.decision_default_mode, "uncertain": p.uncertain if p else "review", "face_min": p.face_min if p else 0.363,
+            "require_pad": p.require_pad if p else False, "id_cards": p.id_cards if p else st.decision_default_id_cards}
+
+
 def _policy_out(p: DecisionPolicy | None) -> dict:
-    return {"mode": p.mode if p else "manual", "uncertain": p.uncertain if p else "review", "face_min": p.face_min if p else 0.363, "require_pad": p.require_pad if p else False, "id_cards": p.id_cards if p else "review"}
+    return _policy_values(p)
 
 
 @router.get("/organizations/{org_id}/decision-policy")

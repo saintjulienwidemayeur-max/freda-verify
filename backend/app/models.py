@@ -321,9 +321,9 @@ class DecisionPolicy(Base):
     failures; what is left is `uncertain` and goes to a person (`review`) or is rejected (`reject`, the organization's explicit choice)."""
     __tablename__ = "decision_policies"
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"), primary_key=True)
-    mode: Mapped[str] = mapped_column(String(8), default="manual")
+    mode: Mapped[str] = mapped_column(String(8), default="auto")
     uncertain: Mapped[str] = mapped_column(String(8), default="review")
     face_min: Mapped[float] = mapped_column(Float, default=0.363)
     require_pad: Mapped[bool] = mapped_column(Boolean, default=False)
-    id_cards: Mapped[str] = mapped_column(String(12), default="review")           # review | face_and_data | face_only
+    id_cards: Mapped[str] = mapped_column(String(16), default="face_and_data")   # review | face_and_data | face_only
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

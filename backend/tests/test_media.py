@@ -16,10 +16,12 @@ def bearer(tok):
     return {"Authorization": f"Bearer {tok}"}
 
 
-def setup(client, email="o@o.example", name="Org O"):
+def setup(client, email="o@o.example", name="Org O", manual=True):
     t = register(client, email, name)
     org = first_org(client, t)
     key = client.post(f"/api/v1/organizations/{org['id']}/api-keys", json={"name": "k", "env": "test"}, headers=auth(t)).json()["secret"]
+    if manual:       # the platform default is AUTOMATIC; most tests exercise the human review flow
+        client.put(f"/api/v1/organizations/{org['id']}/decision-policy", json={"mode": "manual", "uncertain": "review", "face_min": 0.363, "require_pad": False, "id_cards": "review"}, headers=auth(t))
     v = client.post("/api/v1/verifications", json={"reference": "c1"}, headers=bearer(key)).json()
     return t, org, key, v
 
