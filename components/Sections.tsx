@@ -245,7 +245,7 @@ export function Developers() {
           {[0, 1, 2].map((i) => <span key={i} className="h-2.5 w-2.5 rounded-full bg-white/30" />)}
           <span className="ml-3 font-mono text-[11px] opacity-60">GET /api/v1/usage · disponible</span>
         </div>
-        <pre className="overflow-x-auto p-5 font-mono text-xs leading-6">{`curl https://freda-verify-api.onrender.com/api/v1/usage \\
+        <pre className="overflow-x-auto p-5 font-mono text-xs leading-6">{`curl https://api.fredaverify.com/api/v1/usage \\
   -H "Authorization: Bearer $FREDA_KEY"
 
 → { "period_days": 30, "requests": 12, "errors": 0, "by_day": [...] }
