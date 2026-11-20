@@ -26,7 +26,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, face, mailer, ocr
+from app.services import audit, face, mailer, ocr, webhooks
 from app.services.images import read_limited, sniff_ok
 
 router = APIRouter(tags=["verifications"])
@@ -107,6 +107,42 @@ def get_verification(verification_id: uuid.UUID, request: Request, organization_
     if not v:
         raise not_found("Verification not found")          # also for another tenant's id
     return _out(v, _counts(db, [v.id]).get(v.id, 0))
+
+
+def _advisory(db: Session, v: Verification) -> dict:
+    """Machine-readable summary of the advisory checks WITHOUT any personal data (no names, numbers, dates or scores). The human decision is the `decision` field."""
+    rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
+    doc = "pending"
+    if "mrz" in rows:
+        m = rows["mrz"]
+        res = json.loads(decrypt_bytes(m.data)).get("result")
+        if m.status != "read" or not res:
+            doc = "unreadable"
+        else:
+            checks = res.get("checks", {})
+            core = all(checks.get(k) for k in ("document_number", "birth_date", "expiry_date"))
+            doc = "valid" if res.get("all_checks_passed") else "partial" if core else "invalid"
+            if res.get("expired"):
+                doc = "expired"
+    face_band = None
+    if "face" in rows:
+        f = json.loads(decrypt_bytes(rows["face"].data))
+        face_band = f.get("band") if rows["face"].status == "compared" else rows["face"].status
+    return {"document_checks": doc, "face_similarity": face_band, "liveness": "not_performed", "aml": "not_performed"}
+
+
+@router.get("/verifications/{verification_id}/result")
+def get_result(verification_id: uuid.UUID, request: Request, organization_id: uuid.UUID | None = None,
+               principal: Principal = Depends(get_principal), db: Session = Depends(get_db)):
+    """What a business integration reads after the `verification.approved|rejected` webhook (or by polling). `decision` is set only once a PERSON has approved or
+    rejected; `advisory` are automatic checks that never decide. No personal data is returned."""
+    org_id = _org_for(principal, organization_id, "verifications:read", request, db)
+    v = db.scalar(select(Verification).where(Verification.id == verification_id, Verification.organization_id == org_id))
+    if not v:
+        raise not_found("Verification not found")
+    st = _status(v)
+    return {"id": v.id, "reference": v.reference, "env": v.env, "status": st, "decision": st if st in ("APPROVED", "REJECTED") else None,
+            "submitted_at": v.submitted_at, "decided_at": v.decided_at, "advisory": _advisory(db, v) if v.submitted_at else None}
 
 
 # ───────── end-user side: authenticated by the session token only ─────────
@@ -312,7 +348,10 @@ def complete_session(request: Request, background: BackgroundTasks, v: Verificat
         raise AppError(422, "incomplete", "Missing photos: " + ", ".join(missing))
     v.status, v.submitted_at = "MANUAL_REVIEW", now()
     audit.record(db, request, "verification.submitted", org_id=v.organization_id, target_type="verification", target_id=v.id)
+    hooks = webhooks.queue(db, v.organization_id, "verification.submitted", v)
     db.commit()
+    for h in hooks:
+        background.add_task(webhooks.deliver, h)
     background.add_task(run_mrz_check, v.id)                  # after the response: the end user never waits for OCR
     background.add_task(run_face_check, v.id)
     background.add_task(notify_submission, v.id)
@@ -357,14 +396,17 @@ def delete_media(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Dep
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/decision", response_model=VerificationOut)
-def decide(verification_id: uuid.UUID, body: DecisionIn, request: Request, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
+def decide(verification_id: uuid.UUID, body: DecisionIn, request: Request, background: BackgroundTasks, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
     """Manual decision by an owner/admin on a submitted verification. This is a human decision, not an automated result."""
     v = _owned(db, ctx, verification_id)
     if v.status != "MANUAL_REVIEW":
         raise AppError(409, "not_reviewable", "Only submitted verifications awaiting review can be decided")
     v.status, v.decided_at, v.decided_by, v.decision_reason = body.decision, now(), ctx.user.id, (body.reason or None)
     audit.record(db, request, "verification.decided", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"decision": body.decision})
+    hooks = webhooks.queue(db, ctx.org.id, f"verification.{body.decision.lower()}", v)
     db.commit()
+    for h in hooks:
+        background.add_task(webhooks.deliver, h)
     return _out(v, _counts(db, [v.id]).get(v.id, 0))
 
 

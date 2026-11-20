@@ -28,15 +28,17 @@ export function mrzOk(cv: any, canvas: HTMLCanvasElement): boolean {
     const bands: [number, number][] = []; let s = -1;
     for (let y = 0; y <= rh; y++) { const t = y < rh && isText(y); if (t && s < 0) s = y; if (!t && s >= 0) { bands.push([s, y - 1]); s = -1; } }
     const minH = H * 0.015, maxH = H * 0.075;
-    let good = 0;
+    const spans: [number, number][] = [];
     for (const [a, b] of bands) {
       const h = b - a + 1; if (h < minH || h > maxH) continue;
       const cols = new Uint8Array(rw); let x0 = rw, x1 = -1;
       for (let y = a; y <= b; y++) for (let x = 0; x < rw; x++) if (d[y * rw + x]) { cols[x] = 1; if (x < x0) x0 = x; if (x > x1) x1 = x; }
       const occ = cols.reduce((n, v) => n + v, 0) / rw;
-      if (x1 - x0 > rw * 0.78 && occ > 0.5) good++;
+      // complete line: wide, dense AND with a margin on both sides. A line that touches the crop edge has lost its first or last characters (a cut-off MRZ cannot be read reliably)
+      if (x1 - x0 > rw * 0.78 && occ > 0.5 && x0 >= rw * 0.012 && x1 <= rw * 0.988) spans.push([x0, x1]);
     }
-    return good >= 2;
+    // both lines present and ending at about the same place (a truncated second line would end earlier)
+    return spans.length >= 2 && Math.abs(spans[0][1] - spans[1][1]) < rw * 0.06 && Math.abs(spans[0][0] - spans[1][0]) < rw * 0.06;
   } finally { src.delete(); gray.delete(); bw.delete(); }
 }
 

@@ -211,3 +211,33 @@ class MediaOut(BaseModel):
     size: int
     created_at: datetime
     purge_after: datetime | None = None
+
+
+class WebhookIn(_In):
+    url: str = Field(min_length=12, max_length=500)
+    description: str | None = Field(default=None, max_length=100)
+
+
+class WebhookOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    url: str
+    description: str | None
+    active: bool
+    created_at: datetime
+
+
+class WebhookCreatedOut(WebhookOut):
+    secret: str                       # shown once
+
+
+class DeliveryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    event: str
+    status: str
+    attempts: int
+    response_code: int | None
+    last_error: str | None
+    created_at: datetime
+    delivered_at: datetime | None

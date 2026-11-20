@@ -28,6 +28,8 @@ PERMS: dict[str, set[str]] = {
     "media:read": {Role.owner, Role.admin},
     "verifications:decide": {Role.owner, Role.admin},
     "audit:read": {Role.owner, Role.admin},
+    "webhooks:read": {Role.owner, Role.admin},
+    "webhooks:write": {Role.owner, Role.admin},
 }
 
 

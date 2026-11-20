@@ -236,3 +236,34 @@ class RequestLog(Base):
     status: Mapped[int] = mapped_column(Integer)
     latency_ms: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class WebhookEndpoint(Base):
+    """A URL of the business that receives signed events. The signing secret is stored Fernet-encrypted (it is needed to sign) and shown once at creation."""
+    __tablename__ = "webhook_endpoints"
+    __table_args__ = (Index("ix_webhook_endpoints_org", "organization_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    url: Mapped[str] = mapped_column(String(500))
+    secret_enc: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class WebhookDelivery(Base):
+    """One attempt series to deliver one event to one endpoint. The payload holds NO personal data (ids, reference, status only)."""
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (Index("ix_webhook_deliveries_endpoint", "endpoint_id", "created_at"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    endpoint_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("webhook_endpoints.id"), ondelete="CASCADE"))
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    event: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict] = mapped_column(_JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(10), default="pending")        # pending | delivered | failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    response_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
