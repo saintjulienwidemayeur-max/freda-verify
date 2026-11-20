@@ -6,6 +6,7 @@ established (open question D7); accuracy differs across skin tones, ages and ima
 A photo printed on a passport (small, compressed, with a security overlay) is much harder than two selfies.
 """
 import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,27 +65,51 @@ def band(score: float) -> str:
     return "high" if score >= HIGH else "possible" if score >= COSINE_THRESHOLD else "low"
 
 
+_lock = threading.Lock()          # OpenCV's detector keeps per-call state (input size): one comparison at a time per process
+_models_cache: tuple | None = None
+
+
+def _models():
+    global _models_cache
+    if _models_cache is None:
+        import cv2
+        d = model_dir()
+        _models_cache = (cv2.FaceDetectorYN.create(str(d / DET), "", (320, 320), 0.6, 0.3, 5000), cv2.FaceRecognizerSF.create(str(d / REC), ""))
+    return _models_cache
+
+
+def embed(image: bytes, all_faces: bool = False) -> tuple[list, int]:
+    """Face feature vector(s) of an image: the LARGEST face (or every face with all_faces=True). Returns (features, number_of_faces_found).
+    Features are used in memory only (comparison, evaluation) and are never stored by the application."""
+    img = _decode(image)
+    if img is None:
+        raise ValueError("undecodable image")
+    with _lock:
+        det, rec = _models()
+        faces = _faces(det, img)
+        picked = faces if all_faces else ([_largest(faces)] if faces else [])
+        return [rec.feature(rec.alignCrop(img, f)) for f in picked], len(faces)
+
+
+def cosine(a, b) -> float:
+    import cv2
+    with _lock:
+        return float(_models()[1].match(a, b, cv2.FaceRecognizerSF_FR_COSINE))
+
+
 def compare(document_image: bytes, selfie_image: bytes) -> FaceOutcome:
     if not available():
         return FaceOutcome("unavailable")
     try:
-        import cv2
-        d = model_dir()
-        det = cv2.FaceDetectorYN.create(str(d / DET), "", (320, 320), 0.6, 0.3, 5000)
-        rec = cv2.FaceRecognizerSF.create(str(d / REC), "")
-        doc, selfie = _decode(document_image), _decode(selfie_image)
-        if doc is None or selfie is None:
-            return FaceOutcome("error")
-        fd, fs = _faces(det, doc), _faces(det, selfie)
-        if not fd:
-            return FaceOutcome("no_doc_face", selfie_faces=len(fs))
-        if not fs:
-            return FaceOutcome("no_selfie", doc_faces=len(fd))
         # a passport page can show the portrait twice (large + ghost image): every document face is compared and the best match is kept
         # (a stricter reading would use only the main portrait; the reviewer sees the photos anyway)
-        f_self = rec.feature(rec.alignCrop(selfie, _largest(fs)))
-        scores = [float(rec.match(rec.feature(rec.alignCrop(doc, f)), f_self, cv2.FaceRecognizerSF_FR_COSINE)) for f in fd]
-        s = max(scores)
-        return FaceOutcome("compared", round(s, 4), band(s), len(fd), len(fs))
+        doc_feats, n_doc = embed(document_image, all_faces=True)
+        self_feats, n_self = embed(selfie_image)
+        if not doc_feats:
+            return FaceOutcome("no_doc_face", selfie_faces=n_self)
+        if not self_feats:
+            return FaceOutcome("no_selfie", doc_faces=n_doc)
+        s = max(cosine(f, self_feats[0]) for f in doc_feats)
+        return FaceOutcome("compared", round(s, 4), band(s), n_doc, n_self)
     except Exception:  # noqa: BLE001  an engine problem must never break a submission
         return FaceOutcome("error")
