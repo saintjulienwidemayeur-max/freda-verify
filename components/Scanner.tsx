@@ -6,13 +6,13 @@ import { loadFace } from "./faceDetect";
 
 export type ScanText = {
   place: string; face: string; hold: string; dark: string; glare: string; blur: string; auto: string; done: string; capNow: string; denied: string; cancel: string;
-  loading: string; closer: string; far: string; center: string; found: string; fitFrame: string; guideChecking: string;
+  loading: string; closer: string; far: string; center: string; found: string; fitFrame: string; guideChecking: string; capNowBtn: string;
   scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string;
 };
 
 const TICK = 140;                       // analysis interval (ms)
 const NEED = 1100;                      // good time before the automatic capture (ms)
-const BLUR_MIN = 30, DARK = 55, BRIGHT = 225, GLARE = 0.18, QUAD_MOVE = 0.025;
+const BLUR_MIN = 30, DARK = 55, BRIGHT = 250, GLARE = 0.3, QUAD_MOVE = 0.025;   // a pale passport page is bright but not glare: only clipped pixels count
 
 /**
  * Document scanner with automatic capture (document side only; the selfie uses FaceScanner).
@@ -26,7 +26,8 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
   const wrap = useRef<HTMLDivElement>(null), vid = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState(false), [engine, setEngine] = useState<"loading" | "ready" | "fail">("loading"), [attempt, setAttempt] = useState(0);
   const [hint, setHint] = useState(tx.loading), [prog, setProg] = useState(0), [good, setGood] = useState(false), [flash, setFlash] = useState(false);
-  const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState("");
+  const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState(""), [diag, setDiag] = useState(""), [showManual, setShowManual] = useState(false);
+  const manualRef = useRef<() => void>(() => {});
   const fired = useRef(false), cvRef = useRef<any>(null), lmRef = useRef<any>(null), lastQuad = useRef<Quad | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const wantFace = needsFace(kind, side);
 
@@ -51,6 +52,18 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
     const work = document.createElement("canvas"), det = document.createElement("canvas");
     let prev: Float32Array | null = null, prevQuad: Quad | null = null, goodMs = 0, miss = 0, stop = false, cooldown = 0, timer: ReturnType<typeof setTimeout>;
     let lastGuide = 0, guideOk = 0, guideWhy: Reject | null = null;
+    const t0 = performance.now(), manualTimer = setTimeout(() => setShowManual(true), 5000);
+    manualRef.current = () => {
+      const v = vid.current, box = wrap.current?.getBoundingClientRect();
+      if (!v || !box || !v.videoWidth || fired.current) return;
+      const cw = box.width, ch = box.height, vw = v.videoWidth, vh = v.videoHeight, s = Math.max(cw / vw, ch / vh), ox = (vw * s - cw) / 2, oy = (vh * s - ch) / 2;
+      const rw = cw * 0.86, rh = rw / (kind === "passport" ? 1.42 : 1.586);
+      const sx = ((cw - rw) / 2 + ox) / s, sy = ((ch - rh) / 2 + oy) / s, sw = rw / s, sh = rh / s;
+      const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
+      c.getContext("2d")!.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      fired.current = true; setFlash(true); setRej(null);
+      c.toBlob((b) => { if (b) onShot(b); else fired.current = false; }, "image/jpeg", 0.92);   // the server still checks a passport page for its MRZ text
+    };
 
     const capture = () => {
       const v = vid.current; if (!v || !v.videoWidth || fired.current || !lastQuad.current) return;
@@ -119,7 +132,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
             fired.current = true; setFlash(true); setRej(null);
             gc.toBlob((b) => { if (b) onShot(b); else fired.current = false; }, "image/jpeg", 0.92);
           }
-        } else { guideOk = 0; guideWhy = gv.reject; }
+        } else { guideOk = Math.max(0, guideOk - 1); guideWhy = gv.reject; }       // one noisy frame must not erase the progress
       }
       if (quadGood) { guideOk = 0; guideWhy = null; }
       const ok = placement === "ok" && !dark && !glare && !blur && stable && !cooling;
@@ -132,6 +145,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
         guideHint && placement !== "ok" && (placement === "none" || placement === "wrong") ? guideHint
         : placement === "none" ? tx.place : placement === "wrong" ? (kind === "passport" ? tx.showPassport : tx.showId) : placement === "small" ? tx.closer : placement === "big" ? tx.far : placement === "off" ? tx.center
         : dark ? tx.dark : glare ? tx.glare : blur ? tx.blur : !stable ? tx.hold : tx.found);
+      setDiag(`${placement}${kind === "passport" && !quadGood ? ` · frame check: ${guideOk > 0 ? "ok " + guideOk + "/2" : guideWhy ?? "…"}` : ""}${dark ? " · dark" : glare ? " · bright" : blur ? " · blurry" : ""}`);
       if (debug) setDbg(`guide ok=${guideOk} why=${guideWhy ?? "-"} cv ratio=${q ? (Math.max(q.ratio, 1 / q.ratio)).toFixed(2) : "-"} fill=${fill.toFixed(2)} mean=${mean.toFixed(0)} sharp=${sharp.toFixed(0)} stable=${stable} ${placement}`);
       if (goodMs >= NEED) capture();
     };
@@ -142,7 +156,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       if (!stop) timer = setTimeout(step, Math.max(30, TICK - (performance.now() - t0)));
     };
     timer = setTimeout(step, TICK);
-    return () => { stop = true; clearTimeout(timer); void prev; };
+    return () => { stop = true; clearTimeout(timer); clearTimeout(manualTimer); void prev; void t0; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [err, engine, kind, side, tx]);
 
@@ -186,11 +200,11 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
         <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-black/65 px-4 py-3 text-center text-sm font-medium text-white backdrop-blur" role="status">
           {engine === "loading" ? tx.loading : hint}
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full transition-all duration-150" style={{ width: `${prog * 100}%`, background: good ? "#12B76A" : accent }} /></div>
-          <div className="mt-1.5 text-[10px] uppercase tracking-widest text-white/60">{tx.auto} · OpenCV</div>
+          <div className="mt-1.5 text-[10px] uppercase tracking-widest text-white/60">{tx.auto} · {diag || "…"}</div>
         </div>
         <span className={`pointer-events-none absolute inset-0 bg-white transition-opacity duration-300 ${flash ? "opacity-80" : "opacity-0"}`} />
       </div>
-      <div className="flex gap-3"><button type="button" onClick={onCancel} className="rounded-full border px-5 py-3 text-sm font-semibold" style={{ borderRadius: radius }}>{tx.cancel}</button></div>
+      <div className="flex gap-3">{showManual && <button type="button" onClick={() => manualRef.current()} className="flex-1 rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ background: accent, borderRadius: radius }}>{tx.capNowBtn}</button>}<button type="button" onClick={onCancel} className="rounded-full border px-5 py-3 text-sm font-semibold" style={{ borderRadius: radius }}>{tx.cancel}</button></div>
     </div>
   );
 }

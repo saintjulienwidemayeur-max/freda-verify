@@ -17,7 +17,7 @@ export type FaceInfo = {
 let p: Promise<{ lm: FaceLandmarker; delegate: string }> | null = null;
 
 export function loadFace() {
-  p ??= (async () => {
+  p ??= Promise.race([(async () => {
     const { FilesetResolver, FaceLandmarker } = await import("@mediapipe/tasks-vision");
     const fileset = await FilesetResolver.forVisionTasks("/vendor/mediapipe/wasm");
     const make = (delegate: "GPU" | "CPU") =>
@@ -26,7 +26,7 @@ export function loadFace() {
         runningMode: "VIDEO", numFaces: 2, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
       });
     try { return { lm: await make("GPU"), delegate: "GPU" }; } catch { return { lm: await make("CPU"), delegate: "CPU" }; }
-  })();
+  })(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error("face engine timeout")), 45000))]);
   p.catch(() => { p = null; });
   return p;
 }
