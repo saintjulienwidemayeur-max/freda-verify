@@ -3,15 +3,15 @@ import FaceMatch from "@/components/FaceMatch";
 import { Platform, Developers, AmlScreening, Services, Industries, Workflow, Audit, Integration, Security, Faq, Contact } from "@/components/Sections";
 
 const FEATURES = [
-  ["Fully automated", "Documents, selfies and business registries are checked in seconds, with no manual review queue."],
-  ["KYC and KYB, one API", "Verify people and companies in the same flow, with the same response format."],
-  ["Liveness that catches fakes", "Printed photos, replayed screens and deepfakes are stopped before a decision is made."],
-  ["Built for your region", "Local IDs and registries, with data kept where your regulator expects it."],
+  ["Un seul compte, une seule API", "Comptes, équipes, rôles et clés API (test et live) sont disponibles aujourd'hui."],
+  ["Page de vérification marque blanche", "Configurez le nom, les couleurs et la langue de la page que voient vos clients. Version de démonstration pour l'instant."],
+  ["Traçabilité", "Journal des requêtes API et journal d'audit des actions, déjà actifs dans le tableau de bord."],
+  ["KYC, KYB, AML : prévu", "Le moteur de vérification (documents, visage, AML, entreprises) est en cours de construction et n'est pas encore disponible."],
 ];
 const PLANS = [
-  ["Starter", "$0", "100 checks / month"],
-  ["Growth", "$0.40", "per verification"],
-  ["Enterprise", "Custom", "volume pricing and SLA"],
+  ["Starter", "À définir", "offre d'essai prévue"],
+  ["Growth", "À définir", "tarif par vérification"],
+  ["Enterprise", "Sur devis", "volumes et engagements"],
 ];
 
 export default function Home() {
@@ -38,12 +38,12 @@ export default function Home() {
         >
           <div className="relative z-10 [text-shadow:0_0_10px_#ffffff,0_0_3px_#ffffff]">
             <h1 className="mx-auto max-w-3xl text-5xl font-extrabold leading-[0.95] tracking-tighter md:text-7xl">
-              Vérification d&apos;identité automatisée conçue pour la rapidité.
+              Vérification d&apos;identité pour les entreprises. En construction.
             </h1>
             <p className="mx-auto mt-6 max-w-lg text-base text-navy">
-              Vérifiez les personnes et les entreprises en quelques secondes. Lecture de documents, reconnaissance faciale et détection de fraude en un seul appel.
+              Freda Verify prépare une API de vérification d&apos;identité (KYC, KYB, AML). Aujourd&apos;hui : comptes, clés API, journaux et une page de vérification de démonstration. Le moteur de vérification n&apos;est pas encore disponible.
             </p>
-            <a href="#contact" className="mt-8 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy [text-shadow:none]">Start Verifying ↗</a>
+            <Link href="/signup" className="mt-8 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy [text-shadow:none]">Créer un compte ↗</Link>
           </div>
           {/* Arrière-plan (mobile et PC) : ancré en bas, le haut s'estompe pour garder le texte lisible */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -68,7 +68,7 @@ export default function Home() {
           <p className="font-mono text-xs uppercase tracking-widest text-blue">Correspondance faciale</p>
           <h2 className="mt-3 text-4xl font-extrabold tracking-tighter">Le selfie, comparé à la pièce d&apos;identité.</h2>
           <p className="mt-4 max-w-md text-base text-navy/80">
-            Compare le selfie en direct à la photo sur la pièce d&apos;identité, sans seconde capture ni étape supplémentaire. Obtiens un score de similarité, une décision et tous les drapeaux de risque dans la même réponse.
+            Prévu : comparer le selfie à la photo de la pièce d&apos;identité et renvoyer un score de similarité. Cette comparaison n&apos;existe pas encore ; l&apos;animation ci-contre est une illustration, ses scores sont scriptés.
           </p>
         </div>
         <FaceMatch />
@@ -76,7 +76,7 @@ export default function Home() {
       <Developers />
       <AmlScreening />
       <section id="solutions" className="py-16">
-        <h2 className="max-w-xl text-4xl font-extrabold tracking-tighter">One platform for every identity decision.</h2>
+        <h2 className="max-w-xl text-4xl font-extrabold tracking-tighter">Ce qui existe, et ce qui est prévu.</h2>
         <div className="mt-10 grid gap-4 md:grid-cols-4">
           {FEATURES.map(([t, d]) => (
             <div key={t} className="rounded-2xl border border-[#d6e2ff] bg-ice p-6"><h3 className="font-bold">{t}</h3><p className="mt-2 text-sm">{d}</p></div>
@@ -92,7 +92,8 @@ export default function Home() {
       <Integration />
       <Security />
       <section id="pricing" className="py-16">
-        <h2 className="text-4xl font-extrabold tracking-tighter">Pricing</h2>
+        <h2 className="text-4xl font-extrabold tracking-tighter">Tarification</h2>
+        <p className="mt-3 max-w-xl text-sm">Les tarifs ne sont pas encore fixés.</p>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {PLANS.map(([n, p, d]) => (
             <div key={n} className="rounded-2xl border border-[#d6e2ff] p-6"><div className="font-bold">{n}</div><div className="my-2 text-4xl font-extrabold">{p}</div><div className="text-sm">{d}</div></div>
@@ -103,7 +104,7 @@ export default function Home() {
       <Faq />
       <Contact />
       <footer id="insights" className="flex flex-wrap justify-between gap-3 border-t border-[#d6e2ff] py-8 text-sm">
-        <span>© 2026 Freda Verify</span><span>Docs · Status · Privacy</span>
+        <span>© 2026 Freda Verify</span><span>Version préliminaire</span>
       </footer>
       </div>
     </div>

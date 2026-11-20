@@ -164,20 +164,18 @@ Every dashboard page shows a "Sample data" badge and/or a "Demo:" note. Keep the
 - **Still NOT certified liveness.** A replayed video, a deep fake or a 3D mask can pass; random multi-step content only makes pre-recorded replay harder. There is no face match between selfie and document photo (needs a license-cleared face-recognition model, D7) and no server-side verification.
 - Engines are preloaded when the user reaches the document step (OpenCV ~10 MB, MediaPipe ~15 MB wasm + 3.7 MB model).
 
-### 3.6 Landing-page claims that are NOT true yet
+### 3.6 Landing-page claims (corrected 2026-11-20)
 
-The public copy describes capabilities that do not exist. Review before any public launch (legal and reputational risk):
+The landing page (`app/page.tsx`, `components/Sections.tsx`) was rewritten so it only claims what exists: accounts/teams/roles, API keys, request + audit logs, white-label settings, and **demo** capture pages. Everything else is labelled "prévu" / "démo" / "illustration":
 
-| Claim (landing) | Reality today |
-|---|---|
-| "Fully automated … no manual review queue" (`app/page.tsx`) | Not implemented. Also contradicts the intended Manual Review module. |
-| "Liveness that catches fakes: printed photos, replayed screens and deepfakes are stopped" | No liveness exists. Do not claim until tested (section 8, ISO 30107-3 style testing). |
-| "Filtrage AML: sanctions, PEP, adverse media, continuous monitoring" | No AML data or engine. |
-| "KYB reads registries and identifies beneficial owners", "Video KYC", "Vérification d'adresse" | Not implemented. |
-| "Déploiement sur site", "Données dans votre région", "Chiffrement", "Journal d'audit" | None implemented. |
-| Pricing: Starter $0 / 100 checks, Growth $0.40, Enterprise custom | Placeholder numbers, not decided. |
-| API example `POST https://api.freda.dev/v1/sessions` + header `x-api-key` | Domain and endpoint do not exist; also differ from the target API (section 6). |
-| Audit JSON example (`case_20817`, `analyst_04`) | Illustrative only. |
+- hero says the engine is under construction; no "automated in seconds", no "no manual review queue", no "catches deepfakes";
+- services list: document and face = "démo" (browser capture only, nothing uploaded, not certified liveness); address, AML, KYB, Video KYC = "prévu";
+- API example is the real `GET /api/v1/usage` with `Authorization: Bearer` (the fake `api.freda.dev/v1/sessions` + `x-api-key` was removed, closing D3 for the landing copy); docs, sandbox, SDKs, MCP are stated as not existing;
+- security section lists only what is implemented (argon2id, TOTP, hashed keys, append-only audit, tenant isolation) and names the missing items (document encryption, retention, regions, on-prem, external audit);
+- pricing shows "À définir" (no invented prices); FAQ rewritten; the placeholder `mailto:contact@example.com` was replaced by a sign-up link; footer no longer shows dead "Docs · Status · Privacy" items;
+- still illustrative by design: the face-match animation (scripted scores), the AML card, the audit JSON sample (`case_20817`), each labelled as illustration.
+
+Re-check this list whenever a feature ships or a claim is added (rule 15). Legal review before public launch is still required (D4/D9).
 
 ## 3.8 Backend (Phase 1 foundation)
 
@@ -528,7 +526,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 | D1 | Frontend framework: keep **Next.js (static export)** or switch to a plain React SPA (Vite)? | Keep Next.js for now (already built; still React + TS + Tailwind). Revisit if SSR is never needed. |
 | D2 | Repo layout: add `backend/` and `infra/` beside the current app, or restructure into a monorepo (`apps/web`) now? | **Decided & done**: `backend/` and `infra/` sit beside the Next.js app. |
 | D3 | API auth style and path: `Authorization: Bearer` + `/api/v1/verifications` (spec) vs the `x-api-key` + `/v1/sessions` shown in the UI. | **Backend follows the spec**: `Authorization: Bearer` (JWT for dashboard users, `fv_test_`/`fv_live_` keys for the API) under `/api/v1`. UI/landing copy still show `x-api-key` and `/v1/sessions`: update them. |
-| D4 | Public-copy honesty: remove or soften unimplemented claims on the landing page now? | Yes, before sharing the site publicly. |
+| D4 | Public-copy honesty: remove or soften unimplemented claims on the landing page now? | **Done 2026-11-20** (section 3.6); still needs legal review before public launch. |
 | D5 | Branch/merge: merge to `main` and deploy from `main`? | Yes (needs an explicit go-ahead to open a PR). |
 | D6 | Hosting for backend and AI (CPU vs GPU, region, provider) and data-residency choice. | Decide after Phase 1; drives cost and legal. |
 | D7 | Face model and liveness approach given weight licensing. | Run a license review before Phase 3. |
@@ -540,6 +538,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-20 — Landing copy corrected to match reality (see 3.6): unimplemented claims removed or labelled prévu/démo/illustration, fake API example replaced by the real `/usage` call, invented prices removed, placeholder contact e-mail removed.
 - 2026-11-20 — White label connected to the backend: table `branding` (migration 0004, RLS), `GET/PUT /organizations/{id}/branding` with strict validation, role checks, audit entry, tenant isolation; CORS now allows PUT (a missing method would have blocked saving from the browser); 20 new backend tests, browser check of save + reload. Logo upload, domain verification and serving the saved branding to `/verify` are NOT done.
 - 2026-11-20 — Removed the fake Verifications (10 people), Businesses (8 companies) and media viewer; both pages are honest empty states. White label preview and landing animations remain demo/mock.
 - 2026-11-20 — Overview now shows only real backend data (new `Overview.tsx`, data-driven `OverviewChart`); fake stat cards, chart, recent verifications and activity removed; `LiveUsage.tsx` merged into it.

@@ -25,14 +25,14 @@ const Grid = ({ items, cols = "md:grid-cols-3" }: { items: string[][]; cols?: st
 
 export function Services() {
   return (
-    <Sec title="Tous les contrôles d'identité, dans un seul flux." sub="Activez uniquement ce dont votre conformité a besoin, sans assembler plusieurs fournisseurs.">
+    <Sec title="Tous les contrôles d'identité, dans un seul flux." sub="Feuille de route : seules les démos de capture sont utilisables aujourd'hui, rien ne produit encore de verdict de vérification.">
       <Grid items={[
-        ["Vérification de documents", "Lecture et contrôle d'authenticité des pièces d'identité, passeports et registres."],
-        ["Visage et liveness", "Comparaison selfie / document et détection des photos, écrans et deepfakes."],
-        ["Vérification d'adresse", "Validation de l'adresse à partir de justificatifs et de sources officielles."],
-        ["Filtrage AML", "Listes de sanctions, PEP et médias négatifs, avec surveillance continue."],
-        ["KYB", "Vérification des entreprises, de leurs registres et de leurs bénéficiaires effectifs."],
-        ["Video KYC", "Session vidéo en direct ou enregistrée pour les cas à risque élevé."],
+        ["Vérification de documents · démo", "Capture guidée dans le navigateur (cadrage, passeport avec photo et lignes MRZ). Rien n'est envoyé ni authentifié ; la lecture OCR et le contrôle d'authenticité sont prévus."],
+        ["Visage · démo", "Défi de rotation de la tête dans le navigateur. Ce n'est pas une détection de vivacité certifiée ; la comparaison selfie / document est prévue."],
+        ["Vérification d'adresse · prévu", "Non disponible."],
+        ["Filtrage AML · prévu", "Aucune liste de sanctions ou de PEP n'est branchée à ce jour. Les sources de données restent à choisir."],
+        ["KYB · prévu", "Non disponible."],
+        ["Video KYC · prévu", "Non disponible."],
       ]} />
     </Sec>
   );
@@ -60,15 +60,15 @@ export function Workflow() {
     </div>
   );
   return (
-    <Sec title="Un flux que vous configurez." sub="Définissez vos seuils : les profils à faible risque passent seuls, les autres reçoivent des contrôles supplémentaires.">
+    <Sec title="Le flux visé." sub="Prévu : des seuils configurables, avec revue manuelle quand le résultat est incertain. Le moteur de décision n'existe pas encore.">
       <div className="grid items-center gap-4 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
         <Box t="1. Soumission" d="Document, selfie et données saisies par le client." />
         <span className="hidden text-2xl md:block">→</span>
         <Box t="2. Score de risque" d="Seuils et règles définis par votre équipe conformité." />
         <span className="hidden text-2xl md:block">→</span>
         <div className="grid gap-3">
-          <Box dark t="Risque faible" d="Approbation automatique en secondes." />
-          <Box t="Risque élevé" d="AML, video KYC ou revue manuelle." />
+          <Box dark t="Risque faible" d="Prévu : approbation automatique." />
+          <Box t="Risque élevé" d="Prévu : contrôles supplémentaires ou revue manuelle." />
         </div>
       </div>
     </Sec>
@@ -77,7 +77,7 @@ export function Workflow() {
 
 export function Audit() {
   return (
-    <Sec title="Chaque décision est traçable." sub="Vérifications, alertes, codes de raison et contexte du dossier sont réunis dans un seul enregistrement.">
+    <Sec title="Traçabilité." sub="Aujourd'hui : journal d'audit (qui a fait quoi, quand) et journal des requêtes API. Prévu : un dossier par vérification. L'exemple ci-dessous est une illustration du format visé, pas un enregistrement réel.">
       <pre className="overflow-x-auto rounded-2xl border border-[#d6e2ff] bg-white/60 p-5 font-mono text-xs leading-6">{`{
   "case_id": "case_20817",
   "type": "kyc",
@@ -95,9 +95,9 @@ export function Integration() {
   return (
     <Sec id="integration" title="Intégrez comme vous voulez.">
       <Grid items={[
-        ["API REST", "Un appel avec le document et le selfie, une réponse JSON avec la décision."],
-        ["SDK web et mobile", "Composants prêts à l'emploi pour capturer documents et visages."],
-        ["Page hébergée", "Un lien à envoyer au client, sans développement de votre côté."],
+        ["API REST · en cours", "Clés API et journaux disponibles. Les points d'accès de vérification (documents, selfie, résultat) et les webhooks sont prévus."],
+        ["SDK web et mobile · prévu", "Pas de SDK publié pour l'instant."],
+        ["Page hébergée · démo", "Page de capture publique et personnalisable (marque blanche). Elle n'envoie aucune donnée à ce stade."],
       ]} />
     </Sec>
   );
@@ -105,23 +105,23 @@ export function Integration() {
 
 export function Security() {
   return (
-    <Sec id="security" title="Vos données restent sous votre contrôle.">
+    <Sec id="security" title="Sécurité : ce qui est en place.">
       <Grid cols="md:grid-cols-2" items={[
-        ["Déploiement sur site", "Hébergez la suite sur vos propres serveurs si vos données ne doivent pas sortir de votre infrastructure."],
-        ["Données dans votre région", "Choisissez où les données sont stockées pour respecter votre régulateur."],
-        ["Chiffrement et rétention", "Données chiffrées, durées de conservation configurables, suppression sur demande."],
-        ["Journal d'audit", "Accès et actions enregistrés pour vos contrôles internes et externes."],
+        ["Accès protégés", "Mots de passe hachés (argon2id), double authentification TOTP, sessions révocables, rôles et isolation entre organisations."],
+        ["Clés API", "Le secret n'est affiché qu'une fois ; seule une empreinte est stockée."],
+        ["Journal d'audit", "Actions enregistrées de façon non modifiable au niveau de la base de données."],
+        ["Prévu, pas encore en place", "Chiffrement des documents, durées de conservation, choix de la région, déploiement sur site, audit de sécurité externe."],
       ]} />
     </Sec>
   );
 }
 
 const FAQ = [
-  ["Combien de temps dure une vérification ?", "La plupart des vérifications automatiques se terminent en quelques secondes. Les cas à risque élevé peuvent passer par une revue supplémentaire."],
-  ["Quels documents sont acceptés ?", "Cartes d'identité, passeports, permis et registres d'entreprise. La liste complète dépend des pays activés."],
-  ["Puis-je vérifier des entreprises ?", "Oui. Le KYB lit les registres et identifie les bénéficiaires effectifs."],
-  ["Puis-je héberger la solution chez moi ?", "Oui, une option sur site est prévue pour les organisations qui doivent garder leurs données en interne."],
-  ["Y a-t-il un essai gratuit ?", "Oui. Le plan Starter permet de tester avec un volume limité, sans engagement."],
+  ["Puis-je déjà vérifier des identités ?", "Pas encore. Le moteur de vérification (lecture des documents, comparaison faciale, AML) est en construction. Vous pouvez créer un compte, gérer votre équipe et vos clés API, et essayer la page de capture de démonstration."],
+  ["Quels documents seront acceptés ?", "Cartes d'identité, passeports et permis sont visés. La liste dépendra des pays activés et n'est pas figée."],
+  ["Les entreprises (KYB) ?", "Prévu, pas encore disponible."],
+  ["Puis-je héberger la solution chez moi ?", "Pas à ce jour. Le déploiement sur site n'est pas décidé."],
+  ["Y a-t-il un essai gratuit ?", "Les offres et les tarifs ne sont pas encore définis."],
 ];
 
 export function Faq() {
@@ -144,7 +144,7 @@ export function Faq() {
 export function Contact() {
   return (
     <Sec id="contact" title="Parlons de votre cas.">
-      <a href="mailto:contact@example.com" className="inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Parler à l&apos;équipe ↗</a>
+      <a href="/signup" className="inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Créer un compte ↗</a>
     </Sec>
   );
 }
@@ -166,13 +166,13 @@ const IconId = () => (
 const PLATFORM = [
   {
     t: "Authentifier",
-    d: "Confirmez qu'un utilisateur est bien réel et bien présent : authentification biométrique, détection de vivacité, estimation de l'âge, contrôle de l'adresse IP et de l'appareil, et code à usage unique par téléphone ou e-mail pour renforcer la confiance.",
+    d: "Objectif : confirmer qu'un utilisateur est bien réel et présent. Aujourd'hui, seule une démonstration de capture selfie avec défi de rotation de la tête existe, sans vérification serveur.",
     Icon: IconFace,
     bg: "radial-gradient(circle at 18% 28%,#fff 0,transparent 48%),radial-gradient(circle at 82% 72%,#1E4FE0 0,transparent 55%),radial-gradient(circle at 62% 18%,#8CC8FF 0,transparent 50%),#EEF4FF",
   },
   {
     t: "Vérifier",
-    d: "KYC, KYB et filtrage AML, avec des contrôles de documents adaptés à chaque personne et à chaque entreprise. Vous activez les pays, les types de pièces et les sources de données dont votre conformité a besoin.",
+    d: "Objectif : KYC, KYB et filtrage AML avec des contrôles de documents par pays. Ces modules sont prévus et pas encore disponibles.",
     Icon: IconId,
     bg: "radial-gradient(circle at 78% 24%,#fff 0,transparent 46%),radial-gradient(circle at 20% 76%,#1E4FE0 0,transparent 58%),radial-gradient(circle at 50% 50%,#8CC8FF 0,transparent 55%),#EEF4FF",
   },
@@ -186,10 +186,10 @@ export function Platform() {
         Authentifier. <span className="text-blue">Vérifier.</span>
       </h2>
       <p className="mx-auto mt-5 max-w-2xl text-base">
-        Construisez et déployez vos parcours d&apos;identité avec une seule API. Utilisez nos modules prêts à l&apos;emploi ou composez les vôtres, de l&apos;authentification biométrique à la vérification des entreprises.
+        Freda Verify est une plateforme en construction : l&apos;API, le tableau de bord et la page de vérification sont développés pas à pas. Cette page indique ce qui est disponible et ce qui est prévu.
       </p>
       <div className="mt-7 flex flex-wrap justify-center gap-3">
-        <a href="#contact" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Voir la vérification ↗</a>
+        <a href="/verify" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Voir la démo ↗</a>
         <a href="#integration" className="rounded-full border border-[#d6e2ff] px-6 py-3 text-sm">Commencer à construire</a>
       </div>
 
@@ -221,12 +221,11 @@ export function Developers() {
         Conçu pour les développeurs et les agents IA.
       </h2>
       <p className="mt-5 max-w-2xl text-base">
-        Une API unique pour vérifier des identités. Documentation publique, bac à sable immédiat, serveur MCP et SDK pour les principaux langages.
-        Une équipe intègre en un après-midi ; un agent IA y arrive avec une seule instruction grâce à MCP.
+        API REST avec clés de test et de production. La documentation publique, le bac à sable, les SDK et le serveur MCP sont prévus ; ils n'existent pas encore.
       </p>
       <div className="mt-7 flex flex-wrap gap-3">
-        <a href="#integration" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Lire la documentation ↗</a>
-        <a href="#contact" className="rounded-full border border-[#d6e2ff] px-6 py-3 text-sm">Obtenir une clé API</a>
+        <a href="#integration" className="rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Voir l'intégration ↗</a>
+        <a href="/signup" className="rounded-full border border-[#d6e2ff] px-6 py-3 text-sm">Créer un compte pour obtenir une clé</a>
       </div>
 
       <div className="mt-14 grid items-center gap-10 md:grid-cols-2">
@@ -234,10 +233,9 @@ export function Developers() {
           <p className="font-mono text-xs uppercase">01 · Une seule API</p>
           <h3 className="mt-3 text-3xl font-bold tracking-tight md:text-5xl">Une seule API pour toute l&apos;identité.</h3>
           <p className="mt-4 max-w-lg text-base opacity-80">
-            Un seul appel couvre la vérification de documents, la reconnaissance faciale, le liveness, le KYC, le KYB et le filtrage AML.
-            Même clé, même moteur de flux, modules enchaînables dans une seule session, sans travail d&apos;intégration supplémentaire entre eux.
+            Objectif : une seule clé et une seule session pour les documents, le visage, le KYC, le KYB et l&apos;AML. Seules les clés API, les journaux et la mesure d&apos;usage sont disponibles aujourd&apos;hui.
           </p>
-          <a href="#integration" className="mt-6 inline-flex rounded-full border border-[#d6e2ff] px-6 py-3 text-sm">Lire la documentation API ↗</a>
+          <a href="#integration" className="mt-6 inline-flex rounded-full border border-[#d6e2ff] px-6 py-3 text-sm">Voir l'intégration ↗</a>
         </div>
         <ApiHub />
       </div>
@@ -245,18 +243,15 @@ export function Developers() {
       <div className="mt-14 max-w-3xl overflow-hidden rounded-2xl border border-[#d6e2ff] bg-navy text-white shadow-[0_20px_60px_rgba(0,0,0,.25)]">
         <div className="flex gap-1.5 border-b border-white/15 px-4 py-3">
           {[0, 1, 2].map((i) => <span key={i} className="h-2.5 w-2.5 rounded-full bg-white/30" />)}
-          <span className="ml-3 font-mono text-[11px] opacity-60">POST /v1/sessions</span>
+          <span className="ml-3 font-mono text-[11px] opacity-60">GET /api/v1/usage · disponible</span>
         </div>
-        <pre className="overflow-x-auto p-5 font-mono text-xs leading-6">{`curl -X POST https://api.freda.dev/v1/sessions \\
-  -H "x-api-key: $FREDA_KEY" \\
-  -d '{ "workflow": "kyc_standard",
-        "callback": "https://votre-app.com/webhook" }'
+        <pre className="overflow-x-auto p-5 font-mono text-xs leading-6">{`curl https://freda-verify-api.onrender.com/api/v1/usage \\
+  -H "Authorization: Bearer $FREDA_KEY"
 
-→ {
-    "session_id": "ses_7c21a9",
-    "url": "https://verify.freda.dev/ses_7c21a9",
-    "status": "created"
-  }`}</pre>
+→ { "period_days": 30, "requests": 12, "errors": 0, "by_day": [...] }
+
+# Les points d'accès /verifications (création, documents, selfie,
+# résultat) et les webhooks sont prévus, pas encore disponibles.`}</pre>
       </div>
     </section>
   );
@@ -267,16 +262,14 @@ export function AmlScreening() {
     <section id="aml" className="py-16">
       <div className="grid items-center gap-12 md:grid-cols-2">
         <div>
-          <p className="font-mono text-xs uppercase">02 · Filtrage AML</p>
+          <p className="font-mono text-xs uppercase">02 · Filtrage AML · prévu</p>
           <h2 className="mt-3 text-4xl font-extrabold leading-[0.98] tracking-tighter md:text-6xl">
-            Filtrez chaque utilisateur. Restez filtré pour toujours.
+            Filtrage AML : prévu.
           </h2>
           <p className="mt-5 max-w-lg text-base opacity-80">
-            Comparez chaque nouvel utilisateur à de nombreuses listes anti-blanchiment d&apos;argent (AML) dès l&apos;inscription.
-            Choisissez les catégories qui comptent pour vous : sanctions, personnes politiquement exposées, médias défavorables.
-            Gardez-les sous surveillance chaque jour, sans rien faire de plus.
+            Objectif : comparer les utilisateurs à des listes de sanctions et de personnes politiquement exposées. Aucune source de données n&apos;est branchée à ce jour et les sources (officielles ou sous licence) restent à choisir. La carte ci-contre est une illustration.
           </p>
-          <a href="#contact" className="mt-7 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Parler à l&apos;équipe ↗</a>
+          <a href="/signup" className="mt-7 inline-flex rounded-full bg-blue px-6 py-3 text-sm font-semibold text-white hover:bg-navy">Créer un compte ↗</a>
         </div>
         <AmlCard />
       </div>
