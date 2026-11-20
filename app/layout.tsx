@@ -13,7 +13,7 @@ const mono = localFont({
   variable: "--m", display: "swap",
 });
 
-export const metadata = { title: "Freda Verify — Automated identity verification" };
+export const metadata = { metadataBase: new URL("https://fredaverify.com"), title: "Freda Verify — Automated identity verification" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

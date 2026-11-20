@@ -7,6 +7,8 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
+    domains:
+      - api.fredaverify.com         # custom domain (DNS: CNAME api -> freda-verify-api.onrender.com)
     autoDeploy: true
     envVars:
       - key: FV_APP_ENV
@@ -17,7 +19,7 @@ services:
         generateValue: true
       - key: FV_ENCRYPTION_KEY
         generateValue: true
-      - key: FV_CORS_ORIGINS        # JSON list: the URL of the static site below, e.g. ["https://freda-verify.onrender.com"]
+      - key: FV_CORS_ORIGINS        # JSON list: ["https://freda-verify.onrender.com","https://fredaverify.com","https://www.fredaverify.com"]
         sync: false
       - key: FV_TRUST_PROXY         # Render terminates TLS in front of the container
         value: "true"
@@ -29,6 +31,9 @@ services:
     runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./out
+    domains:
+      - fredaverify.com             # custom domains (DNS: see CLAUDE.md, section 3.9)
+      - www.fredaverify.com
     envVars:
-      - key: NEXT_PUBLIC_API_URL    # public URL of the API service, e.g. https://freda-verify-api.onrender.com
+      - key: NEXT_PUBLIC_API_URL    # public URL of the API: https://api.fredaverify.com once the domain is live (until then https://freda-verify-api.onrender.com)
         sync: false
