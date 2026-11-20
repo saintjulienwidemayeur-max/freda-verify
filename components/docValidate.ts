@@ -55,6 +55,12 @@ export function validateDoc(cv: any, lm: FaceLandmarker | null, kind: DocKind, s
   return { ok: true };
 }
 
+function rotate90(c: HTMLCanvasElement): HTMLCanvasElement {
+  const o = document.createElement("canvas"); o.width = c.height; o.height = c.width;
+  const g = o.getContext("2d")!; g.translate(o.width, 0); g.rotate(Math.PI / 2); g.drawImage(c, 0, 0);
+  return o;
+}
+
 /** Validates an uploaded image: finds the document, flattens it, then runs the same checks as the live scanner. */
 export async function validateFile(cv: any, lm: FaceLandmarker | null, kind: DocKind, side: Side, file: Blob): Promise<{ ok: true; blob: Blob } | { ok: false; reject: Reject }> {
   let bmp: ImageBitmap;
@@ -65,8 +71,10 @@ export async function validateFile(cv: any, lm: FaceLandmarker | null, kind: Doc
   const det = document.createElement("canvas"); det.width = 320; det.height = Math.max(24, Math.round((320 * full.height) / full.width));
   det.getContext("2d", { willReadFrequently: true })!.drawImage(full, 0, 0, det.width, det.height);
   const q = detectCard(cv, det);
-  if (!q || !aspectOk(kind, q.ratio)) return { ok: false, reject: "shape" };
-  const crop = rectify(cv, full, q);
+  let crop: HTMLCanvasElement;
+  if (q && aspectOk(kind, q.ratio)) crop = rectify(cv, full, q);
+  else if (!q && aspectOk(kind, full.width / full.height)) crop = full.width >= full.height ? full : rotate90(full);   // already a tight crop of the page (no visible outline): the face and MRZ checks below still apply
+  else return { ok: false, reject: "shape" };
   const v = validateDoc(cv, lm, kind, side, crop);
   if (!v.ok) return v;
   const blob = await new Promise<Blob | null>((res) => crop.toBlob((b) => res(b), "image/jpeg", 0.92));
