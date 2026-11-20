@@ -39,6 +39,15 @@ Rules: one capture = one file; for each attack type use the volunteer's real fac
 
 ## 4. Measuring
 
+**Name every file with the person code first** (`p017_phoneA_dark_1.jpg`): the OULU-NPU-style mode splits PEOPLE, never images, into a development half and a test half, picks the threshold on development (EER) and reports ACER on test only:
+
+```bash
+FV_PAD_MODEL_DIR=/opt/pad-models python -m tools.pad_eval /path/to/pad_set --protocol
+```
+
+The plain mode below (no person codes) is for quick looks only.
+
+
 ```bash
 cd backend
 FV_PAD_MODEL_DIR=/opt/pad-models python -m tools.pad_eval /path/to/pad_set --thresholds 0.3,0.5,0.7,0.9 --stress

@@ -107,3 +107,22 @@ def test_extra_selfie_frames_are_stored_scored_together_and_do_not_touch_face_co
     assert len(seen) == 3
     c = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks", headers=auth(t)).json()
     assert len(c["pad"]["frames"]) == 3 and c["face"]["status"] in ("compared", "no_doc_face", "no_selfie", "ambiguous", "unavailable", "error")
+
+
+def test_protocol_splits_people_never_images_and_reports_on_test_only():
+    from tools.pad_eval import protocol, side
+    people = [f"p{i:03d}" for i in range(40)]
+    gen = [(p, 0.9 - 0.01 * (i % 5)) for i, p in enumerate(people) for _ in range(3)]
+    att = {"print": [(p, 0.1 + 0.01 * (i % 5)) for i, p in enumerate(people) for _ in range(3)],
+           "replay": [(p, 0.15 + 0.3 * (i % 4 == 0)) for i, p in enumerate(people) for _ in range(3)]}
+    r = protocol(gen, att)
+    assert r["both_sides"] and r["people"]["dev"] + r["people"]["test"] == 40
+    assert all(side(p) in ("dev", "test") for p in people) and side("p001") == side("p001")           # deterministic
+    assert 0.0 <= r["threshold"] <= 1.0 and r["acer"] is not None and r["worst"][0] in ("print", "replay")
+    assert r["bpcer"][1] == sum(1 for p in people if side(p) == "test") * 3                     # test half only
+
+
+def test_eer_threshold_separates_clean_scores():
+    from tools.pad_eval import eer_threshold
+    t, eer = eer_threshold([0.8, 0.9, 0.95], [0.1, 0.2, 0.3])
+    assert 0.3 < t <= 0.8 and eer == 0.0
