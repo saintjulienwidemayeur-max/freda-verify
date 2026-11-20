@@ -137,6 +137,9 @@ def parse_mrz(lines: list[str], fix_ocr: bool = True) -> MrzResult:
         opt = (opt + opt2).strip("<")
 
     warnings: list[str] = []
+    if dtype.startswith("P") and fmt != "TD3":
+        warnings.append(f"a passport normally has 2 lines of 44 characters; this reading has {len(ls[0])}, so the end of the lines may have been cut off (photo edge or glare). "
+                        "The overall check may fail for that reason even when the individual fields are right: compare with the photo")
     bd, ed = _date(birth, birth=True), _date(exp, birth=False)
     if bd is None:
         warnings.append("birth date is not a valid calendar date")

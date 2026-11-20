@@ -100,3 +100,15 @@ def test_mrz_endpoint_requires_authentication_and_validates(client):
     assert ok.status_code == 200 and ok.json()["all_checks_passed"] is True
     bad = client.post("/api/v1/tools/mrz/check", json={"lines": ["too", "short"]}, headers=auth(t))
     assert bad.status_code == 422 and bad.json()["error"]["code"] == "invalid_mrz"
+
+
+def test_passport_read_as_36_character_layout_warns_about_cut_lines():
+    # ICAO 9303 specimen (public, invented person); the second line is cut to 36 characters like a photo that lost the end of the line
+    l1 = ("P<UTOERIKSSON<<ANNA<MARIA" + "<" * 19)
+    l2 = "L898902C36UTO7408122F1204159ZE184226B<<<<<10"
+    short = parse_mrz([l1[:36], l2[:36]])
+    assert short.format == "TD2" and short.checks["document_number"] and short.checks["birth_date"] and short.checks["expiry_date"]
+    assert not short.checks["composite"]
+    assert any("cut off" in w for w in short.warnings)
+    full = parse_mrz([l1, l2])
+    assert full.format == "TD3" and full.all_checks_passed and not full.warnings
