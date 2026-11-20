@@ -35,3 +35,20 @@ def test_implausible_or_empty_readings_are_flagged():
 def test_random_ocr_garbage_does_not_look_like_an_identity():
     f = idtext.extract("lorem ipsum dolor sit\n%%% ??? 12 34\n.", TODAY)
     assert not idtext.plausible(f, TODAY)["birth_date"] and not idtext.plausible(f, TODAY)["document_number"]
+
+
+def test_merge_trusted_uses_mrz_dates_with_valid_check_digits():
+    from app.services.idtext import merge_trusted
+    mrz = {"checks": {"birth_date": True, "expiry_date": True, "document_number": False, "composite": True},
+           "birth_date": "2003-11-01", "expiry_date": "2033-01-15", "document_number": "0D2FTC562"}
+    f, src = merge_trusted({"name": "JEAN PIERRE", "birth_date": "1999-01-01"}, "Date de naissance 05/06/1990", mrz)
+    assert f["birth_date"] == "2003-11-01" and src["birth_date"] == "mrz"
+    assert f["expiry_date"] == "2033-01-15" and f["document_number"] == "0D2FTC562"   # composite covers the number
+    assert f["name"] == "JEAN PIERRE"
+
+
+def test_merge_trusted_ignores_mrz_dates_when_digit_fails_and_fills_from_back():
+    from app.services.idtext import merge_trusted
+    mrz = {"checks": {"birth_date": False, "expiry_date": False, "document_number": False, "composite": False}, "birth_date": "2003-11-01"}
+    f, src = merge_trusted({"name": "A B"}, "Date de naissance 05/06/1990", mrz)
+    assert f["birth_date"] == "1990-06-05" and src["birth_date"] == "back_text"

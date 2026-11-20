@@ -202,6 +202,28 @@ def extract(text: str, today: date | None = None) -> dict:
     return out
 
 
+def merge_trusted(fields: dict, back_text: str | None, mrz: dict | None) -> tuple[dict, dict]:
+    """Completes the fields read from the card FRONT with (1) the printed text of the BACK (only fields still missing) and (2) the machine-readable zone of the back, but only the
+    values whose own ICAO check digit passed (a birth date or expiry date whose digit is valid is far more reliable than printed-text OCR). The MRZ values take priority.
+    The second returned dict says where each value came from. The names of a card MRZ are NOT used (no check digit protects them)."""
+    out = dict(fields)
+    src = {k: "front_text" for k in out}
+    if back_text:
+        for k, val in extract(back_text).items():
+            if k not in out:
+                out[k], src[k] = val, "back_text"
+    checks = (mrz or {}).get("checks") or {}
+    if mrz and checks:
+        whole = bool(checks.get("composite")) and checks.get("birth_date") and checks.get("expiry_date")
+        if checks.get("birth_date") and mrz.get("birth_date"):
+            out["birth_date"], src["birth_date"] = mrz["birth_date"], "mrz"
+        if checks.get("expiry_date") and mrz.get("expiry_date"):
+            out["expiry_date"], src["expiry_date"] = mrz["expiry_date"], "mrz"
+        if (checks.get("document_number") or whole) and mrz.get("document_number"):
+            out["document_number"], src["document_number"] = mrz["document_number"], "mrz"
+    return out, src
+
+
 def plausible(fields: dict, today: date | None = None) -> dict:
     """Checks on the extracted fields themselves (not a verification against any registry)."""
     today = today or date.today()

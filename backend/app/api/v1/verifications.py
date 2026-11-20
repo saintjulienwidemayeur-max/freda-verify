@@ -351,12 +351,16 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
             if not v or not front or front.doc_type not in ("id", "license"):
                 return
             text = idtext.read_text(decrypt_bytes(front.data))
-            if not text:
-                cmp_status, cmp_payload, fields = "unreadable", {}, {}
-            else:
-                fields = idtext.extract(text)
+            back = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_back"))
+            mrz_row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz"))
+            mrz_res = (_load(mrz_row) or {}).get("result") if mrz_row and mrz_row.status == "read" else None
+            back_text = idtext.read_text(decrypt_bytes(back.data)) if back else None
+            fields, sources = idtext.merge_trusted(idtext.extract(text) if text else {}, back_text, mrz_res)
+            if text:
                 cmp_status, cmp_payload = ("compared", idtext.compare(json.loads(decrypt_bytes(v.expected_enc)), text)) if v.expected_enc else ("no_expected", {})
-            ext_payload = {"fields": fields, "plausible": idtext.plausible(fields) if fields else None, "country": front.country}
+            else:
+                cmp_status, cmp_payload = "unreadable", {}
+            ext_payload = {"fields": fields, "plausible": idtext.plausible(fields) if fields else None, "sources": sources, "country": front.country}
             if fields.get("document_number"):
                 v.doc_hash = _doc_hash(v.organization_id, fields["document_number"])
             for kind, status, payload in (("idtext", cmp_status, cmp_payload), ("idfields", "extracted" if fields else "unreadable", ext_payload)):
