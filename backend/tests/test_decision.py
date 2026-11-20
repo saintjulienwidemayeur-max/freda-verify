@@ -46,7 +46,7 @@ def put_policy(client, t, org, **kw):
 
 def test_default_is_manual_and_only_admins_change_the_policy(client):
     t, org, key, v = media_setup(client)
-    assert client.get(f"/api/v1/organizations/{org['id']}/decision-policy", headers=auth(t)).json() == {"mode": "manual", "uncertain": "review", "face_min": 0.363, "require_pad": False}
+    assert client.get(f"/api/v1/organizations/{org['id']}/decision-policy", headers=auth(t)).json() == {"mode": "manual", "uncertain": "review", "face_min": 0.363, "require_pad": False, "id_cards": "review"}
     assert submit_all(client, v["session_token"]).status_code == 204
     assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "MANUAL_REVIEW"            # manual: nobody decided
     assert put_policy(client, t, org, face_min=0.95).status_code == 422 and put_policy(client, t, org, mode="x").status_code == 422
@@ -84,3 +84,44 @@ def test_auto_mode_leaves_unclear_cases_to_a_person_and_never_breaks_submission(
     monkeypatch.setattr(V.decision, "decide", boom)
     assert submit_all(client, v2["session_token"]).status_code == 204
     assert client.get("/api/v1/session", headers=bearer(v2["session_token"])).json()["status"] == "MANUAL_REVIEW"             # a failure leaves it in manual review
+
+
+def card(**over):
+    return decide(**{**KW, "mrz": None, "doc_type": "id", "face": FACE_OK, **over})
+
+
+def test_id_cards_follow_the_organizations_rule():
+    assert card().decision is None and card().codes == ["no_mrz_for_id"]                                     # default: a person
+    assert card(id_cards="face_only").decision == "APPROVED"                                                  # explicit risk choice: no document check
+    assert card(id_cards="face_only", face={"status": "compared", "score": 0.2, "band": "low"}).decision is None
+    good = {"status": "compared", "fields": 3, "matched": 3, "name": 1.0, "number": True, "birth": True}
+    assert card(id_cards="face_and_data", idtext=good).decision == "APPROVED"
+    assert card(id_cards="face_and_data", idtext={**good, "matched": 1, "name": 1.0}).codes == ["id_data_mismatch"]
+    assert card(id_cards="face_and_data", idtext={**good, "name": 0.4, "matched": 2}).codes == ["id_data_mismatch"]
+    assert card(id_cards="face_and_data", idtext={"status": "no_expected"}).codes == ["id_data_no_expected"]
+    assert card(id_cards="face_and_data", idtext=None).codes == ["id_data_missing"]
+    assert card(id_cards="face_and_data", idtext={**good, "fields": 1, "matched": 1}).decision is None        # one declared field is not enough
+
+
+def test_declared_data_is_encrypted_never_returned_and_checked_on_the_card(client, monkeypatch):
+    from sqlalchemy import text
+
+    from app.db.session import get_engine
+    from app.services import idtext as it
+    t, org, key, _ = media_setup(client)
+    r = client.post("/api/v1/verifications", json={"reference": "c9", "expected": {"name": "Saint Julien Widemayeur", "birth_date": "2003-11-01", "document_number": "0089062024-5"}},
+                    headers={"Authorization": f"Bearer {key}"})
+    assert r.status_code == 201 and "expected" not in r.json() and "Widemayeur" not in r.text
+    with get_engine().connect() as c:
+        assert "Widemayeur" not in str(c.execute(text("select expected_enc from freda_verify.verifications")).all())
+    assert client.post("/api/v1/verifications", json={"expected": {"birth_date": "not-a-date"}}, headers={"Authorization": f"Bearer {key}"}).status_code == 422
+    monkeypatch.setattr(it, "read_text", lambda image: "NOM WIDEMAYEUR PRENOM SAINT JULIEN NAISSANCE 01/11/2003 NIF 00-89-06-2024-5")
+    tok = r.json()["session_token"]
+    from tests.test_media import JPG, up
+    client.post("/api/v1/session/consent", headers=bearer(tok))
+    assert up(client, tok, "document_front", JPG, q="?doc_type=id&country=HT").status_code == 204
+    assert up(client, tok, "document_back", JPG, q="?doc_type=id&country=HT").status_code == 204
+    assert up(client, tok, "selfie").status_code == 204
+    assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 204
+    c = client.get(f"/api/v1/organizations/{org['id']}/verifications/{r.json()['id']}/checks", headers=auth(t)).json()
+    assert c["idtext"]["status"] == "compared" and c["idtext"]["matched"] == 3 and "WIDEMAYEUR" not in str(c["idtext"])

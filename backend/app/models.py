@@ -171,6 +171,7 @@ class Verification(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
     decision_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    expected_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)       # Fernet JSON of what the customer DECLARED (name, birth date, document number): personal data
 
 
 class VerificationMedia(Base):
@@ -324,4 +325,5 @@ class DecisionPolicy(Base):
     uncertain: Mapped[str] = mapped_column(String(8), default="review")
     face_min: Mapped[float] = mapped_column(Float, default=0.363)
     require_pad: Mapped[bool] = mapped_column(Boolean, default=False)
+    id_cards: Mapped[str] = mapped_column(String(12), default="review")           # review | face_and_data | face_only
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

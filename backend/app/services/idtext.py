@@ -1,0 +1,120 @@
+"""Consistency check between what the CUSTOMER DECLARED (the business passes `expected` when it creates the verification) and the text printed on an ID card / licence, read with Tesseract.
+
+A national ID card (CIN) has no machine-readable zone and no check digits, so the only machine evidence of its content is whether the printed text agrees with the declared name, date
+of birth and document number. This is a CONSISTENCY check, not proof of authenticity: a forged card can be printed with the declared data, and OCR of printed fields is unreliable
+(measured on a real CIN: it misread a day and a 0/O). So it is only ever used as POSITIVE evidence together with the face comparison. The OCR text is never stored; only match results.
+"""
+import io
+import re
+import unicodedata
+from datetime import date
+
+MONTHS = {1: ("JAN", "JANV", "JANVIER", "JANUARY", "JANVYE"), 2: ("FEB", "FEV", "FEVR", "FEVRIER", "FEBRUARY", "FEVRIYE"), 3: ("MAR", "MARS", "MARCH", "MAS"),
+          4: ("APR", "AVR", "AVRIL", "APRIL", "AVRIL"), 5: ("MAY", "MAI", "ME"), 6: ("JUN", "JUIN", "JUNE", "JEN"), 7: ("JUL", "JUIL", "JUILLET", "JULY", "JIYE"),
+          8: ("AUG", "AOU", "AOUT", "AUGUST", "OUT"), 9: ("SEP", "SEPT", "SEPTEMBRE", "SEPTEMBER", "SEPTANM"), 10: ("OCT", "OCTOBRE", "OCTOBER", "OKTOB"),
+          11: ("NOV", "NOVEMBRE", "NOVEMBER", "NOVANM"), 12: ("DEC", "DECEMBRE", "DECEMBER", "DESANM")}
+
+
+def _norm(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().upper()
+    return re.sub(r"[^A-Z0-9]+", " ", s).strip()
+
+
+def _lev(a: str, b: str, cap: int = 2) -> int:
+    if abs(len(a) - len(b)) > cap:
+        return cap + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def name_score(expected: str, text: str) -> float:
+    """Share of the declared name words found in the text (a word may carry one OCR error when it has >= 5 letters)."""
+    words = [w for w in _norm(expected).split() if len(w) >= 2]
+    if not words:
+        return 0.0
+    toks = _norm(text).split()
+    hit = 0
+    for w in words:
+        tol = 1 if len(w) >= 5 else 0
+        if any(_lev(w, t, tol) <= tol for t in toks if abs(len(t) - len(w)) <= tol):
+            hit += 1
+    return hit / len(words)
+
+
+def number_match(expected: str, text: str) -> bool:
+    """The declared document number appears in the text (spaces / dashes ignored, one wrong character allowed from 8 characters up)."""
+    e = re.sub(r"[^A-Z0-9]", "", _norm(expected).replace(" ", ""))
+    if len(e) < 5:
+        return False
+    hay = re.sub(r"[^A-Z0-9]", "", _norm(text).replace(" ", ""))
+    tol = 1 if len(e) >= 8 else 0
+    if e in hay:
+        return True
+    if tol:
+        for ln in (len(e) - 1, len(e), len(e) + 1):
+            for i in range(0, max(0, len(hay) - ln) + 1):
+                if _lev(e, hay[i:i + ln], 1) <= 1:
+                    return True
+    return False
+
+
+def birth_match(expected: date, text: str) -> bool:
+    """Day, month and year of the declared birth date all appear (numeric forms such as 01/11/2003, 01-11-03, or a month name)."""
+    n = _norm(text)
+    d, m, y = f"{expected.day:02d}", f"{expected.month:02d}", f"{expected.year:04d}"
+    compact = n.replace(" ", "")
+    if any(x in compact for x in (d + m + y, d + m + y[2:], y + m + d)):
+        return True
+    toks = n.split()
+    yy = {y, y[2:]}
+    names = {x for x in MONTHS[expected.month]}
+    has_d = d in toks or str(expected.day) in toks
+    has_y = bool(yy & set(toks))
+    has_m = m in toks or str(expected.month) in toks or any(t in names or (len(t) >= 3 and t[:3] in {x[:3] for x in names} and t[:3] != "MAR" or t in names) for t in toks)
+    return has_d and has_m and has_y
+
+
+def read_text(image: bytes) -> str | None:
+    """Tesseract (generic model) over the whole card. None when the engine or the image is unavailable."""
+    from app.services import ocr
+    if not ocr.available():
+        return None
+    try:
+        import pytesseract
+        from PIL import Image, ImageOps
+        img = Image.open(io.BytesIO(image))
+        img.load()
+        g = ImageOps.autocontrast(img.convert("L"), cutoff=1)
+        k = 1800 / max(g.size)
+        if k > 1:
+            g = g.resize((int(g.width * k), int(g.height * k)))
+        return pytesseract.image_to_string(g, lang="eng", config="--psm 6", timeout=25)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def compare(expected: dict, text: str) -> dict:
+    """Match results for the declared fields (only the ones the business supplied). No OCR text is returned."""
+    out: dict = {"fields": 0, "matched": 0}
+    if expected.get("name"):
+        out["fields"] += 1
+        sc = name_score(expected["name"], text)
+        out["name"] = round(sc, 2)
+        out["matched"] += 1 if sc >= 0.8 else 0
+    if expected.get("document_number"):
+        out["fields"] += 1
+        out["number"] = number_match(expected["document_number"], text)
+        out["matched"] += 1 if out["number"] else 0
+    if expected.get("birth_date"):
+        out["fields"] += 1
+        try:
+            out["birth"] = birth_match(date.fromisoformat(expected["birth_date"]), text)
+        except ValueError:
+            out["birth"] = False
+        out["matched"] += 1 if out["birth"] else 0
+    return out

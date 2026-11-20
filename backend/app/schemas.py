@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -149,10 +149,18 @@ class BrandingOut(BrandingIn):
     has_logo: bool = False
 
 
+class ExpectedIn(_In):
+    """What the customer DECLARED to the business (all optional). Used only to check the printed text of an ID card; stored encrypted; never sent in webhooks."""
+    name: str | None = Field(default=None, max_length=100, pattern=r"^[^<>{}\\]*$")
+    birth_date: date | None = None
+    document_number: str | None = Field(default=None, max_length=30, pattern=r"^[A-Za-z0-9 ._/-]*$")
+
+
 class VerificationIn(_In):
     reference: str | None = Field(default=None, max_length=100, pattern=r"^[A-Za-z0-9 ._:@/#-]*$")
     organization_id: uuid.UUID | None = None          # dashboard users only; API keys always use their own organization
     expires_in_minutes: int | None = Field(default=None, ge=5, le=10080)
+    expected: ExpectedIn | None = None
 
 
 class VerificationOut(BaseModel):

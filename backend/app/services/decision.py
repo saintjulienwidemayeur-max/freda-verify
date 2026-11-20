@@ -16,11 +16,24 @@ class Verdict:
     codes: list[str] = field(default_factory=list)
 
 
-def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | None, agreeing: int, face: dict | None, pad: dict | None, doc_type: str | None) -> Verdict:
+def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | None, agreeing: int, face: dict | None, pad: dict | None, doc_type: str | None,
+           id_cards: str = "review", idtext: dict | None = None) -> Verdict:
     hard: list[str] = []
     unc: list[str] = []
-    if not mrz:
-        unc.append("mrz_unreadable" if doc_type == "passport" else "no_mrz_for_id")
+    is_card = doc_type in ("id", "license")
+    if is_card:
+        # ID cards / licences have no machine-readable zone. `face_only` (organization's explicit risk choice): no document check at all. `face_and_data`: the printed text must agree with the data
+        # the customer declared (>= 2 declared fields, name among them). Anything else goes to a person.
+        if id_cards == "face_only":
+            pass
+        elif id_cards == "face_and_data":
+            ok = bool(idtext) and idtext.get("status") == "compared" and idtext.get("fields", 0) >= 2 and idtext.get("matched", 0) >= 2 and idtext.get("name", 0) >= 0.8
+            if not ok:
+                unc.append("id_data_" + (idtext.get("status", "missing") if idtext else "missing") if not (idtext and idtext.get("status") == "compared") else "id_data_mismatch")
+        else:
+            unc.append("no_mrz_for_id")
+    elif not mrz:
+        unc.append("mrz_unreadable")
     else:
         checks = mrz.get("checks", {})
         if mrz.get("expired") and checks.get("expiry_date"):

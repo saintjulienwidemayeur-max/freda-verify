@@ -27,7 +27,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, face, mailer, ocr, pad, webhooks
+from app.services import audit, decision, face, idtext, mailer, ocr, pad, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -82,6 +82,9 @@ def create_verification(body: VerificationIn, request: Request, principal: Princ
     v = Verification(organization_id=org_id, env=principal.api_key.env if principal.api_key else "test", reference=(body.reference or None),
                      session_hash=sha256(token), expires_at=now() + timedelta(minutes=body.expires_in_minutes or s.session_ttl_minutes),
                      created_by_key=principal.api_key.id if principal.api_key else None, created_by_user=principal.user.id if principal.user else None)
+    if body.expected and any((body.expected.name, body.expected.birth_date, body.expected.document_number)):
+        v.expected_enc = encrypt_bytes(json.dumps({"name": body.expected.name or None, "birth_date": body.expected.birth_date.isoformat() if body.expected.birth_date else None,
+                                                   "document_number": body.expected.document_number or None}).encode())
     db.add(v)
     db.flush()
     audit.record(db, request, "verification.created", org_id=org_id, user_id=principal.user.id if principal.user else None,
@@ -314,9 +317,33 @@ def run_pad_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
             db.close()
 
 
+def run_idtext_check(verification_id: uuid.UUID) -> None:
+    """ID card / licence only: compares the DECLARED data (if the business supplied it) with the printed text. Stores match results only, never the OCR text. Never raises."""
+    try:
+        with SessionLocal() as db:
+            v = db.get(Verification, verification_id)
+            front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front")) if v else None
+            if not v or not front or front.doc_type not in ("id", "license"):
+                return
+            if not v.expected_enc:
+                status, payload = "no_expected", {}
+            else:
+                text = idtext.read_text(decrypt_bytes(front.data))
+                status, payload = ("unreadable", {}) if not text else ("compared", idtext.compare(json.loads(decrypt_bytes(v.expected_enc)), text))
+            row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext")) or VerificationCheck(
+                verification_id=v.id, organization_id=v.organization_id, kind="idtext")
+            row.status, row.source, row.data, row.created_at = status, "document_front", encrypt_bytes(json.dumps(payload).encode()), now()
+            db.add(row)
+            audit.record(db, None, "verification.idtext_checked", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": status})
+            db.commit()
+    except Exception:  # noqa: BLE001
+        return
+
+
 def run_pipeline(verification_id: uuid.UUID) -> None:
     """After submission: MRZ reading, face comparison and the experimental PAD score, one after the other (one process, little RAM), then the automatic decision if the organization enabled it."""
     run_mrz_check(verification_id)
+    run_idtext_check(verification_id)
     run_face_check(verification_id)
     run_pad_check(verification_id)
     auto_decide(verification_id)
@@ -337,7 +364,8 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
             rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
             front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
             mrz_row = _load(rows.get("mrz")) or {}
-            verdict = decision.decide(face_min=pol.face_min, require_pad=pol.require_pad, uncertain=pol.uncertain, mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,
+            verdict = decision.decide(face_min=pol.face_min, require_pad=pol.require_pad, uncertain=pol.uncertain, id_cards=pol.id_cards,
+                                      idtext=({"status": rows["idtext"].status, **_load(rows["idtext"])} if rows.get("idtext") else None), mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,
                                       agreeing=int(mrz_row.get("agreeing", 0)), face=({"status": rows["face"].status, **_load(rows["face"])} if rows.get("face") else None),
                                       pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None)
             reason = ("auto: " + ",".join(verdict.codes))[:200]
@@ -505,7 +533,8 @@ def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
     frow = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face"))
     lrow = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "liveness"))
     return {"engine_available": ocr.available(), "mrz": _check_out(row), "face_available": face.available(), "face": _face_out(frow),
-            "pad_available": pad.available(), "pad": _face_out(lrow)}
+            "pad_available": pad.available(), "pad": _face_out(lrow),
+            "idtext": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext")))}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/face")
@@ -550,10 +579,11 @@ class PolicyIn(BaseModel):
     uncertain: str = Field(pattern=r"^(review|reject)$")
     face_min: float = Field(ge=0.2, le=0.9)
     require_pad: bool
+    id_cards: str = Field(default="review", pattern=r"^(review|face_and_data|face_only)$")
 
 
 def _policy_out(p: DecisionPolicy | None) -> dict:
-    return {"mode": p.mode if p else "manual", "uncertain": p.uncertain if p else "review", "face_min": p.face_min if p else 0.363, "require_pad": p.require_pad if p else False}
+    return {"mode": p.mode if p else "manual", "uncertain": p.uncertain if p else "review", "face_min": p.face_min if p else 0.363, "require_pad": p.require_pad if p else False, "id_cards": p.id_cards if p else "review"}
 
 
 @router.get("/organizations/{org_id}/decision-policy")
@@ -565,8 +595,8 @@ def get_policy(ctx: OrgCtx = Depends(org_access("verifications:read")), db: Sess
 def put_policy(body: PolicyIn, request: Request, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
     """Owner/admin. `auto` makes the SYSTEM approve/reject submitted verifications by the rules in app.services.decision; every automatic decision is audited and can be overridden by a person."""
     p = db.get(DecisionPolicy, ctx.org.id) or DecisionPolicy(organization_id=ctx.org.id)
-    p.mode, p.uncertain, p.face_min, p.require_pad, p.updated_at = body.mode, body.uncertain, round(body.face_min, 3), body.require_pad, now()
+    p.mode, p.uncertain, p.face_min, p.require_pad, p.id_cards, p.updated_at = body.mode, body.uncertain, round(body.face_min, 3), body.require_pad, body.id_cards, now()
     db.add(p)
-    audit.record(db, request, "decision_policy.updated", org_id=ctx.org.id, user_id=ctx.user.id, meta={"mode": p.mode, "uncertain": p.uncertain, "face_min": p.face_min, "require_pad": p.require_pad})
+    audit.record(db, request, "decision_policy.updated", org_id=ctx.org.id, user_id=ctx.user.id, meta={"mode": p.mode, "uncertain": p.uncertain, "face_min": p.face_min, "require_pad": p.require_pad, "id_cards": p.id_cards})
     db.commit()
     return _policy_out(p)

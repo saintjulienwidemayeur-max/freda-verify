@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { can, useAuth } from "@/lib/auth";
 
-type Policy = { mode: "manual" | "auto"; uncertain: "review" | "reject"; face_min: number; require_pad: boolean };
+type Policy = { mode: "manual" | "auto"; uncertain: "review" | "reject"; face_min: number; require_pad: boolean; id_cards: "review" | "face_and_data" | "face_only" };
 
 /** Decision mode of the organization. In AUTO mode the system approves / rejects submitted verifications by fixed rules; a person can always override an automatic decision. */
 export default function DecisionPolicy() {
@@ -32,11 +32,18 @@ export default function DecisionPolicy() {
         <label className="text-sm font-medium">Minimum face similarity to approve ({p.face_min.toFixed(2)})
           <input type="range" min={0.2} max={0.9} step={0.01} disabled={!admin || p.mode === "manual"} value={p.face_min} onChange={(e) => set({ face_min: Number(e.target.value) })} className="mt-2 block w-full" />
           <span className="text-xs font-normal text-navy/50">Published model threshold 0.363. In our tests ~13 % of the same people scored below it and ~1 % of different people reached it.</span></label>
+        <label className="text-sm font-medium md:col-span-2">ID cards and licences (no machine-readable zone)
+          <select disabled={!admin || p.mode === "manual"} value={p.id_cards} onChange={(e) => set({ id_cards: e.target.value as Policy["id_cards"] })} className="mt-1.5 block w-full rounded-xl border border-[#d6e2ff] bg-white px-3 py-2.5 text-sm font-normal">
+            <option value="review">Always send to a person (recommended)</option>
+            <option value="face_and_data">Approve if the face matches AND the printed text agrees with the data the customer declared</option>
+            <option value="face_only">Approve if the face matches (NO document check: risky)</option></select>
+          {p.id_cards === "face_only" && <span className="mt-1 block text-xs font-normal text-[#B42318]">Anyone who shows a forged or someone else&apos;s card with a matching face would be approved. Nothing verifies the document content.</span>}
+          {p.id_cards === "face_and_data" && <span className="mt-1 block text-xs font-normal text-[#B54708]">Needs at least 2 declared fields (name + birth date or ID number) when you create the verification. Reading printed text is unreliable and a forged card can carry the declared data.</span>}</label>
         <label className="flex items-start gap-2 text-sm font-medium"><input type="checkbox" disabled={!admin || p.mode === "manual"} checked={p.require_pad} onChange={(e) => set({ require_pad: e.target.checked })} className="mt-1 h-4 w-4" />
           <span>Also require the experimental live-capture score<span className="block text-xs font-normal text-navy/50">Not recommended yet: in our tests about 1 live person in 5 scored low.</span></span></label>
       </div>
       <ul className="mt-4 list-disc space-y-1 pl-5 text-xs text-navy/60">
-        <li><b>Approved</b> only if: every document check digit is valid, at least 2 independent readings agree, the document is not expired, and the face similarity reaches the minimum.</li>
+        <li><b>Approved</b> only if (passports): every document check digit is valid, at least 2 independent readings agree, the document is not expired, and the face similarity reaches the minimum.</li>
         <li><b>Rejected</b> automatically only for an objective failure: an expired document whose expiry date was read correctly.</li>
         <li>Anything else is “not clear”: sent to a person, or rejected if you chose that. Rejecting unclear cases WILL turn away some real people.</li>
         <li>These checks are not certified: they do not prove the person is live or the document genuine, and they do not cover sanctions or PEP screening.</li>

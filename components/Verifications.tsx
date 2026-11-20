@@ -8,8 +8,9 @@ type V = { id: string; status: string; env: string; reference: string | null; co
 type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string | null };
 type Mrz = { format: string; document_type: string; issuing_country: string; surname: string; given_names: string; document_number: string; nationality: string; birth_date: string | null; sex: string; expiry_date: string | null; checks: Record<string, boolean>; all_checks_passed: boolean; expired: boolean | null; ocr_corrections: number; warnings: string[] };
 type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string };
+type IdText = { status: string; fields?: number; matched?: number; name?: number; number?: boolean; birth?: boolean };
 type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number>; min_frame?: number | null; frames?: { status: string; real_probability: number | null }[] };
-type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
+type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; idtext?: IdText | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie", selfie_2: "Selfie · frame 2", selfie_3: "Selfie · frame 3", selfie_video: "Challenge video" };
 
@@ -126,6 +127,20 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
         </div>
       )}
 
+      {admin && checks?.idtext && (
+        <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="ID card text check">
+          <h3 className="font-display text-sm font-bold">ID card: printed text vs declared data (advisory)</h3>
+          {checks.idtext.status === "no_expected" && <p className="mt-2 text-sm text-navy/60">No declared data was supplied for this verification, so the card text could not be checked. Compare the card with what the customer told you.</p>}
+          {checks.idtext.status === "unreadable" && <p className="mt-2 text-sm text-[#B54708]">The card text could not be read. Check the photo yourself.</p>}
+          {checks.idtext.status === "compared" && (
+            <p className="mt-2 flex flex-wrap gap-2 text-xs">
+              {checks.idtext.name !== undefined && <span className={`rounded-full px-2.5 py-0.5 ${checks.idtext.name >= 0.8 ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{checks.idtext.name >= 0.8 ? "✓" : "✗"} Name</span>}
+              {checks.idtext.birth !== undefined && <span className={`rounded-full px-2.5 py-0.5 ${checks.idtext.birth ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{checks.idtext.birth ? "✓" : "✗"} Date of birth</span>}
+              {checks.idtext.number !== undefined && <span className={`rounded-full px-2.5 py-0.5 ${checks.idtext.number ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{checks.idtext.number ? "✓" : "✗"} ID number</span>}
+              <span className="text-navy/50">{checks.idtext.matched}/{checks.idtext.fields} declared fields found on the card</span></p>)}
+          <p className="mt-3 text-xs leading-relaxed text-navy/50">Consistency only: a forged card can be printed with the declared data, and reading printed text is unreliable (it can miss a correct field). Not proof that the card is genuine.</p>
+        </div>)}
+
       {admin && media && media.length > 0 && (
         <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="Face comparison">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -195,7 +210,7 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "
 export default function Verifications() {
   const { org } = useAuth();
   const [rows, setRows] = useState<V[] | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false);
-  const [ref, setRef] = useState(""), [fresh, setFresh] = useState<{ url: string; reference: string | null } | null>(null), [copied, setCopied] = useState(false);
+  const [ref, setRef] = useState(""), [expName, setExpName] = useState(""), [expBirth, setExpBirth] = useState(""), [expNum, setExpNum] = useState(""), [fresh, setFresh] = useState<{ url: string; reference: string | null } | null>(null), [copied, setCopied] = useState(false);
   const writable = can.readKeys(org);                                  // owner, admin, member
   const [open, setOpen] = useState<string | null>(null);
 
@@ -208,8 +223,8 @@ export default function Verifications() {
   const create = async (e: FormEvent) => {
     e.preventDefault(); if (!org) return; setBusy(true); setError("");
     try {
-      const v = await api<V & { url: string }>("/verifications", { method: "POST", json: { organization_id: org.id, reference: ref.trim() || undefined } });
-      setFresh({ url: v.url, reference: v.reference }); setCopied(false); setRef(""); await load();
+      const v = await api<V & { url: string }>("/verifications", { method: "POST", json: { organization_id: org.id, reference: ref.trim() || undefined, expected: (expName.trim() || expBirth || expNum.trim()) ? { name: expName.trim() || undefined, birth_date: expBirth || undefined, document_number: expNum.trim() || undefined } : undefined } });
+      setFresh({ url: v.url, reference: v.reference }); setCopied(false); setRef(""); setExpName(""); setExpBirth(""); setExpNum(""); await load();
     } catch (er) { setError(er instanceof ApiError ? (er.details[0] ? `${er.details[0].field}: ${er.details[0].message}` : er.message) : "Could not create the verification"); } finally { setBusy(false); }
   };
   const copy = async () => { try { await navigator.clipboard.writeText(fresh?.url ?? ""); setCopied(true); } catch { setCopied(false); } };
@@ -228,6 +243,13 @@ export default function Verifications() {
         <form onSubmit={create} className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-[#e3eaf8] bg-white p-4">
           <label className="min-w-[14rem] flex-1 text-sm font-medium">Reference (optional)
             <input value={ref} onChange={(e) => setRef(e.target.value)} maxLength={100} placeholder="your customer id, e.g. cust-42" className="mt-1.5 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2.5 text-sm font-normal" /></label>
+          <details className="w-full"><summary className="cursor-pointer text-sm font-medium text-navy/70">Data the customer declared (optional: lets us check an ID card, which has no machine-readable zone)</summary>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <label className="text-xs font-medium">Full name<input value={expName} onChange={(e) => setExpName(e.target.value)} maxLength={100} className="mt-1 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
+              <label className="text-xs font-medium">Date of birth<input type="date" value={expBirth} onChange={(e) => setExpBirth(e.target.value)} className="mt-1 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
+              <label className="text-xs font-medium">ID number<input value={expNum} onChange={(e) => setExpNum(e.target.value)} maxLength={30} className="mt-1 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
+            </div>
+            <p className="mt-2 text-xs text-navy/50">Stored encrypted, used only to compare with the printed text, never sent in webhooks. Through the API: <code className="font-mono">expected: {"{"} name, birth_date, document_number {"}"}</code>.</p></details>
           <button disabled={busy} className="rounded-full bg-blue px-6 py-2.5 text-sm font-semibold text-white hover:bg-navy disabled:opacity-50">{busy ? "Creating…" : "Create verification link"}</button>
         </form>
       )}
