@@ -194,3 +194,16 @@ def test_challenge_video_is_optional_validated_encrypted_and_viewable_by_the_rev
     assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 204
     r = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/media/selfie_video", headers=auth(t))
     assert r.status_code == 200 and r.headers["content-type"] == "video/mp4" and r.content == MP4 and r.headers["cache-control"] == "private, no-store"
+
+
+def test_customer_can_read_the_outcome_with_the_session_link_even_after_expiry(client):
+    t, org, _, v = setup(client)
+    tok = v["session_token"]
+    assert submit_all(client, tok).status_code == 204
+    assert client.get("/api/v1/session", headers=bearer(tok)).json()["status"] == "MANUAL_REVIEW"
+    client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/decision", json={"decision": "REJECTED", "reason": "private reviewer note"}, headers=auth(t))
+    with get_engine().begin() as c:
+        c.execute(text("update freda_verify.verifications set expires_at = now() - interval '1 day'"))
+    r = client.get("/api/v1/session", headers=bearer(tok))
+    assert r.status_code == 200 and r.json()["status"] == "REJECTED" and "private reviewer note" not in r.text      # outcome yes, reviewer note never
+    assert up(client, tok, "selfie").status_code == 409                                                               # but nothing can be uploaded any more

@@ -157,7 +157,7 @@ def get_session(request: Request, authorization: str | None = Header(default=Non
     if not v:
         raise unauthorized("Invalid session")
     request.state.org_id = v.organization_id
-    if v.expires_at <= now():
+    if v.expires_at <= now() and v.status == "PENDING":          # a submitted or decided verification can still be read (the customer may come back for the result)
         raise AppError(410, "session_expired", "This verification link has expired")
     return v
 

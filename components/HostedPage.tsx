@@ -106,7 +106,7 @@ export default function HostedPage() {
   const [sendErr, setSendErr] = useState(false);
   const [copied, setCopied] = useState(false);
   const [token, setToken] = useState("");
-  const [sessErr, setSessErr] = useState(false);
+  const [sessErr, setSessErr] = useState(false), [result, setResult] = useState<string>("");
   useEffect(() => {
     const tk = tokenFromHash();
     setToken(tk);
@@ -117,6 +117,7 @@ export default function HostedPage() {
           const r = await sessionFetch("/session", tk);
           if (!r.ok) throw new Error(String(r.status));
           const d = (await r.json()) as SessionData; const b = d.branding;
+          if (d.status && d.status !== "PENDING" && d.status !== "EXPIRED") { setResult(d.status); setStep("done"); }   // the customer came back: show the outcome
           let logo: string | null = null;
           if (b.has_logo) { try { const lr = await sessionFetch("/session/logo", tk); if (lr.ok) { logo = URL.createObjectURL(await lr.blob()); urls.current.add(logo); } } catch { /* page works without the logo */ } }
           const docs: Record<DocKey, boolean> = { id: b.docs.includes("id"), passport: b.docs.includes("passport"), license: b.docs.includes("license") };
@@ -203,8 +204,19 @@ export default function HostedPage() {
       try { const r = await sessionFetch("/session/complete", token, { method: "POST" }); if (!r.ok) throw new Error(String(r.status)); } catch { setSendErr(true); setBusy(false); return; }
       setBusy(false);
     }
+    if (token) setResult("MANUAL_REVIEW");
     wipe(); setStep("done");
   };
+
+  // after submission the outcome comes from a person: poll for it (every 8 s, up to ~20 min) and show it as soon as it is decided
+  useEffect(() => {
+    if (step !== "done" || !token || (result !== "MANUAL_REVIEW" && result !== "PENDING")) return;
+    let n = 0; const iv = setInterval(async () => {
+      if (++n > 150) return clearInterval(iv);
+      try { const r = await sessionFetch("/session", token); if (r.ok) { const d = (await r.json()) as { status?: string }; if (d.status && d.status !== "MANUAL_REVIEW") setResult(d.status); } } catch { /* keep waiting */ }
+    }, 8000);
+    return () => clearInterval(iv);
+  }, [step, token, result]);
   const restart = () => { wipe(); setKind(null); setAgree(false); setStep("welcome"); };
 
   const Btn = ({ children, onClick, disabled, ghost }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; ghost?: boolean }) => (
@@ -406,9 +418,9 @@ export default function HostedPage() {
         {step === "done" && (<>
           <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
             <div className="relative grid h-28 w-28 place-items-center"><span className="absolute inset-0 rounded-full" style={{ background: tint }} /><span className="absolute inset-4 rounded-full" style={{ background: `${c.color}33` }} />
-              <span className="relative grid h-16 w-16 place-items-center rounded-full" style={{ background: c.color, color: fg }}><Ic d="M5 12.5l4.500 4.500L19 7.500" className="h-8 w-8" /></span></div>
-            <h2 className="mt-6 font-display text-2xl font-extrabold tracking-tight">{token ? t.doneT : t.demoDoneT}</h2>
-            <p className="mt-3 max-w-xs text-[15px] leading-snug" style={{ color: mut }}>{token ? t.doneS : t.demoDone}</p>
+              <span className="relative grid h-16 w-16 place-items-center rounded-full" style={{ background: token && result === "REJECTED" ? "#D92D20" : token && result === "APPROVED" ? "#12B76A" : c.color, color: token && (result === "REJECTED" || result === "APPROVED") ? "#fff" : fg }}><Ic d={token && result === "REJECTED" ? "M6 6l12 12M18 6L6 18" : "M5 12.5l4.500 4.500L19 7.500"} className="h-8 w-8" /></span></div>
+            <h2 className="mt-6 font-display text-2xl font-extrabold tracking-tight">{!token ? t.demoDoneT : result === "APPROVED" ? t.resOk : result === "REJECTED" ? t.resNo : t.doneT}</h2>
+            <p className="mt-3 max-w-xs text-[15px] leading-snug" style={{ color: mut }}>{!token ? t.demoDone : result === "APPROVED" ? t.resOkS : result === "REJECTED" ? t.resNoS : t.doneS}</p>
           </div>
           <Btn onClick={restart}>{t.back} {name}</Btn><Secured />
         </>)}

@@ -21,7 +21,7 @@ type Dict = {
   docT: string; docS: string; issued: string; change: string; id: string; passport: string; license: string;
   idS: string; passportS: string; licenseS: string; tips: string;
   selfieT: string; selfieS: string; selfieB: string; selfieTips: string;
-  doneT: string; doneS: string; back: string; redirect: string;
+  doneT: string; doneS: string; resOk: string; resOkS: string; resNo: string; resNoS: string; back: string; redirect: string;
   frontT: string; frontS: string; backT: string; backS: string; pageT: string; pageS: string;
   takeCam: string; upload: string; retake: string; useAnyway: string; capture: string; cancel: string; camDenied: string;
   qGood: string; qDark: string; qBright: string; qBlur: string; reviewT: string; reviewS: string; submit: string;
@@ -45,7 +45,7 @@ export const T: Record<Lang, Dict> = {
     id: "National ID card", passport: "Passport", license: "Driver's license",
     idS: "Front and back", passportS: "Photo page", licenseS: "Front and back", tips: "Good lighting · No glare · All corners visible",
     selfieT: "Take a selfie", selfieS: "Center your face in the oval. We will then ask you to turn your head left or right.", selfieB: "Take selfie", selfieTips: "Remove glasses · Neutral face · Good light",
-    doneT: "Verification submitted", doneS: "Thank you! We are reviewing your information. You will be notified of the result shortly.", back: "Back to", redirect: "You will be redirected automatically.",
+    doneT: "Verification submitted", doneS: "Thank you! We are reviewing your information. You will be notified of the result shortly.", resOk: "Identity verified", resOkS: "Your verification was approved. You can go back to the service.", resNo: "Verification not approved", resNoS: "We could not approve your verification. Please contact the service for help.", back: "Back to", redirect: "You will be redirected automatically.",
     frontT: "Front of your document", frontS: "Place the front inside the frame.", backT: "Back of your document", backS: "Now turn it over and capture the back.", pageT: "Passport photo page", pageS: "Open the passport to the photo page.",
     takeCam: "Use camera", upload: "Upload a photo", retake: "Retake", useAnyway: "Use anyway", capture: "Capture", cancel: "Cancel", camDenied: "Camera unavailable. You can upload a photo instead.",
     qGood: "Looks good", qDark: "Too dark — find better light", qBright: "Too bright or glare", qBlur: "Blurry — hold steady", reviewT: "Review your photos", reviewS: "Make sure everything is clear and readable.", submit: "Submit",
@@ -68,7 +68,7 @@ export const T: Record<Lang, Dict> = {
     id: "Carte d'identité nationale", passport: "Passeport", license: "Permis de conduire",
     idS: "Recto et verso", passportS: "Page photo", licenseS: "Recto et verso", tips: "Bon éclairage · Sans reflet · Coins visibles",
     selfieT: "Prenez un selfie", selfieS: "Centrez votre visage dans l'ovale. Nous vous demanderons ensuite de tourner la tête à gauche ou à droite.", selfieB: "Prendre le selfie", selfieTips: "Sans lunettes · Visage neutre · Bonne lumière",
-    doneT: "Vérification envoyée", doneS: "Merci ! Nous examinons vos informations. Vous serez informé du résultat sous peu.", back: "Retour à", redirect: "Vous serez redirigé automatiquement.",
+    doneT: "Vérification envoyée", doneS: "Merci ! Nous examinons vos informations. Vous serez informé du résultat sous peu.", resOk: "Identité vérifiée", resOkS: "Votre vérification a été approuvée. Vous pouvez retourner au service.", resNo: "Vérification non approuvée", resNoS: "Nous n'avons pas pu approuver votre vérification. Contactez le service pour de l'aide.", back: "Retour à", redirect: "Vous serez redirigé automatiquement.",
     frontT: "Recto de votre document", frontS: "Placez le recto dans le cadre.", backT: "Verso de votre document", backS: "Retournez-le et capturez le verso.", pageT: "Page photo du passeport", pageS: "Ouvrez le passeport à la page photo.",
     takeCam: "Utiliser la caméra", upload: "Téléverser une photo", retake: "Reprendre", useAnyway: "Utiliser quand même", capture: "Capturer", cancel: "Annuler", camDenied: "Caméra indisponible. Vous pouvez téléverser une photo.",
     qGood: "Image correcte", qDark: "Trop sombre — cherchez plus de lumière", qBright: "Trop clair ou reflet", qBlur: "Flou — restez stable", reviewT: "Vérifiez vos photos", reviewS: "Assurez-vous que tout est net et lisible.", submit: "Envoyer",
@@ -91,7 +91,7 @@ export const T: Record<Lang, Dict> = {
     id: "Kat idantite nasyonal", passport: "Paspò", license: "Pèmi kondwi",
     idS: "Devan ak dèyè", passportS: "Paj foto a", licenseS: "Devan ak dèyè", tips: "Bon limyè · Pa gen refle · Tout kwen yo vizib",
     selfieT: "Pran yon selfi", selfieS: "Mete figi w nan ovòl la. Apre nou pral mande w vire tèt ou goch oswa dwat.", selfieB: "Pran selfi a", selfieTips: "Retire linèt · Figi nòmal · Bon limyè",
-    doneT: "Verifikasyon an voye", doneS: "Mèsi! N ap egzamine enfòmasyon w yo. N ap enfòme w rezilta a talè.", back: "Retounen sou", redirect: "W ap retounen otomatikman.",
+    doneT: "Verifikasyon an voye", doneS: "Mèsi! N ap egzamine enfòmasyon w yo. N ap enfòme w rezilta a talè.", resOk: "Idantite verifye", resOkS: "Verifikasyon w apwouve. Ou ka retounen nan sèvis la.", resNo: "Verifikasyon an pa apwouve", resNoS: "Nou pa t kapab apwouve verifikasyon w. Kontakte sèvis la pou jwenn èd.", back: "Retounen sou", redirect: "W ap retounen otomatikman.",
     frontT: "Devan dokiman w", frontS: "Mete devan an andedan kadre a.", backT: "Dèyè dokiman w", backS: "Kounye a vire l epi pran dèyè a.", pageT: "Paj foto paspò a", pageS: "Louvri paspò a nan paj foto a.",
     takeCam: "Itilize kamera", upload: "Voye yon foto", retake: "Refè", useAnyway: "Itilize l kanmenm", capture: "Pran foto", cancel: "Anile", camDenied: "Kamera pa disponib. Ou ka voye yon foto.",
     qGood: "Foto a bon", qDark: "Twò nwa — chèche plis limyè", qBright: "Twò klè oswa gen refle", qBlur: "Flou — pa bouje", reviewT: "Revize foto w yo", reviewS: "Asire w tout bagay klè epi lizib.", submit: "Voye",
