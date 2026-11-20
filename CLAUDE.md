@@ -552,6 +552,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-20 — Brevo e-mails redesigned (`mailer.render_html`): branded table layout with the logo (`{FV_HOSTED_URL}/logo.png`), title, button + copy-paste link, footer; all dynamic text escaped; checked in a headless browser render only, NOT in real mail clients (Gmail/Outlook). Real sending hit HTTP 401 first (wrong Brevo key type); the owner replaced the key.
 - 2026-11-20 — Face evaluation enlarged to 39 usable people: FRR 12.8 % and FAR 1.35 % at 0.363 (details in 3.8); threshold unchanged; data deleted.
 - 2026-11-20 — First real face-comparison evaluation on 17 people (owner-supplied merchant onboarding files, deleted afterwards): at threshold 0.363 FRR 11.8 % (3–34 %), FAR 0.37 % (0.06–2.1 %), AUC 0.95; 19 % of files had no detectable face; 'selfie holding the ID' contains the ID portrait which would match trivially, so a dominance guard (`ambiguous` status, 134 tests) was added; band labels made descriptive. Details in 3.8.
 - 2026-11-20 — `backend/tools/face_eval.py` (+ `face.embed/cosine` helpers, 2 tests, 133 total) to measure genuine/impostor face-comparison error rates on consented photos; sample-size guidance in the final message of this session (≈30 people for a first useful picture, ≥100 genuine pairs to bound FRR).
