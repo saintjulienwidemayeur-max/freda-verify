@@ -115,3 +115,44 @@ def test_filler_noise_and_docno_repairs_are_decided_by_check_digits():
     line2 = "O80N0S1XP" + "<"                                          # arbitrary: just prove the swap generator yields O<->0 variants
     vs = ocr._docno_variants([TD3[0], line2 + TD3[1][10:]], "TD3")
     assert any(v[1][:9] == "080N0S1XP" for v in vs) and parse_mrz(TD3)
+
+
+def _best(raw):
+    from app.services.mrz import parse_mrz
+    from app.services.ocr import candidates
+    best = None
+    for c in candidates(raw):
+        try:
+            r = parse_mrz(c, fix_ocr=not getattr(c, "shifted", False))
+        except Exception:  # noqa: BLE001, S112
+            continue
+        if getattr(c, "shifted", False) and not (r.all_checks_passed and not r.warnings and r.sex in ("M", "F") and all(a == "<" or a == b for a, b in zip(c[1][10:13], c[0][2:5], strict=False))):
+            continue
+        if "<" in r.nationality:
+            from dataclasses import replace
+            r = replace(r, nationality=r.issuing_country)
+        if best is None or sum(r.checks.values()) > sum(best.checks.values()):
+            best = r
+    return best
+
+
+def test_one_dropped_character_in_the_data_line_is_repaired_by_the_check_digits():
+    # real failure seen on a phone: a character of the nationality was lost, every later field slid by one and all dates / sex were garbage
+    l1, l2 = TD3
+    dropped = l2[:12] + l2[13:]                       # 'UTO' -> 'UT'
+    assert len(dropped) == 43
+    r = _best(l1 + "\n" + dropped)
+    assert r.all_checks_passed and r.document_number == "L898902C3" and r.birth_date == "1974-08-12" and r.nationality == "UTO" and r.sex == "F"
+
+
+def test_one_extra_character_and_two_dropped_characters_are_repaired_too():
+    l1, l2 = TD3
+    assert _best(l1 + "\n" + l2[:11] + "X" + l2[11:]).all_checks_passed                     # one extra character (45 chars)
+    assert _best(l1 + "\n" + l2[:11] + l2[13:]).all_checks_passed                           # two dropped in the nationality zone
+
+
+def test_a_misaligned_reading_never_passes_by_accident_on_wrong_text():
+    l1, l2 = TD3
+    garbage = "".join("0123456789"[(i * 7) % 10] for i in range(40))
+    r = _best(l1 + "\n" + garbage)
+    assert r is None or not r.all_checks_passed

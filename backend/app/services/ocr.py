@@ -10,7 +10,7 @@ Output is advice for a human reviewer, never an automatic decision.
 import io
 import shutil
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.services.mrz import LAYOUTS, MrzError, MrzResult, parse_mrz
 
@@ -125,15 +125,53 @@ def repair_variants(cand: list[str]) -> list[list[str]]:
     return allv + extra                                     # repaired names first: on equal check-digit scores the first variant wins
 
 
-def candidates(raw: str) -> list[list[str]]:
+class Cand(list):
+    """A candidate set of MRZ lines. `shifted` = the data line was length-repaired (a character inserted / deleted): such a candidate is trusted ONLY if every check digit passes."""
+    shifted = False
+
+
+def _line2_options(line: str, size: int) -> list[str]:
+    """The data line of a 2-line document (passport / TD2). Besides the usual pad / trim at the END, a SINGLE dropped character (or a single extra one) anywhere shifts every field after
+    it, so all check digits fail although the text is almost right. Try an insertion ('<' placeholder) at each position, or a deletion, and let the ICAO check digits choose: a wrong
+    alignment passes several independent check digits by chance only about 1 time in 10,000. Two dropped characters are tried only inside the nationality / date zone."""
+    out = [x for x in [_fit(line, size)] if x]
+    d = size - len(line)
+    if d == 1:
+        out += [line[:p] + "<" + line[p:] for p in range(1, size - 1)]
+    elif d == 2:
+        out += [line[:p] + "<" + line[p:q] + "<" + line[q:] for p in range(9, 15) for q in range(p, 16)]
+    elif d == -1:
+        out += [line[:p] + line[p + 1:] for p in range(0, len(line))]
+    return list(dict.fromkeys(out))
+
+
+def candidates(raw: str) -> list[Cand]:
     lines = [_normalise(x) for x in raw.splitlines()]
     lines = [x for x in lines if len(x) >= 25]
-    out: list[list[str]] = []
+    out: list[Cand] = []
     for (size, count) in LAYOUTS:
         for i in range(0, len(lines) - count + 1):
-            fitted = [_fit(x, size) for x in lines[i:i + count]]
-            if all(fitted):
-                out.extend(repair_variants([x for x in fitted if x]))
+            window = lines[i:i + count]
+            first = [_fit(x, size) for x in window]
+            if not all(first):
+                if count == 2 and first[0] and abs(len(window[1]) - size) <= 3:       # first line fine, data line off by a few characters
+                    pass
+                else:
+                    continue
+            if count == 2:
+                l1 = _fit(window[0], size)
+                if not l1:
+                    continue
+                std = _fit(window[1], size)
+                for l2 in _line2_options(window[1], size):
+                    if l2 == std:
+                        out.extend(Cand(v) for v in repair_variants([l1, l2]))
+                    else:                                                    # length repair: ONE plain variant per position (no other repairs), judged very strictly in read_mrz
+                        c = Cand([l1, l2])
+                        c.shifted = True
+                        out.append(c)
+            else:
+                out.extend(repair_variants([x for x in first if x]))
     return out
 
 
@@ -175,9 +213,15 @@ def read_mrz(image: bytes, quick: bool = False) -> OcrOutcome:
         seen: set[tuple] = set()
         for cand in candidates(text):
             try:
-                res = parse_mrz(cand, fix_ocr=True)
+                res = parse_mrz(cand, fix_ocr=not getattr(cand, "shifted", False))
             except (MrzError, KeyError, IndexError, ValueError):
                 continue
+            if getattr(cand, "shifted", False) and not (res.all_checks_passed and not res.warnings and res.sex in ("M", "F") and res.document_number.replace("<", "").isalnum()
+                                                        and all(a == "<" or a == b for a, b in zip(cand[1][10:13], cand[0][2:5], strict=False))):
+                continue          # a length repair is trusted ONLY if every check digit passes, dates / sex / numbers are plausible AND the nationality equals the issuing country (a '<' hole is allowed:
+                                  # that is where the lost character was). 44 tries x 4 digits could otherwise pass by chance (measured: false accepts went from 6 to 14 per 360 pages)
+            if "<" in res.nationality and len(res.issuing_country) == 3 and res.issuing_country.isalpha():
+                res = replace(res, nationality=res.issuing_country)          # a repaired insertion left a filler there; nationality is not check-digited, the issuing country is the usual value
             sc = _score(res)
             if best is None or sc > best[0]:
                 best = (sc, res, cand)
