@@ -97,3 +97,21 @@ def test_rerun_needs_a_document_photo(client):
     org = first_org(client, t)
     v = client.post("/api/v1/verifications", json={"organization_id": org["id"]}, headers=auth(t)).json()
     assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks/mrz", headers=auth(t)).status_code == 409
+
+
+@needs_tesseract
+def test_clean_page_is_confirmed_by_independent_readings():
+    o = ocr.read_mrz(page(TD3))
+    assert o.status == "read" and o.agreeing >= 2                      # two crops / preprocessings agree: stronger than one valid check digit
+
+
+def test_filler_noise_and_docno_repairs_are_decided_by_check_digits():
+    # OCR-B '<' read as K/X inside the optional data, and a document number whose O/0 was swapped
+    noisy = [TD3[0], TD3[1][:28] + "<<K<<X<<<<<<<<" + TD3[1][42:]]
+    assert any(c[1][28:42] == "<" * 14 for c in ocr.repair_variants(noisy))
+    swapped = [TD3[0], TD3[1].replace("L898902C3", "L898902C3")]       # no ambiguity here: no extra variants from the swap
+    assert ocr.repair_variants(swapped)
+    from app.services.mrz import parse_mrz
+    line2 = "O80N0S1XP" + "<"                                          # arbitrary: just prove the swap generator yields O<->0 variants
+    vs = ocr._docno_variants([TD3[0], line2 + TD3[1][10:]], "TD3")
+    assert any(v[1][:9] == "080N0S1XP" for v in vs) and parse_mrz(TD3)

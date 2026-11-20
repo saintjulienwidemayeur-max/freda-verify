@@ -6,7 +6,7 @@ import { can, useAuth } from "@/lib/auth";
 type V = { id: string; status: string; env: string; reference: string | null; consent_given: boolean; created_at: string; expires_at: string; submitted_at: string | null; decided_at: string | null; decision_reason: string | null; media_count: number };
 type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string | null };
 type Mrz = { format: string; document_type: string; issuing_country: string; surname: string; given_names: string; document_number: string; nationality: string; birth_date: string | null; sex: string; expiry_date: string | null; checks: Record<string, boolean>; all_checks_passed: boolean; expired: boolean | null; ocr_corrections: number; warnings: string[] };
-type Checks = { engine_available: boolean; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null } | null };
+type Checks = { engine_available: boolean; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie" };
 
@@ -63,6 +63,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           {checks?.mrz?.result && (() => { const r = checks.mrz!.result!; return (
             <div className="mt-3 text-sm">
               <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${r.all_checks_passed ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{r.all_checks_passed ? "All check digits valid" : "Check digits do NOT match"}</span>
+              {(checks.mrz!.agreeing ?? 0) >= 2 ? <span className="ml-2 rounded-full bg-[#E7F7EF] px-2.5 py-0.5 font-mono text-xs text-[#067647]">{checks.mrz!.agreeing} readings agree</span> : <span className="ml-2 rounded-full bg-[#FEF3E2] px-2.5 py-0.5 font-mono text-xs text-[#B54708]">single reading: verify on the photo</span>}
               {r.expired && <span className="ml-2 rounded-full bg-[#FDECEA] px-2.5 py-0.5 font-mono text-xs text-[#B42318]">EXPIRED</span>}
               <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-xs">
                 {([["Format", r.format], ["Document type", r.document_type], ["Issuing country", r.issuing_country], ["Surname", r.surname], ["Given names", r.given_names], ["Document number", r.document_number], ["Nationality", r.nationality], ["Birth date", r.birth_date ?? "—"], ["Sex", r.sex], ["Expiry date", r.expiry_date ?? "—"]] as [string, string][]).map(([k, val]) => (<div key={k} className="contents"><dt className="text-navy/55">{k}</dt><dd className="font-mono">{val}</dd></div>))}
@@ -71,7 +72,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
               {r.ocr_corrections > 0 && <p className="mt-2 text-xs text-[#B54708]">{r.ocr_corrections} character(s) were auto-corrected (typical OCR confusions): compare with the photo.</p>}
               {r.warnings.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-[#B54708]">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
             </div>); })()}
-          <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. Valid check digits show the text is internally consistent, not that the document is genuine. Not tested on real passports yet.</p>
+          <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. One check digit is a single digit: a wrong reading passes it about 1 time in 10, so compare the document number with the photo, especially for a single reading. Nationality, sex and names have no check digit. Valid check digits show the text is internally consistent, not that the document is genuine. Tested on generated pages only, never on real passports.</p>
         </div>
       )}
 

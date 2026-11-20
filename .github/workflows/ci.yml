@@ -38,7 +38,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12", cache: pip, cache-dependency-path: backend/requirements-dev.txt}
-      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr fonts-ocr-b
+      - name: OCR-B model for Tesseract (pinned by SHA-256)
+        run: |
+          d="$(dirname "$(find /usr/share/tesseract-ocr -name eng.traineddata | head -1)")"
+          sudo curl -fsSL -o "$d/ocrb.traineddata" https://raw.githubusercontent.com/Shreeshrii/tessdata_ocrb/master/ocrb.traineddata
+          echo "f4631039e140e674518e8adb39b41751ef62e6338686d5fff6c1c707e591b829  $d/ocrb.traineddata" | sudo sha256sum -c -
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - name: migrations are in sync with the models

@@ -176,7 +176,7 @@ def run_mrz_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
                 best = (sc, m.kind, o)
         if best:
             _, source, outcome = best
-        payload = {"result": outcome.result.to_dict() if outcome.result else None, "lines": outcome.lines}
+        payload = {"result": outcome.result.to_dict() if outcome.result else None, "lines": outcome.lines, "agreeing": outcome.agreeing}
         row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz")) or VerificationCheck(
             verification_id=v.id, organization_id=v.organization_id, kind="mrz")
         row.status, row.source, row.data, row.created_at = outcome.status, source, encrypt_bytes(json.dumps(payload).encode()), now()
@@ -196,7 +196,7 @@ def _check_out(row: VerificationCheck | None) -> dict | None:
     if not row:
         return None
     payload = json.loads(decrypt_bytes(row.data))
-    return {"status": row.status, "source": row.source, "created_at": row.created_at, "result": payload.get("result"), "lines": payload.get("lines")}
+    return {"status": row.status, "source": row.source, "created_at": row.created_at, "result": payload.get("result"), "lines": payload.get("lines"), "agreeing": payload.get("agreeing", 0)}
 
 
 # ───────── photos uploaded by the end user (session token) ─────────
