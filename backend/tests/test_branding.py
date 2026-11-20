@@ -71,3 +71,62 @@ def test_cors_preflight_allows_put_from_the_app_origin(client):
     r = client.options("/api/v1/organizations/00000000-0000-0000-0000-000000000000/branding",
                        headers={"Origin": "https://app.example.test", "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "authorization,content-type"})
     assert r.status_code == 200 and "PUT" in r.headers["access-control-allow-methods"]
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+WEBP = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 64
+
+
+def logo_url(org):
+    return url(org) + "/logo"
+
+
+def put_logo(client, t, org, data=PNG, ctype="image/png"):
+    return client.put(logo_url(org), content=data, headers={**auth(t), "Content-Type": ctype})
+
+
+def test_logo_roundtrip_flag_and_delete(client):
+    t = register(client)
+    org = first_org(client, t)
+    assert client.get(url(org), headers=auth(t)).json()["has_logo"] is False
+    assert client.get(logo_url(org), headers=auth(t)).status_code == 404
+    assert put_logo(client, t, org).status_code == 204
+    g = client.get(logo_url(org), headers=auth(t))
+    assert g.status_code == 200 and g.content == PNG and g.headers["content-type"] == "image/png" and g.headers["x-content-type-options"] == "nosniff"
+    assert client.get(url(org), headers=auth(t)).json()["has_logo"] is True
+    assert put_logo(client, t, org, WEBP, "image/webp").status_code == 204          # replace
+    assert client.get(logo_url(org), headers=auth(t)).content == WEBP
+    assert client.delete(logo_url(org), headers=auth(t)).status_code == 204
+    assert client.get(url(org), headers=auth(t)).json()["has_logo"] is False
+    actions = [a["action"] for a in client.get(f"/api/v1/organizations/{org['id']}/audit-logs", headers=auth(t)).json()]
+    assert "branding.logo_updated" in actions and "branding.logo_deleted" in actions
+
+
+@pytest.mark.parametrize("data,ctype,code", [
+    (b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>", "image/svg+xml", 422),
+    (b"<svg/>" + b" " * 64, "image/png", 422),                       # declared PNG, not a PNG
+    (b"GIF89a" + b"\x00" * 64, "image/gif", 422),
+    (PNG, "text/html", 422),
+    (b"", "image/png", 422),
+    (PNG + b"\x00" * (512 * 1024), "image/png", 413),
+])
+def test_bad_logos_are_rejected(client, data, ctype, code):
+    t = register(client)
+    org = first_org(client, t)
+    assert put_logo(client, t, org, data, ctype).status_code == code
+    assert client.get(url(org), headers=auth(t)).json()["has_logo"] is False
+
+
+def test_logo_is_tenant_isolated_and_viewer_cannot_write(client):
+    a = register(client, "a@a.example", "Org A")
+    b = register(client, "b@b.example", "Org B")
+    org_a, org_b = first_org(client, a), first_org(client, b)
+    assert put_logo(client, a, org_a).status_code == 204
+    assert client.get(logo_url(org_a), headers=auth(b)).status_code == 404
+    assert put_logo(client, b, org_a).status_code == 404
+    assert client.delete(logo_url(org_a), headers=auth(b)).status_code == 404
+    assert client.get(logo_url(org_b), headers=auth(b)).status_code == 404         # B has none: A's logo never leaks
+    client.post(f"/api/v1/organizations/{org_a['id']}/members", json={"email": "b@b.example", "role": "viewer"}, headers=auth(a))
+    assert client.get(logo_url(org_a), headers=auth(b)).status_code == 200
+    assert put_logo(client, b, org_a).status_code == 403
+    assert client.delete(logo_url(org_a), headers=auth(b)).status_code == 403

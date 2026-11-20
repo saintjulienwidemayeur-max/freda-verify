@@ -27,13 +27,14 @@ export const tokenStore = {
 export const setAccessToken = (t: string | null) => { access = t; };
 export const setSignedOutHandler = (fn: (() => void) | null) => { onSignedOut = fn; };
 
-async function raw(path: string, init: RequestInit & { json?: unknown; auth?: boolean }): Promise<Response> {
+async function raw(path: string, init: RequestInit & { json?: unknown; auth?: boolean; blob?: Blob }): Promise<Response> {
   if (!API_URL) throw new ApiError(0, "not_configured", "The API address is not configured (NEXT_PUBLIC_API_URL).");
   const headers: Record<string, string> = { Accept: "application/json" };
   if (init.json !== undefined) headers["Content-Type"] = "application/json";
+  if (init.blob) headers["Content-Type"] = init.blob.type;
   if (init.auth !== false && access) headers.Authorization = `Bearer ${access}`;
   try {
-    return await fetch(`${API_URL}/api/v1${path}`, { method: init.method ?? "GET", headers, body: init.json !== undefined ? JSON.stringify(init.json) : undefined, credentials: "omit", signal: init.signal });
+    return await fetch(`${API_URL}/api/v1${path}`, { method: init.method ?? "GET", headers, body: init.blob ?? (init.json !== undefined ? JSON.stringify(init.json) : undefined), credentials: "omit", signal: init.signal });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError(0, "network", "Cannot reach the server. Check your connection and try again.");
@@ -70,13 +71,23 @@ export function refreshSession(): Promise<boolean> {
   return inflight;
 }
 
-export async function api<T = unknown>(path: string, opts: { method?: string; json?: unknown; auth?: boolean; signal?: AbortSignal } = {}): Promise<T> {
+type Opts = { method?: string; json?: unknown; blob?: Blob; auth?: boolean; signal?: AbortSignal };
+export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T> {
   let r = await raw(path, opts);
   if (r.status === 401 && opts.auth !== false && tokenStore.get()) {
     if (await refreshSession()) r = await raw(path, opts);
     else onSignedOut?.();
   }
   return parse<T>(r);
+}
+
+/** Authenticated download of binary data (e.g. the logo). Returns null on 404. */
+export async function apiBlob(path: string): Promise<Blob | null> {
+  let r = await raw(path, {});
+  if (r.status === 401 && tokenStore.get()) { if (await refreshSession()) r = await raw(path, {}); else onSignedOut?.(); }
+  if (r.status === 404) return null;
+  if (!r.ok) return parse<never>(r);
+  return r.blob();
 }
 
 /** Only same-site relative paths are accepted as a post-login destination (no open redirect). */

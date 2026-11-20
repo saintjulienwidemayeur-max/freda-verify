@@ -1,6 +1,7 @@
+import hashlib
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -8,7 +9,7 @@ from app.core.deps import OrgCtx, Principal, get_current_user, get_principal, or
 from app.core.errors import AppError, forbidden, not_found
 from app.core.security import generate_api_key, new_hex
 from app.db.session import get_db
-from app.models import ApiKey, AuditLog, Branding, Membership, Organization, RequestLog, Role, User, now
+from app.models import ApiKey, AuditLog, Branding, BrandingLogo, Membership, Organization, RequestLog, Role, User, now
 from app.schemas import BrandingIn, BrandingOut, KeyCreatedOut, KeyIn, KeyOut, MemberIn, MemberOut, OrgIn, OrgOut, RoleIn
 from app.services import audit
 
@@ -55,16 +56,28 @@ def rename_org(body: OrgIn, request: Request, ctx: OrgCtx = Depends(org_access("
 
 
 # ───────── white label (branding of the hosted page) ─────────
-def _branding_out(b: Branding | None) -> BrandingOut:
+LOGO_MAX = 512 * 1024
+_LOGO_TYPES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff"}
+
+
+def _logo_ok(ctype: str, data: bytes) -> bool:
+    """Declared type must match the real bytes (magic number). SVG is refused on purpose (script risk); the file is stored as is, never rendered server-side."""
+    if ctype == "image/webp":
+        return len(data) > 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    sig = _LOGO_TYPES.get(ctype)
+    return bool(sig) and data.startswith(sig) and len(data) > 32
+
+
+def _branding_out(b: Branding | None, has_logo: bool = False) -> BrandingOut:
     if not b:
-        return BrandingOut()
+        return BrandingOut(has_logo=has_logo)
     return BrandingOut(name=b.name, color=b.color, theme=b.theme, shape=b.shape, lang=b.lang, title=b.title, subtitle=b.subtitle, support_email=b.support_email,
-                       docs=list(dict.fromkeys(b.docs)), redirect_url=b.redirect_url, domain=b.domain, hide_powered=b.hide_powered, updated_at=b.updated_at)
+                       docs=list(dict.fromkeys(b.docs)), redirect_url=b.redirect_url, domain=b.domain, hide_powered=b.hide_powered, updated_at=b.updated_at, has_logo=has_logo)
 
 
 @router.get("/organizations/{org_id}/branding", response_model=BrandingOut)
 def get_branding(ctx: OrgCtx = Depends(org_access("branding:read")), db: Session = Depends(get_db)):
-    return _branding_out(db.get(Branding, ctx.org.id))
+    return _branding_out(db.get(Branding, ctx.org.id), db.get(BrandingLogo, ctx.org.id) is not None)
 
 
 @router.put("/organizations/{org_id}/branding", response_model=BrandingOut)
@@ -76,7 +89,50 @@ def put_branding(body: BrandingIn, request: Request, ctx: OrgCtx = Depends(org_a
     db.add(b)
     audit.record(db, request, "branding.updated", org_id=ctx.org.id, user_id=ctx.user.id, target_type="organization", target_id=ctx.org.id)
     db.commit()
-    return _branding_out(b)
+    return _branding_out(b, db.get(BrandingLogo, ctx.org.id) is not None)
+
+
+@router.put("/organizations/{org_id}/branding/logo", status_code=204)
+async def put_logo(request: Request, ctx: OrgCtx = Depends(org_access("branding:write")), db: Session = Depends(get_db)):
+    """Raw image bytes in the body (Content-Type image/png | image/jpeg | image/webp), at most 512 KB."""
+    ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > LOGO_MAX:
+        raise AppError(413, "logo_too_large", "Logo must be 512 KB or smaller")
+    buf = bytearray()
+    async for chunk in request.stream():                       # never buffer more than the limit, whatever Content-Length says
+        buf += chunk
+        if len(buf) > LOGO_MAX:
+            raise AppError(413, "logo_too_large", "Logo must be 512 KB or smaller")
+    data = bytes(buf)
+    if not _logo_ok(ctype, data):
+        raise AppError(422, "invalid_logo", "Use a PNG, JPEG or WebP image (SVG is not accepted)")
+    row = db.get(BrandingLogo, ctx.org.id) or BrandingLogo(organization_id=ctx.org.id)
+    row.content_type, row.size, row.sha256, row.data = ctype, len(data), hashlib.sha256(data).hexdigest(), data
+    row.updated_by, row.updated_at = ctx.user.id, now()
+    db.add(row)
+    audit.record(db, request, "branding.logo_updated", org_id=ctx.org.id, user_id=ctx.user.id, target_type="organization", target_id=ctx.org.id)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/organizations/{org_id}/branding/logo")
+def get_logo(ctx: OrgCtx = Depends(org_access("branding:read")), db: Session = Depends(get_db)):
+    row = db.get(BrandingLogo, ctx.org.id)
+    if not row:
+        raise not_found("No logo")
+    return Response(row.data, media_type=row.content_type, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+                                                                    "Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+@router.delete("/organizations/{org_id}/branding/logo", status_code=204)
+def delete_logo(request: Request, ctx: OrgCtx = Depends(org_access("branding:write")), db: Session = Depends(get_db)):
+    row = db.get(BrandingLogo, ctx.org.id)
+    if row:
+        db.delete(row)
+        audit.record(db, request, "branding.logo_deleted", org_id=ctx.org.id, user_id=ctx.user.id, target_type="organization", target_id=ctx.org.id)
+        db.commit()
+    return Response(status_code=204)
 
 
 # ───────── members ─────────

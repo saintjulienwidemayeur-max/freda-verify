@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, apiBlob, ApiError } from "@/lib/api";
 import { can, useAuth } from "@/lib/auth";
 import HostedPreview, { T, type Cfg, type DocKey, type Step } from "./HostedPreview";
 
@@ -14,7 +14,7 @@ const isHost = (v: string) => /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?
 const isUrl = (v: string) => { try { const u = new URL(v); return u.protocol === "https:"; } catch { return false; } };
 const isMail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-type Server = { name: string; color: string; theme: Cfg["theme"]; shape: Cfg["shape"]; lang: Cfg["lang"]; title: string; subtitle: string; support_email: string; docs: DocKey[]; redirect_url: string; domain: string; hide_powered: boolean };
+type Server = { name: string; color: string; theme: Cfg["theme"]; shape: Cfg["shape"]; lang: Cfg["lang"]; title: string; subtitle: string; support_email: string; docs: DocKey[]; redirect_url: string; domain: string; hide_powered: boolean; has_logo?: boolean };
 const fromServer = (s: Server, logo: string | null): Cfg => ({
   name: s.name, logo, color: s.color.toUpperCase(), theme: s.theme, shape: s.shape, lang: s.lang, title: s.title, subtitle: s.subtitle,
   docs: { id: s.docs.includes("id"), passport: s.docs.includes("passport"), license: s.docs.includes("license") }, domain: s.domain, redirect: s.redirect_url, support: s.support_email, hidePowered: s.hide_powered,
@@ -51,7 +51,7 @@ export default function WhiteLabel() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [srvErr, setSrvErr] = useState("");
   const writable = can.editBranding(org);
-  const [logoErr, setLogoErr] = useState("");
+  const [logoErr, setLogoErr] = useState(""), [logoBusy, setLogoBusy] = useState(false);
   const [hex, setHex] = useState(DEFAULT.color);
   const urlRef = useRef<string | null>(null);
   // load the saved settings of the organization (the logo is not stored yet, so it stays empty after a reload)
@@ -59,7 +59,14 @@ export default function WhiteLabel() {
     if (!org) return;
     let live = true; setLoading(true); setSrvErr("");
     api<Server>(`/organizations/${org.id}/branding`)
-      .then((s) => { if (!live) return; const n = fromServer(s, null); setC(n); setHex(n.color); setSaved(false); })
+      .then(async (s) => {
+        let logo: string | null = null;
+        if (s.has_logo) { try { const b = await apiBlob(`/organizations/${org.id}/branding/logo`); if (b) logo = URL.createObjectURL(b); } catch { /* shown without logo */ } }
+        if (!live) { if (logo) URL.revokeObjectURL(logo); return; }
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+        urlRef.current = logo;
+        const n = fromServer(s, logo); setC(n); setHex(n.color); setSaved(false);
+      })
       .catch((e) => { if (live) setSrvErr(e instanceof ApiError ? e.message : "Could not load your settings"); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
@@ -85,14 +92,26 @@ export default function WhiteLabel() {
   }, [c]);
 
   const onLogo = (f: File | undefined) => {
-    setLogoErr(""); if (!f) return;
-    if (!["image/png", "image/jpeg", "image/svg+xml", "image/webp"].includes(f.type)) return setLogoErr("Use a PNG, JPG, SVG or WebP image.");
-    if (f.size > 1024 * 1024) return setLogoErr("Logo must be under 1 MB.");
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = URL.createObjectURL(f); set("logo", urlRef.current);
+    setLogoErr(""); if (!f || !org) return;
+    if (!writable) return setLogoErr("Your role cannot change the logo.");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(f.type)) return setLogoErr("Use a PNG, JPG or WebP image (SVG is not accepted).");
+    if (f.size > 512 * 1024) return setLogoErr("Logo must be under 512 KB.");
+    setLogoBusy(true);
+    api(`/organizations/${org.id}/branding/logo`, { method: "PUT", blob: f })
+      .then(() => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = URL.createObjectURL(f); setC((p) => ({ ...p, logo: urlRef.current })); })
+      .catch((er) => setLogoErr(er instanceof ApiError ? er.message : "Could not upload the logo"))
+      .finally(() => setLogoBusy(false));
+  };
+  const removeLogo = () => {
+    if (!org) return;
+    setLogoBusy(true); setLogoErr("");
+    api(`/organizations/${org.id}/branding/logo`, { method: "DELETE" })
+      .then(() => { if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; } setC((p) => ({ ...p, logo: null })); })
+      .catch((er) => setLogoErr(er instanceof ApiError ? er.message : "Could not remove the logo"))
+      .finally(() => setLogoBusy(false));
   };
   const color = (v: string) => { setHex(v); if (isHex(v)) set("color", v.toUpperCase()); };
-  const reset = () => { if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; } setC(DEFAULT); setHex(DEFAULT.color); setLogoErr(""); setSaved(false); };
+  const reset = () => { setC({ ...DEFAULT, logo: c.logo }); setHex(DEFAULT.color); setLogoErr(""); setSaved(false); };
 
   return (
     <>
@@ -119,11 +138,12 @@ export default function WhiteLabel() {
                   {c.logo ? <img src={c.logo} alt="Logo preview" className="max-h-12 max-w-24 object-contain" /> : c.name.trim() ? <span className="text-xs font-normal text-navy/40">No logo</span> : <img src="/logo-mark.svg" alt="Freda Verify default logo" className="h-10 w-10" />}
                 </span>
                 <label className="cursor-pointer rounded-full border border-[#d6e2ff] px-4 py-2 text-sm font-normal hover:bg-ice">Upload logo
-                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="sr-only" onChange={(e) => onLogo(e.target.files?.[0])} /></label>
-                {c.logo && <button type="button" onClick={() => set("logo", null)} className="text-xs underline">Remove</button>}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoBusy || !writable} className="sr-only" onChange={(e) => { onLogo(e.target.files?.[0]); e.target.value = ""; }} /></label>
+                {c.logo && <button type="button" disabled={logoBusy || !writable} onClick={removeLogo} className="text-xs underline disabled:opacity-50">Remove</button>}
+                {logoBusy && <span className="text-xs text-navy/50">Saving…</span>}
               </div>
               {logoErr && <p role="alert" className="mt-1 text-xs font-normal text-[#B42318]">{logoErr}</p>}
-              <p className="mt-1 text-xs font-normal text-navy/50">PNG, JPG, SVG or WebP · max 1 MB.</p>
+              <p className="mt-1 text-xs font-normal text-navy/50">PNG, JPG or WebP · max 512 KB · saved as soon as you upload it.</p>
             </div>
           </Card>
 
@@ -183,7 +203,7 @@ export default function WhiteLabel() {
           </div>
           {srvErr && <p role="alert" className="rounded-xl border border-[#f1b8b2] bg-[#FDECEA] p-3 text-sm text-[#B42318]">{srvErr}</p>}
           {!writable && <p className="text-xs text-navy/60">Your role can view these settings but not change them.</p>}
-          <p className="text-xs text-navy/50">Settings are saved to your workspace. Not stored yet: the logo (upload is for preview only), custom-domain verification and the redirect URL. The hosted page does not read these saved settings yet; the “Open the live page” link passes them in the URL.</p>
+          <p className="text-xs text-navy/50">Settings are saved to your workspace. Not active yet: custom-domain verification and the redirect URL. The logo is saved with your workspace but is not served to your customers yet. The hosted page does not read these saved settings yet; the “Open the live page” link passes them in the URL.</p>
         </form>
 
         <aside className="min-[960px]:sticky min-[960px]:top-4 min-[960px]:order-first" aria-label="Live preview">

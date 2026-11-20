@@ -146,3 +146,4 @@ class BrandingIn(_In):
 
 class BrandingOut(BrandingIn):
     updated_at: datetime | None = None
+    has_logo: bool = False

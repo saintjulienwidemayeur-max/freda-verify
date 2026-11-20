@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -134,6 +134,19 @@ class Branding(Base):
     redirect_url: Mapped[str] = mapped_column(String(500), default="")
     domain: Mapped[str] = mapped_column(String(253), default="")
     hide_powered: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class BrandingLogo(Base):
+    """Logo bytes of the hosted page, kept in PostgreSQL (small, validated PNG/JPEG/WebP only, never SVG). Kept apart from `branding` so reading
+    the settings never loads image bytes. Served only to authenticated members for now; a public, separate asset origin comes with session tokens."""
+    __tablename__ = "branding_logos"
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(20))
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
     updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
