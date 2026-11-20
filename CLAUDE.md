@@ -107,8 +107,7 @@ components/
   LiveUsage.tsx                 Real usage card on Overview
   DashShell.tsx                 Sidebar (collapsible) + top bar + **session guard** (redirects to /login?next=…), user/org card, organization switcher, sign out; `sample` prop controls the Sample/Live badge
   OverviewChart.tsx             Interactive bar chart
-  Verifications.tsx             People list/filter/search/detail/approve-reject
-  Media.tsx                     Selfie "video" player + ID front/back + lightbox
+  EmptyState.tsx                Honest empty state used by Verifications and Businesses
   Scanner.tsx                   DOCUMENT scanner with automatic capture: OpenCV.js card-edge detection, shape must match the chosen document, strict validation of the flattened crop (docValidate.ts); fails closed if OpenCV/MediaPipe cannot load
   docValidate.ts                Strict document checks: passport page = shape + face photo on the left + two MRZ text lines; ID/licence front = shape + face photo; back = shape. Also validates uploaded photos
   FaceScanner.tsx               Selfie scanner: MediaPipe face detection + ACTIVE two-step challenge (turn LEFT/RIGHT at random, then turn the OTHER way; blink only with ?blink=1), animated SVG pointing hand + chevrons + label. Fails closed if MediaPipe cannot load
@@ -117,7 +116,7 @@ components/
   HostedPage.tsx                Real end-user flow at /verify: consent, country, document, camera/upload, local quality check, review, demo finish. Config via URL params
   HostedPreview.tsx             Mock of the end-user hosted verification page (welcome, country, document, selfie, done), driven by the white-label config
   WhiteLabel.tsx                Branding form (name, logo, colors, theme, shape, language, texts, docs, domain, redirect) + phone preview
-  Businesses.tsx, ApiKeys.tsx, Logs.tsx, Settings.tsx, Support.tsx
+  ApiKeys.tsx, Logs.tsx, Settings.tsx, Support.tsx
   FaceMatch.tsx                 Landing animation (document photo vs selfie)
   Sections.tsx                  Landing sections (Platform, Developers, AML, services, FAQ...)
   AmlCard.tsx, ApiHub.tsx       Landing animations
@@ -141,14 +140,12 @@ Not yet existing: login / sign-up / password reset, hosted verification page for
 
 | Where | What is simulated |
 |---|---|
-| `components/Verifications.tsx` | 10 hard-coded people, scores, checks, reasons. Approve/Reject only changes React state (lost on refresh). |
-| `components/Media.tsx` | The "video" is a **photo animated with CSS**, not a real recording. ID front/back are **generic drawn cards**, not real documents. Only 2 demo photos exist (`public/faces`). |
-| `components/Businesses.tsx` | 8 hard-coded companies. |
 | `components/ApiKeys.tsx` | **Real** (backend): list/create/revoke through `/organizations/{id}/api-keys`; the secret is shown once and never stored in the browser. (Old client-side key generation was removed.) |
 | `components/Logs.tsx` | **Real** (backend): request log (route template, status, latency, key prefix) and audit trail. Empty until the API is used. |
 | `components/Settings.tsx` | **Real** (backend): rename organization, team (add existing user, change role, remove), TOTP two-step verification with recovery codes. Webhook URL and notification toggles were removed (no backend yet). |
 | `components/HostedPage.tsx` (`/verify`) | **Public page. Real UI, no backend.** The scanner opens the camera automatically on each capture step and **captures automatically** (`components/Scanner.tsx`): it analyses the frame area every 140 ms (brightness, glare, sharpness via Laplacian variance, frame-to-frame stability) and captures after ~1.3 s of good frames (selfie: ~3 s with a visible 3-2-1 countdown); a manual "Capture now" appears after 9 s and an upload fallback exists. **Documents now use OpenCV.js card-edge detection** (`cardDetect.ts`): it finds a convex 4-corner shape with a card/passport-page aspect ratio (1.2–1.9) and 65–115° corners, checks fit ("Move closer / back / center"), corner stability, exposure, glare and sharpness, then captures a perspective-corrected, upright crop (~1000 px wide). Limits: it detects a card-SHAPED rectangle, not a genuine document (a credit card, a card-shaped object or a screen can pass); low contrast against the background can miss the edges; no OCR, no document-type classification, no tamper checks. If OpenCV (or MediaPipe, needed for the face-photo check) cannot load, the document scanner **fails closed**: it shows an error with a "Try again" button and accepts nothing. **Selfie (`FaceScanner.tsx`)**: MediaPipe Face Landmarker (self-hosted, in-browser) requires exactly one face, centered in the oval, big enough and frontal (yaw within ±9°) for ~0.8 s, takes the still photo, then **asks the user to turn their head LEFT or RIGHT (random)** showing an animated pointing finger (👈/👉) with chevrons and a direction label. Success = head yaw ≥ 20° in the requested direction for 2 consecutive frames (≈ nose/cheek ratio 0.17 as fallback); the wrong direction shows "Other way"; after 12 s the direction flips ("Let's try again"). Sign convention (verified): yaw > 0 = user's LEFT, < 0 = user's RIGHT, from `atan2(m[8], m[10])` of the facial transformation matrix; the preview is mirrored so the finger points to the same side the user sees. **Limits: this is a basic active challenge, NOT certified liveness.** A replayed video, a deep-fake or a 3D mask can pass; no PAD, no texture/depth analysis, no server-side re-check, no face matching against the document. It was tested only with synthetic perspective-warped frames (≈5° effective yaw) using a test-only build flag `NEXT_PUBLIC_TURN_DEG` (**never set it in production**; default 20°) and never with real head turns on real phones: thresholds must be tuned on real devices. If MediaPipe cannot load, the selfie scanner **fails closed** (error + "Try again"); there is no weaker fallback. Document authenticity, face matching and certified liveness belong to Phases 2–3. Camera (`getUserMedia`) and file input work; a local quality check (brightness, glare, blur via canvas) runs in the browser. Photos live only in memory (`blob:` URLs), are never uploaded (no network request is made), and are deleted on submit/restart. The final screen says "Demo complete — no verification was performed" and **never shows a verdict**. Branding comes from URL params (`name,color,theme,shape,lang,docs,title,subtitle,support`), validated and rendered as text; `redirect` and logo are deliberately NOT accepted from the URL (open-redirect / untrusted-image risk). Do not wire any upload to this page until the backend, consent and retention requirements (sections 5, 8, white-label requirements) are met. |
 | `components/WhiteLabel.tsx` | Branding config lives in React state only (logo is an in-memory object URL). Custom-domain "DNS record" and its target value are examples; no domain or certificate is verified. The phone preview (`HostedPreview.tsx`) is a clickable mock of a hosted page that does not exist yet: no camera, no upload, no real country/document rules (country list is a fixed sample of 24 ISO codes, names via `Intl.DisplayNames`; Kreyòl falls back to French names). |
+| `app/dashboard/verifications`, `app/dashboard/businesses` | **Empty states** (`components/EmptyState.tsx`): the 10 fake people, 8 fake companies and `Media.tsx` were deleted (2026-11-20); real pages come with the verification engine. |
 | `components/Overview.tsx`, `OverviewChart.tsx` | **Real** (backend): requests/errors (30 days), active API keys, team members, per-day chart from `/usage`, recent API activity from request-logs. The "Verifications" card is an honest empty state (no engine yet). All invented numbers were removed (2026-11-20). |
 | `components/FaceMatch.tsx` | Marketing animation; scores 98 % / 34 % are scripted. |
 | `components/Support.tsx` | "All systems operational" is static text. |
@@ -422,7 +419,7 @@ Dashboard sections requested: Overview, Verifications, Customers, Organizations,
 | Section | Today |
 |---|---|
 | Overview | **Real data** (usage, keys, members, recent API activity); verification stats absent until the engine exists |
-| Verifications | UI mock ✔ (list, filters, detail, media viewer, approve/reject) |
+| Verifications | Empty state only (no engine; fake list removed) |
 | Customers | **missing** (could merge with Verifications or be the business's end-customer directory) |
 | Organizations | **missing** (Businesses page is KYB subjects, not tenants) |
 | Developers | **missing** (docs, test documents, SDK downloads) |
@@ -543,6 +540,7 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 
 ## 15. Changelog
 
+- 2026-11-20 — Removed the fake Verifications (10 people), Businesses (8 companies) and media viewer; both pages are honest empty states. White label preview and landing animations remain demo/mock.
 - 2026-11-20 — Overview now shows only real backend data (new `Overview.tsx`, data-driven `OverviewChart`); fake stat cards, chart, recent verifications and activity removed; `LiveUsage.tsx` merged into it.
 - 2026-11-20 — Backend deployed as a Render **Web Service** (`freda-verify-api`, Docker, free plan, Oregon) against the new Supabase project "Freda verify"; migrations 0001–0002 ran automatically (10 tables in `freda_verify`). Supabase advisor findings addressed by migration 0003 (RLS on `alembic_version`, pinned `search_path` of the audit trigger function). Open finding that is NOT ours: `public.rls_auto_enable()` (SECURITY DEFINER, executable by `anon`/`authenticated`) exists in the Supabase project; revoke EXECUTE if it is not needed.
 - 2026-11-19 — Frontend connected to the backend: login, sign-up, forgot/reset password, session guard, user/org card + organization switcher, real API Keys / Logs / Settings (team, MFA) pages and live usage card; backend moved to the dedicated schema `freda_verify` (RLS + revoke migration), tables created automatically at container start, DSN normalisation for Supabase, `/request-logs` endpoint, `render.yaml`; 20 browser end-to-end checks, 58 backend tests. Supabase/Render deployment not performed.
