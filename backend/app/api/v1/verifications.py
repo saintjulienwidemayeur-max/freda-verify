@@ -2,24 +2,27 @@
 
 Business side (API key or dashboard user): create / list / read verifications.
 End-user side (session token `fvs_…`, nothing else): read the branding of the organization, download its logo, record consent.
-Documents, selfies, results and webhooks are NOT implemented: a verification stays PENDING until it expires.
+Photos: the end user uploads a document (front, back) and a selfie with the session token; they are stored ENCRYPTED, deleted after the retention
+period, and reviewed by a human in the dashboard (status MANUAL_REVIEW → APPROVED / REJECTED). There is NO automated analysis (no OCR, face match,
+liveness or AML), no results API and no webhooks.
 """
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Header, Request, Response
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core import ratelimit
 from app.core.config import get_settings
-from app.core.deps import PERMS, Principal, get_principal
+from app.core.deps import PERMS, OrgCtx, Principal, get_principal, org_access
 from app.core.errors import AppError, forbidden, not_found, unauthorized
-from app.core.security import new_token, sha256
+from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import get_db
-from app.models import Branding, BrandingLogo, Membership, Verification, now
-from app.schemas import BrandingOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
+from app.models import Branding, BrandingLogo, Membership, Verification, VerificationMedia, now
+from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
 from app.services import audit
+from app.services.images import read_limited, sniff_ok
 
 router = APIRouter(tags=["verifications"])
 SESSION_PREFIX = "fvs_"
@@ -29,9 +32,24 @@ def _status(v: Verification) -> str:
     return "EXPIRED" if v.status == "PENDING" and v.expires_at <= now() else v.status
 
 
-def _out(v: Verification) -> dict:
+def _out(v: Verification, media_count: int = 0) -> dict:
     return {"id": v.id, "status": _status(v), "env": v.env, "reference": v.reference, "consent_given": v.consent_at is not None,
-            "created_at": v.created_at, "expires_at": v.expires_at}
+            "created_at": v.created_at, "expires_at": v.expires_at, "submitted_at": v.submitted_at, "decided_at": v.decided_at,
+            "decision_reason": v.decision_reason, "media_count": media_count}
+
+
+def _counts(db: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    if not ids:
+        return {}
+    return dict(db.execute(select(VerificationMedia.verification_id, func.count()).where(VerificationMedia.verification_id.in_(ids))
+                           .group_by(VerificationMedia.verification_id)).all())
+
+
+def purge_expired_media(db: Session) -> int:
+    """Retention: photos are deleted once `purge_after` has passed. Called on every upload and at startup; the verification record itself stays."""
+    n = db.execute(delete(VerificationMedia).where(VerificationMedia.purge_after <= now())).rowcount
+    db.commit()
+    return n or 0
 
 
 def _org_for(principal: Principal, organization_id: uuid.UUID | None, perm: str, request: Request, db: Session) -> uuid.UUID:
@@ -71,7 +89,8 @@ def list_verifications(request: Request, organization_id: uuid.UUID | None = Non
     org_id = _org_for(principal, organization_id, "verifications:read", request, db)
     rows = db.scalars(select(Verification).where(Verification.organization_id == org_id).order_by(Verification.created_at.desc())
                       .limit(max(1, min(limit, 100))).offset(max(0, offset))).all()
-    return [_out(v) for v in rows]
+    c = _counts(db, [v.id for v in rows])
+    return [_out(v, c.get(v.id, 0)) for v in rows]
 
 
 @router.get("/verifications/{verification_id}", response_model=VerificationOut)
@@ -81,7 +100,7 @@ def get_verification(verification_id: uuid.UUID, request: Request, organization_
     v = db.scalar(select(Verification).where(Verification.id == verification_id, Verification.organization_id == org_id))
     if not v:
         raise not_found("Verification not found")          # also for another tenant's id
-    return _out(v)
+    return _out(v, _counts(db, [v.id]).get(v.id, 0))
 
 
 # ───────── end-user side: authenticated by the session token only ─────────
@@ -128,3 +147,106 @@ def give_consent(request: Request, v: Verification = Depends(get_session), db: S
         audit.record(db, request, "verification.consent_given", org_id=v.organization_id, target_type="verification", target_id=v.id)
         db.commit()
     return Response(status_code=204)
+
+
+# ───────── photos uploaded by the end user (session token) ─────────
+KINDS = ("document_front", "document_back", "selfie")
+DOC_TYPES = ("id", "passport", "license")
+
+
+def _open_for_upload(v: Verification) -> None:
+    if v.consent_at is None:
+        raise AppError(409, "consent_required", "Consent must be given before uploading photos")
+    if v.status != "PENDING":
+        raise AppError(409, "session_closed", "This verification was already submitted")
+
+
+@router.put("/session/media/{kind}", status_code=204)
+async def upload_media(kind: str, request: Request, doc_type: str | None = Query(default=None), country: str | None = Query(default=None, pattern=r"^[A-Z]{2}$"),
+                       v: Verification = Depends(get_session), db: Session = Depends(get_db)):
+    """Raw image bytes (image/jpeg | image/png | image/webp, ≤ FV_MEDIA_MAX_BYTES). Replaces a previous upload of the same kind. Stored encrypted."""
+    if kind not in KINDS:
+        raise not_found("Unknown kind")
+    _open_for_upload(v)
+    if kind != "selfie" and doc_type not in DOC_TYPES:
+        raise AppError(422, "validation_error", "doc_type must be id, passport or license for documents")
+    if kind == "document_back" and doc_type == "passport":
+        raise AppError(422, "validation_error", "A passport has no back side")
+    s = get_settings()
+    ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    data = await read_limited(request, s.media_max_bytes)
+    if not sniff_ok(ctype, data):
+        raise AppError(422, "invalid_image", "Use a JPEG, PNG or WebP photo")
+    purge_expired_media(db)
+    db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
+    db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind != "selfie" else None,
+                             country=country if kind != "selfie" else None, content_type=ctype, size=len(data), sha256=__import__("hashlib").sha256(data).hexdigest(),
+                             data=encrypt_bytes(data), purge_after=now() + timedelta(days=s.media_retention_days)))
+    audit.record(db, request, "verification.media_uploaded", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"kind": kind, "size": len(data)})
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/session/complete", status_code=204)
+def complete_session(request: Request, v: Verification = Depends(get_session), db: Session = Depends(get_db)):
+    """Submits the verification for HUMAN review (MANUAL_REVIEW). Requires the selfie and the document photo(s)."""
+    _open_for_upload(v)
+    rows = {m.kind: m for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id))}
+    front = rows.get("document_front")
+    need_back = bool(front and front.doc_type in ("id", "license"))
+    missing = [k for k in ("document_front", "selfie") if k not in rows] + (["document_back"] if need_back and "document_back" not in rows else [])
+    if missing:
+        raise AppError(422, "incomplete", "Missing photos: " + ", ".join(missing))
+    v.status, v.submitted_at = "MANUAL_REVIEW", now()
+    audit.record(db, request, "verification.submitted", org_id=v.organization_id, target_type="verification", target_id=v.id)
+    db.commit()
+    return Response(status_code=204)
+
+
+# ───────── business side: review (dashboard users only, by organization) ─────────
+def _owned(db: Session, ctx: OrgCtx, vid: uuid.UUID) -> Verification:
+    v = db.scalar(select(Verification).where(Verification.id == vid, Verification.organization_id == ctx.org.id))
+    if not v:
+        raise not_found("Verification not found")
+    return v
+
+
+@router.get("/organizations/{org_id}/verifications/{verification_id}/media", response_model=list[MediaOut])
+def list_media(verification_id: uuid.UUID, ctx: OrgCtx = Depends(org_access("verifications:read")), db: Session = Depends(get_db)):
+    v = _owned(db, ctx, verification_id)
+    return db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id).order_by(VerificationMedia.kind)).all()
+
+
+@router.get("/organizations/{org_id}/verifications/{verification_id}/media/{kind}")
+def view_media(verification_id: uuid.UUID, kind: str, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """Decrypts and returns one photo. Owners/admins only; every view is audited."""
+    v = _owned(db, ctx, verification_id)
+    m = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
+    if not m:
+        raise not_found("No such photo (it may have been deleted)")
+    audit.record(db, request, "verification.media_viewed", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"kind": kind})
+    db.commit()
+    return Response(decrypt_bytes(m.data), media_type=m.content_type, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+                                                                              "Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+@router.delete("/organizations/{org_id}/verifications/{verification_id}/media", status_code=204)
+def delete_media(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """Deletes every uploaded photo of this verification now (the record, status and decision stay)."""
+    v = _owned(db, ctx, verification_id)
+    n = db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id)).rowcount
+    audit.record(db, request, "verification.media_deleted", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"count": n})
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/organizations/{org_id}/verifications/{verification_id}/decision", response_model=VerificationOut)
+def decide(verification_id: uuid.UUID, body: DecisionIn, request: Request, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
+    """Manual decision by an owner/admin on a submitted verification. This is a human decision, not an automated result."""
+    v = _owned(db, ctx, verification_id)
+    if v.status != "MANUAL_REVIEW":
+        raise AppError(409, "not_reviewable", "Only submitted verifications awaiting review can be decided")
+    v.status, v.decided_at, v.decided_by, v.decision_reason = body.decision, now(), ctx.user.id, (body.reason or None)
+    audit.record(db, request, "verification.decided", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"decision": body.decision})
+    db.commit()
+    return _out(v, _counts(db, [v.id]).get(v.id, 0))

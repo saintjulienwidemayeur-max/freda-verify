@@ -164,6 +164,10 @@ class VerificationOut(BaseModel):
     consent_given: bool
     created_at: datetime
     expires_at: datetime
+    submitted_at: datetime | None = None
+    decided_at: datetime | None = None
+    decision_reason: str | None = None
+    media_count: int = 0
 
 
 class VerificationCreatedOut(VerificationOut):
@@ -191,3 +195,19 @@ class SessionOut(BaseModel):
     expires_at: datetime
     consent_given: bool
     branding: SessionBranding
+
+
+class DecisionIn(_In):
+    decision: Literal["APPROVED", "REJECTED"]
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class MediaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    kind: str
+    doc_type: str | None
+    country: str | None
+    content_type: str
+    size: int
+    created_at: datetime
+    purge_after: datetime

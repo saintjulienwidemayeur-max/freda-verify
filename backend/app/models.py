@@ -167,6 +167,29 @@ class Verification(Base):
     created_by_key: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("api_keys.id"), ondelete="SET NULL"), nullable=True)
     created_by_user: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
+    decision_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class VerificationMedia(Base):
+    """A photo uploaded by the end user. `data` is Fernet-encrypted; photos are deleted at `purge_after` (retention) or on request.
+    There is no automated analysis of these images: a human reviews them in the dashboard."""
+    __tablename__ = "verification_media"
+    __table_args__ = (UniqueConstraint("verification_id", "kind"), Index("ix_media_purge", "purge_after"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    verification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("verifications.id"), ondelete="CASCADE"), index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))                      # document_front | document_back | selfie
+    doc_type: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    content_type: Mapped[str] = mapped_column(String(20))
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))                    # of the plain image (integrity / duplicate detection later)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    purge_after: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class AuditLog(Base):

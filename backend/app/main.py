@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,10 +12,24 @@ from app.core.middleware import RequestContext
 from app.db.session import get_engine
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    try:                                                  # retention: delete expired photos at startup (also done on every upload)
+        from app.api.v1.verifications import purge_expired_media
+        from app.db.session import SessionLocal
+        with SessionLocal() as db:
+            n = purge_expired_media(db)
+            if n:
+                logging.getLogger("freda").info("retention: %s expired photos deleted", n)
+    except Exception:  # noqa: BLE001  never block startup on housekeeping (e.g. migrations still running)
+        logging.getLogger("freda").warning("retention purge skipped at startup")
+    yield
+
+
 def create_app() -> FastAPI:
     s = get_settings()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    app = FastAPI(title="Freda Verify API", version="0.1.0", docs_url="/docs" if s.app_env != "prod" else None, redoc_url=None,
+    app = FastAPI(title="Freda Verify API", version="0.1.0", lifespan=lifespan, docs_url="/docs" if s.app_env != "prod" else None, redoc_url=None,
                   openapi_url="/openapi.json" if s.app_env != "prod" else None)
     app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"], expose_headers=["X-Request-ID", "Retry-After"])

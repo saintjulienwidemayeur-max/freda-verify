@@ -39,7 +39,7 @@ function readConfig(search: string): Cfg {
 
 /* ───────────── real session (token in the URL fragment, sent only to the API as a Bearer header) ───────────── */
 type SessionData = { status: string; consent_given: boolean; branding: { name: string; color: string; theme: Theme; shape: Shape; lang: Lang; title: string; subtitle: string; support_email: string; docs: string[]; hide_powered: boolean; has_logo: boolean } };
-const sessionFetch = (path: string, token: string, init?: RequestInit) => fetch(`${API_URL}/api/v1${path}`, { ...init, headers: { Authorization: `Bearer ${token}` }, credentials: "omit" });
+const sessionFetch = (path: string, token: string, init?: RequestInit) => fetch(`${API_URL}/api/v1${path}`, { ...init, headers: { ...(init?.headers as Record<string, string>), Authorization: `Bearer ${token}` }, credentials: "omit" });
 const tokenFromHash = (): string => { const m = /^#s=(fvs_[A-Za-z0-9_-]{20,100})$/.exec(window.location.hash); return m ? m[1] : ""; };
 
 /* ───────────── desktop detection + QR ───────────── */
@@ -103,6 +103,7 @@ export default function HostedPage() {
   const [debug, setDebug] = useState(false);
   const [blinkOn, setBlinkOn] = useState(false);
   const [upErr, setUpErr] = useState<Reject | null>(null);
+  const [sendErr, setSendErr] = useState(false);
   const [copied, setCopied] = useState(false);
   const [token, setToken] = useState("");
   const [sessErr, setSessErr] = useState(false);
@@ -161,12 +162,19 @@ export default function HostedPage() {
   const prev = () => { if (step === "country") setStep("welcome"); else if (idx > 0) setStep(order[idx - 1]); setCam(false); };
 
   const setShot = useCallback(async (key: "front" | "back" | "selfie", blob: Blob) => {
-    setBusy(true);
+    setBusy(true); setSendErr(false);
+    if (token) {   // real session: the photo is sent (encrypted at rest, reviewed by a person) BEFORE it is accepted on screen
+      try {
+        const q = key === "selfie" ? "" : `?doc_type=${kind ?? "id"}&country=${country}`;
+        const r = await sessionFetch(`/session/media/${key === "selfie" ? "selfie" : `document_${key}`}${q}`, token, { method: "PUT", headers: { "Content-Type": blob.type }, body: blob });
+        if (!r.ok) throw new Error(String(r.status));
+      } catch { setSendErr(true); setBusy(false); setCam(false); return; }
+    }
     const url = URL.createObjectURL(blob); urls.current.add(url); fresh.current = url;
     const quality = await analyze(blob);
     setShots((s) => { if (s[key]) { URL.revokeObjectURL(s[key]!.url); urls.current.delete(s[key]!.url); } return { ...s, [key]: { url, q: quality } }; });
     setCam(false); setBusy(false);
-  }, []);
+  }, [token, kind, country]);
   const drop = (key: "front" | "back" | "selfie") => setShots((s) => { if (s[key]) { URL.revokeObjectURL(s[key]!.url); urls.current.delete(s[key]!.url); } const n = { ...s }; delete n[key]; return n; });
   const wipe = () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); setShots({}); };
   // open the scanner automatically on each capture step; auto-advance after a fresh good capture
@@ -175,10 +183,17 @@ export default function HostedPage() {
     if (step !== "front" && step !== "back" && step !== "selfie") return;
     const s = shots[step];
     if (!s || fresh.current !== s.url || issues(s.q, T[c.lang]).length > 0) return;
-    const tm = setTimeout(() => { fresh.current = null; if (step === "selfie") finish(); else setStep(order[order.indexOf(step) + 1]); }, step === "selfie" ? 250 : 1300);
+    const tm = setTimeout(() => { fresh.current = null; if (step === "selfie") void finish(); else setStep(order[order.indexOf(step) + 1]); }, step === "selfie" ? 250 : 1300);
     return () => clearTimeout(tm);
   }); // eslint-disable-line react-hooks/exhaustive-deps
-  const finish = () => { wipe(); setStep("done"); };
+  const finish = async () => {
+    if (token) {
+      setBusy(true); setSendErr(false);
+      try { const r = await sessionFetch("/session/complete", token, { method: "POST" }); if (!r.ok) throw new Error(String(r.status)); } catch { setSendErr(true); setBusy(false); return; }
+      setBusy(false);
+    }
+    wipe(); setStep("done");
+  };
   const restart = () => { wipe(); setKind(null); setAgree(false); setStep("welcome"); };
 
   const Btn = ({ children, onClick, disabled, ghost }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; ghost?: boolean }) => (
@@ -223,7 +238,7 @@ export default function HostedPage() {
     const title = isSelfie ? t.selfieT : kind === "passport" ? t.pageT : key === "front" ? t.frontT : t.backT;
     const sub = isSelfie ? t.selfieS : kind === "passport" ? t.pageS : key === "front" ? t.frontS : t.backS;
     const s = shots[key];
-    const next = () => { if (isSelfie) finish(); else setStep(order[idx + 1]); };
+    const next = () => { if (isSelfie) void finish(); else setStep(order[idx + 1]); };
     const bad = s ? issues(s.q, t).length > 0 : false;
     return (<>
       <h2 className="mt-4 font-display text-2xl font-extrabold leading-tight tracking-tight">{title}</h2>
@@ -264,6 +279,7 @@ export default function HostedPage() {
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f && f.size < 15 * 1024 * 1024) void uploadDoc(key as "front" | "back", f); }} />
               </label>
             )}
+            {sendErr && <p role="alert" className="mt-3 rounded-xl p-3 text-sm" style={{ background: "#FDECEA", color: "#B42318" }}>{t.sendFail}</p>}
             {upErr && !isSelfie && (
               <div className="rounded-2xl px-4 py-3 text-sm font-medium text-white" style={{ background: "#B42318" }} role="alert">
                 <b className="block">{t.docRej}</b>{upErr === "shape" ? t.rejShape : upErr === "face" ? t.rejFace : upErr === "mrz" ? t.rejMrz : t.rejUnavail}
@@ -281,7 +297,7 @@ export default function HostedPage() {
   return (
     <main className="min-h-[100dvh] sm:py-6" style={{ background: dark ? "#050C2B" : "#F1F4FB", color: tx }}>
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[440px] flex-col px-5 pb-5 pt-3 sm:min-h-[760px] sm:rounded-[2rem] sm:shadow-[0_24px_70px_rgba(10,22,71,.18)]" style={{ background: bg }}>
-        <div role="status" className="mx-auto mb-2 rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: "#FEF3E2", color: "#B54708" }}>{t.demoBanner}</div>
+        {!token && <div role="status" className="mx-auto mb-2 rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: "#FEF3E2", color: "#B54708" }}>{t.demoBanner}</div>}
 
         {step !== "qr" && step !== "welcome" && step !== "done" && (
           <div className="flex items-center gap-3">
@@ -296,7 +312,7 @@ export default function HostedPage() {
             <h1 className="mt-4 font-display text-[28px] font-extrabold leading-[1.1] tracking-tight">{t.qrTitle}</h1>
             <p className="mt-3 max-w-xs text-[15px] leading-snug" style={{ color: mut }}>{t.qrSub}</p>
             <div className="mt-6 w-[236px] rounded-3xl bg-white p-4 shadow-[0_10px_40px_rgba(10,22,71,.16)]" style={{ border: `1px solid ${line}` }}><Qr value={link} /></div>
-            <p className="mt-4 max-w-[17rem] truncate text-xs" style={{ color: mut }} title={link}>{link.replace(/^https?:\/\//, "")}</p>
+            {!token && <p className="mt-4 max-w-[17rem] truncate text-xs" style={{ color: mut }} title={link}>{link.replace(/^https?:\/\//, "")}</p>}
             <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setCopied(false); } }}
               className="mt-2 rounded-full px-4 py-2 text-sm font-semibold" style={{ color: c.color, background: tint }}>{copied ? `✓ ${t.qrCopied}` : t.qrCopy}</button>
             <p className="mt-5 max-w-xs text-xs leading-snug" style={{ color: mut }}>{t.qrWhy}</p>
@@ -330,6 +346,7 @@ export default function HostedPage() {
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" style={{ accentColor: c.color }} />
             <span>{t.agreePre} <span className="font-medium" style={{ color: c.color }}>{termsLabel(c.lang, name)}</span> {t.agreePost}</span>
           </label>
+          {token && <p className="mb-3 text-[12px] leading-snug" style={{ color: mut }}>{t.sendNote.replace("{n}", name)}</p>}
           <Btn onClick={() => { if (token) void sessionFetch("/session/consent", token, { method: "POST" }).catch(() => {}); setStep("country"); }} disabled={!agree}>{t.start}</Btn>
           {c.support && <p className="mt-2 break-all text-center text-xs" style={{ color: mut }}>{t.help} {c.support}</p>}
           <Secured />
@@ -379,8 +396,8 @@ export default function HostedPage() {
           <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
             <div className="relative grid h-28 w-28 place-items-center"><span className="absolute inset-0 rounded-full" style={{ background: tint }} /><span className="absolute inset-4 rounded-full" style={{ background: `${c.color}33` }} />
               <span className="relative grid h-16 w-16 place-items-center rounded-full" style={{ background: c.color, color: fg }}><Ic d="M5 12.5l4.500 4.500L19 7.500" className="h-8 w-8" /></span></div>
-            <h2 className="mt-6 font-display text-2xl font-extrabold tracking-tight">{t.demoDoneT}</h2>
-            <p className="mt-3 max-w-xs text-[15px] leading-snug" style={{ color: mut }}>{t.demoDone}</p>
+            <h2 className="mt-6 font-display text-2xl font-extrabold tracking-tight">{token ? t.doneT : t.demoDoneT}</h2>
+            <p className="mt-3 max-w-xs text-[15px] leading-snug" style={{ color: mut }}>{token ? t.doneS : t.demoDone}</p>
           </div>
           <Btn onClick={restart}>{t.back} {name}</Btn><Secured />
         </>)}

@@ -95,3 +95,12 @@ def encrypt_secret(plain: str) -> str:
 
 def decrypt_secret(token: str) -> str:
     return _fernet().decrypt(token.encode()).decode()
+
+
+def encrypt_bytes(data: bytes) -> bytes:
+    """Field-level encryption of stored media (Fernet: AES-128-CBC + HMAC). The key comes from FV_ENCRYPTION_KEY, never from the database."""
+    return _fernet().encrypt(data)
+
+
+def decrypt_bytes(token: bytes) -> bytes:
+    return _fernet().decrypt(token)

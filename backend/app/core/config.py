@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     issuer: str = "freda-verify"
     hosted_url: str = "https://freda-verify.onrender.com"   # origin of the static site that serves /verify (used to build session links)
     session_ttl_minutes: int = 1440         # default lifetime of a verification session link
+    media_retention_days: int = 30          # uploaded photos are deleted this many days after upload (the decision record stays)
+    media_max_bytes: int = 2 * 1024 * 1024  # per photo
     session_rate_limit: int = 120           # requests / minute / session token
 
     @field_validator("database_url")
