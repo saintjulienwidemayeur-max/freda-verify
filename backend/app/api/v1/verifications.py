@@ -561,6 +561,18 @@ def rerun_pad(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depend
     return {"pad_available": pad.available(), "pad": _face_out(run_pad_check(v.id, db))}
 
 
+@router.post("/organizations/{org_id}/verifications/{verification_id}/recheck", status_code=202)
+def recheck(verification_id: uuid.UUID, request: Request, background: BackgroundTasks, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
+    """Runs every automatic check again and then the automatic decision (if the organization enabled it). Useful when the server restarted before the checks finished (nothing is retried after a restart)."""
+    v = _owned(db, ctx, verification_id)
+    if v.status != "MANUAL_REVIEW":
+        raise AppError(409, "not_reviewable", "Only verifications awaiting review can be re-checked")
+    audit.record(db, request, "verification.rechecked", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
+    db.commit()
+    background.add_task(run_pipeline, v.id)
+    return {"started": True}
+
+
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/mrz")
 def rerun_mrz(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
     """Re-reads the MRZ now (e.g. after an engine upgrade). Needs at least one stored document photo."""

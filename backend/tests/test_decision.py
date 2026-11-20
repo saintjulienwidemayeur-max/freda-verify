@@ -125,3 +125,13 @@ def test_declared_data_is_encrypted_never_returned_and_checked_on_the_card(clien
     assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 204
     c = client.get(f"/api/v1/organizations/{org['id']}/verifications/{r.json()['id']}/checks", headers=auth(t)).json()
     assert c["idtext"]["status"] == "compared" and c["idtext"]["matched"] == 3 and "WIDEMAYEUR" not in str(c["idtext"])
+
+
+def test_recheck_runs_the_pipeline_again_and_decides_when_auto(client, monkeypatch):
+    t, org, key, v = media_setup(client)
+    assert submit_all(client, v["session_token"]).status_code == 204                                  # manual mode: stays in review
+    put_policy(client, t, org)
+    monkeypatch.setattr(V.decision, "decide", lambda **kw: Verdict("APPROVED", ["all_checks_passed"]))
+    assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/recheck", headers=auth(t)).status_code == 202
+    assert client.get("/api/v1/session", headers=bearer(v["session_token"])).json()["status"] == "APPROVED"
+    assert client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/recheck", headers=auth(t)).status_code == 409   # already decided

@@ -190,6 +190,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
       )}
 
       {v.decision_reason && <p className="mt-3 text-sm">Decision note: {v.decision_reason}</p>}
+      {admin && v.status === "MANUAL_REVIEW" && <button disabled={busy} onClick={() => void act(() => api(`${base}/recheck`, { method: "POST" }))} className="mt-2 rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Run all checks again{checks && !checks.mrz ? " (checks missing)" : ""}</button>}
       {admin && (v.status === "MANUAL_REVIEW" || (v.decision_reason ?? "").startsWith("auto:")) && (
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[#e3eaf8] pt-4">
           <label className="min-w-[14rem] flex-1 text-sm font-medium">Note (optional)<input value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} className="mt-1.5 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
