@@ -21,6 +21,8 @@ PERMS: dict[str, set[str]] = {
     "members:manage": {Role.owner, Role.admin},
     "keys:read": {Role.owner, Role.admin, Role.member},
     "keys:write": {Role.owner, Role.admin},
+    "branding:read": {Role.owner, Role.admin, Role.member, Role.viewer},
+    "branding:write": {Role.owner, Role.admin},
     "audit:read": {Role.owner, Role.admin},
 }
 

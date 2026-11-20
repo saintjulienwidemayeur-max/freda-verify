@@ -16,7 +16,7 @@ def create_app() -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     app = FastAPI(title="Freda Verify API", version="0.1.0", docs_url="/docs" if s.app_env != "prod" else None, redoc_url=None,
                   openapi_url="/openapi.json" if s.app_env != "prod" else None)
-    app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"], expose_headers=["X-Request-ID", "Retry-After"])
     app.add_middleware(RequestContext)
     install_error_handlers(app)

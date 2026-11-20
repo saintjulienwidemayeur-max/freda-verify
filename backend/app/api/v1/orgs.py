@@ -8,8 +8,8 @@ from app.core.deps import OrgCtx, Principal, get_current_user, get_principal, or
 from app.core.errors import AppError, forbidden, not_found
 from app.core.security import generate_api_key, new_hex
 from app.db.session import get_db
-from app.models import ApiKey, AuditLog, Membership, Organization, RequestLog, Role, User, now
-from app.schemas import KeyCreatedOut, KeyIn, KeyOut, MemberIn, MemberOut, OrgIn, OrgOut, RoleIn
+from app.models import ApiKey, AuditLog, Branding, Membership, Organization, RequestLog, Role, User, now
+from app.schemas import BrandingIn, BrandingOut, KeyCreatedOut, KeyIn, KeyOut, MemberIn, MemberOut, OrgIn, OrgOut, RoleIn
 from app.services import audit
 
 router = APIRouter(tags=["organizations"])
@@ -52,6 +52,31 @@ def rename_org(body: OrgIn, request: Request, ctx: OrgCtx = Depends(org_access("
     audit.record(db, request, "org.updated", org_id=ctx.org.id, user_id=ctx.user.id, target_type="organization", target_id=ctx.org.id)
     db.commit()
     return _org_out(ctx.org, ctx.membership.role)
+
+
+# ───────── white label (branding of the hosted page) ─────────
+def _branding_out(b: Branding | None) -> BrandingOut:
+    if not b:
+        return BrandingOut()
+    return BrandingOut(name=b.name, color=b.color, theme=b.theme, shape=b.shape, lang=b.lang, title=b.title, subtitle=b.subtitle, support_email=b.support_email,
+                       docs=list(dict.fromkeys(b.docs)), redirect_url=b.redirect_url, domain=b.domain, hide_powered=b.hide_powered, updated_at=b.updated_at)
+
+
+@router.get("/organizations/{org_id}/branding", response_model=BrandingOut)
+def get_branding(ctx: OrgCtx = Depends(org_access("branding:read")), db: Session = Depends(get_db)):
+    return _branding_out(db.get(Branding, ctx.org.id))
+
+
+@router.put("/organizations/{org_id}/branding", response_model=BrandingOut)
+def put_branding(body: BrandingIn, request: Request, ctx: OrgCtx = Depends(org_access("branding:write")), db: Session = Depends(get_db)):
+    b = db.get(Branding, ctx.org.id) or Branding(organization_id=ctx.org.id)
+    for k, v in body.model_dump().items():
+        setattr(b, k, list(dict.fromkeys(v)) if k == "docs" else (v.lower() if k == "domain" else v))
+    b.updated_by, b.updated_at = ctx.user.id, now()
+    db.add(b)
+    audit.record(db, request, "branding.updated", org_id=ctx.org.id, user_id=ctx.user.id, target_type="organization", target_id=ctx.org.id)
+    db.commit()
+    return _branding_out(b)
 
 
 # ───────── members ─────────

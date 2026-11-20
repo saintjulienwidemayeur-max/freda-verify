@@ -117,6 +117,27 @@ class ApiKey(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class Branding(Base):
+    """White-label settings of the hosted verification page (one row per organization). Plain configuration, validated on write.
+    The logo is NOT stored yet (no object storage); custom domain and redirect URL are saved but not verified/used yet."""
+    __tablename__ = "branding"
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), default="")
+    color: Mapped[str] = mapped_column(String(7), default="#1E4FE0")
+    theme: Mapped[str] = mapped_column(String(5), default="light")
+    shape: Mapped[str] = mapped_column(String(7), default="rounded")
+    lang: Mapped[str] = mapped_column(String(2), default="en")
+    title: Mapped[str] = mapped_column(String(60), default="")
+    subtitle: Mapped[str] = mapped_column(String(140), default="")
+    support_email: Mapped[str] = mapped_column(String(254), default="")
+    docs: Mapped[list] = mapped_column(_JSON, default=lambda: ["id", "passport"])
+    redirect_url: Mapped[str] = mapped_column(String(500), default="")
+    domain: Mapped[str] = mapped_column(String(253), default="")
+    hide_powered: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class AuditLog(Base):
     """Append-only (a PostgreSQL trigger rejects UPDATE/DELETE). Never store secrets, tokens or document data here."""
     __tablename__ = "audit_logs"

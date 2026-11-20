@@ -79,5 +79,6 @@ export const can = {
   readKeys: (o: Org | null) => !!o && o.role !== "viewer",
   manageMembers: (o: Org | null) => o?.role === "owner" || o?.role === "admin",
   rename: (o: Org | null) => o?.role === "owner" || o?.role === "admin",
+  editBranding: (o: Org | null) => o?.role === "owner" || o?.role === "admin",
   audit: (o: Org | null) => o?.role === "owner" || o?.role === "admin",
 };

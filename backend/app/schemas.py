@@ -122,3 +122,27 @@ class KeyCreatedOut(KeyOut):
 class MrzIn(_In):
     lines: list[str] = Field(min_length=2, max_length=3)
     fix_ocr: bool = True
+
+
+_HEX = r"^#[0-9a-fA-F]{6}$"
+_HOST = r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$"
+
+
+class BrandingIn(_In):
+    """Every field is untrusted text: length-limited, no HTML is ever rendered (the page shows it as text)."""
+    name: str = Field(default="", max_length=40)
+    color: str = Field(default="#1E4FE0", pattern=_HEX)
+    theme: Literal["light", "dark"] = "light"
+    shape: Literal["square", "rounded", "pill"] = "rounded"
+    lang: Literal["en", "fr", "ht"] = "en"
+    title: str = Field(default="", max_length=60)
+    subtitle: str = Field(default="", max_length=140)
+    support_email: EmailStr | Literal[""] = ""
+    docs: list[Literal["id", "passport", "license"]] = Field(default_factory=lambda: ["id", "passport"], min_length=1, max_length=3)
+    redirect_url: str = Field(default="", max_length=500, pattern=r"^(https://[^\s<>\"']+)?$")
+    domain: str = Field(default="", max_length=253, pattern=rf"^({_HOST[1:-1]})?$")
+    hide_powered: bool = False
+
+
+class BrandingOut(BrandingIn):
+    updated_at: datetime | None = None

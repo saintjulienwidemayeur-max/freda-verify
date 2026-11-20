@@ -20,7 +20,7 @@ def test_row_level_security_is_enabled_on_every_table():
     with get_engine().connect() as c:
         rows = c.execute(text("select tablename, rowsecurity from pg_tables where schemaname = 'freda_verify'")).all()
         cfg = c.execute(text("select proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'freda_verify' and proname = 'audit_logs_immutable'")).scalar()
-    assert len(rows) == 10 and all(rls for _, rls in rows)          # the 9 tables + alembic_version
+    assert len(rows) == 11 and all(rls for _, rls in rows)          # the 10 tables + alembic_version
     assert cfg == ["search_path=pg_catalog"]                         # the trigger function does not depend on the caller's search_path
 
 

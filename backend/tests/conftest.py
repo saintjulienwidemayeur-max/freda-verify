@@ -38,7 +38,8 @@ def _schema():
 def _clean():
     ratelimit.reset_memory()
     with get_engine().begin() as c:
-        c.execute(text("TRUNCATE " + ", ".join(f"freda_verify.{t}" for t in ("users", "organizations", "memberships", "refresh_sessions", "password_reset_tokens", "recovery_codes", "api_keys", "audit_logs", "request_logs")) + " RESTART IDENTITY CASCADE"))
+        tables = ("users", "organizations", "memberships", "refresh_sessions", "password_reset_tokens", "recovery_codes", "api_keys", "branding", "audit_logs", "request_logs")
+        c.execute(text("TRUNCATE " + ", ".join(f"freda_verify.{t}" for t in tables) + " RESTART IDENTITY CASCADE"))
     yield
 
 

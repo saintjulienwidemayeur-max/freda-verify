@@ -4,5 +4,5 @@ import WhiteLabel from "@/components/WhiteLabel";
 export const metadata = { title: "White label — Freda Verify" };
 
 export default function Page() {
-  return <DashShell active="White label"><WhiteLabel /></DashShell>;
+  return <DashShell active="White label" sample={false}><WhiteLabel /></DashShell>;
 }
