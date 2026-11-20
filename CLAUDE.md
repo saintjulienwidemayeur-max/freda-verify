@@ -537,12 +537,14 @@ Security audit and pen test, load testing, privacy/DPIA review, monitoring and a
 | D7 | Face model and liveness approach given weight licensing. | Run a license review before Phase 3. |
 | D8 | AML data sources (official lists vs licensed commercial feeds; PEP source). | Decide before Phase 4; expect a licensing cost. |
 | D9 | Launch markets and legal review (Haiti and others), consent and retention policy. | Engage legal/compliance early. |
+| D11 | External AI/LLM (DeepSeek, Claude, GPT, Gemini…) to read documents? | **Decided 2026-11-20 by the owner: NO.** Document and selfie reading stays self-hosted and deterministic (Tesseract + ICAO check digits, later open-weights models on our own servers if needed). No identity photo is ever sent to a third-party AI API. Revisit only with a legal review (D9) and a DPA. |
 | D10 | Pricing model (current $0 / $0.40 / custom are placeholders). | Decide after cost per verification is measured. |
 
 ---
 
 ## 15. Changelog
 
+- 2026-11-20 — Decision D11: no external AI/LLM API for reading identity documents or selfies (privacy, cross-border biometric transfer, hallucination risk, no mandatory paid dependency). Improvements to document reading stay self-hosted.
 - 2026-11-20 — OCR accuracy measured on generated OCR-B pages (`backend/tools/ocr_eval.py`, 13 degradations): the generic `eng` model was poor (19 % valid), so the pinned OCR-B Tesseract model is now installed (Dockerfile, CI); added filler/O-0 repairs guided by check digits, deskew, and multi-reading agreement (`agreeing`, shown in the review panel); fresh-seed result 91 % of pages with all identity fields right, 3.2 % wrong-but-check-digit-valid. Findings and limits in 3.8. Not measured on real documents (none available offline).
 - 2026-11-20 — CI backend failure fixed: `alembic check` found that the indexes on `verification_media` / `verification_checks` were named differently in the models (`index=True` → schema-prefixed name) than in migrations 0007/0008. Models now declare the same explicit index names as the migrations (no new migration needed, nothing changes in deployed databases). Lesson: run `alembic upgrade head && alembic check` locally before pushing a migration.
 - 2026-11-20 — Server-side MRZ reading: `app/services/ocr.py` (Tesseract + ICAO validator), table `verification_checks` (migration 0008, encrypted), background run after submission, reviewer endpoints (`GET .../checks`, `POST .../checks/mrz`) and a review-panel section; Dockerfile and CI install tesseract; 8 new tests (116 total) + browser check. Retention decision: photos are now kept until a person deletes them (default `FV_MEDIA_RETENTION_DAYS=0`, migration 0008 clears existing `purge_after`); the hosted-page notice no longer claims automatic deletion. NOT validated on real documents.
