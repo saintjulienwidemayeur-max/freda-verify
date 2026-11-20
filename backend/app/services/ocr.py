@@ -190,7 +190,9 @@ def read_mrz(image: bytes, quick: bool = False) -> OcrOutcome:
     def prep(top: float):
         crop = img.convert("L").crop((0, int(h * top), w, h))
         crop = crop.resize((1800, max(1, int(crop.height * 1800 / max(1, crop.width)))))
-        return ImageOps.autocontrast(crop, cutoff=2)
+        crop = ImageOps.autocontrast(crop, cutoff=2)
+        # Tesseract drops characters that touch the image border (a hand-held photo often ends right at the last '<'): a white margin keeps them
+        return ImageOps.expand(crop, border=(90, 40), fill=255)
 
     done = False
     with _one_at_a_time:

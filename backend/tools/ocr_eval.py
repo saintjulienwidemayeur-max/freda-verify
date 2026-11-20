@@ -167,6 +167,8 @@ SCENARIOS = {
     "perspective": lambda im, r: _jpeg(_persp(im, r, 0.04), 85),
     "low contrast": lambda im, r: _jpeg(Image.blend(im, Image.new("RGB", im.size, (170, 170, 170)), 0.55), 85),
     "glare on MRZ": lambda im, r: _jpeg(_glare(im, r), 85),
+    "tight crop (MRZ touches the edges)": lambda im, r: _jpeg(im.crop((int(im.width * 0.038), 0, int(im.width * 0.962), im.height)), 85),
+    "tight crop + tilt 3°": lambda im, r: _jpeg(im.crop((int(im.width * 0.038), 0, int(im.width * 0.962), im.height)).rotate(r.choice([-3, 3]), expand=False, fillcolor=(90, 90, 90), resample=Image.BICUBIC), 80),
     "phone (combined)": lambda im, r: _jpeg(_noise(_persp(_scale(im, 0.7), r, 0.025).rotate(r.uniform(-2, 2), fillcolor=(90, 90, 90)).filter(ImageFilter.GaussianBlur(1.0)), 40), 60),
 }
 

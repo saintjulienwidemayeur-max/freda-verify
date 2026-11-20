@@ -74,7 +74,8 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           {checks?.mrz?.status === "unreadable" && <p className="mt-2 text-sm text-navy/60">No machine-readable zone could be read from the document photos (the document may have none, or the photo is unclear). Check the photos yourself.</p>}
           {checks?.mrz?.result && (() => { const r = checks.mrz!.result!; return (
             <div className="mt-3 text-sm">
-              <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${r.all_checks_passed ? "bg-[#E7F7EF] text-[#067647]" : "bg-[#FDECEA] text-[#B42318]"}`}>{r.all_checks_passed ? "All check digits valid" : "Check digits do NOT match"}</span>
+              {(() => { const core = !!r.checks.document_number && !!r.checks.birth_date && !!r.checks.expiry_date; const partial = !r.all_checks_passed && core;
+                return <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${r.all_checks_passed ? "bg-[#E7F7EF] text-[#067647]" : partial ? "bg-[#FEF3E2] text-[#B54708]" : "bg-[#FDECEA] text-[#B42318]"}`}>{r.all_checks_passed ? "All check digits valid" : partial ? "Main fields valid · overall check failed (end of line probably cut off)" : "Check digits do NOT match"}</span>; })()}
               {(checks.mrz!.agreeing ?? 0) >= 2 ? <span className="ml-2 rounded-full bg-[#E7F7EF] px-2.5 py-0.5 font-mono text-xs text-[#067647]">{checks.mrz!.agreeing} readings agree</span> : <span className="ml-2 rounded-full bg-[#FEF3E2] px-2.5 py-0.5 font-mono text-xs text-[#B54708]">single reading: verify on the photo</span>}
               {r.expired && <span className="ml-2 rounded-full bg-[#FDECEA] px-2.5 py-0.5 font-mono text-xs text-[#B42318]">EXPIRED</span>}
               <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-xs">
