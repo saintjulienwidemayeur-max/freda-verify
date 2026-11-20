@@ -267,3 +267,49 @@ class WebhookDelivery(Base):
     last_error: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PadCampaign(Base):
+    """A reusable invitation link for volunteers who donate photos for presentation-attack (PAD) testing. The token lives in the URL fragment; it is stored encrypted so the owner can copy the link again."""
+    __tablename__ = "pad_campaigns"
+    __table_args__ = (Index("ix_pad_campaigns_org", "organization_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    token_enc: Mapped[str] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey(fk("users.id"), ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class PadContribution(Base):
+    """One volunteer. `code` (p001, p002, ...) is the only identifier in exported file names. Consent is recorded before anything can be uploaded."""
+    __tablename__ = "pad_contributions"
+    __table_args__ = (UniqueConstraint("campaign_id", "code"), Index("ix_pad_contributions_campaign", "campaign_id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("pad_campaigns.id"), ondelete="CASCADE"))
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    code: Mapped[str] = mapped_column(String(8))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    consent_version: Mapped[str] = mapped_column(String(16))
+    skin_label: Mapped[str | None] = mapped_column(String(24), nullable=True)      # optional, self-described
+    device: Mapped[str | None] = mapped_column(String(80), nullable=True)           # coarse user-agent summary only
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PadSample(Base):
+    """A donated photo (Fernet-encrypted). kind: live | print | replay | mask."""
+    __tablename__ = "pad_samples"
+    __table_args__ = (UniqueConstraint("contribution_id", "kind", "slot"), Index("ix_pad_samples_contribution", "contribution_id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
+    contribution_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("pad_contributions.id"), ondelete="CASCADE"))
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(8))
+    slot: Mapped[int] = mapped_column(Integer)
+    light: Mapped[str | None] = mapped_column(String(16), nullable=True)           # lighting label chosen from a fixed list
+    content_type: Mapped[str] = mapped_column(String(24))
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

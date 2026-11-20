@@ -14,6 +14,7 @@ const ICONS = {
   business: <I><path d="M4 20V6.5A1.5 1.5 0 0 1 5.5 5H13a1.5 1.5 0 0 1 1.5 1.5V20M14.5 10H18.5A1.5 1.5 0 0 1 20 11.5V20M2.5 20h19M8 9h2.5M8 12.5h2.5M8 16h2.5" /></I>,
   key: <I><circle cx="8" cy="15" r="3.5" /><path d="M10.5 12.5L20 3M16 7l3 3M13.5 9.5l2 2" /></I>,
   webhook: <I><circle cx="6" cy="17" r="2.5" /><circle cx="18" cy="17" r="2.5" /><circle cx="12" cy="6.500" r="2.5" /><path d="M12 9v3.500M10.300 14.500L7.800 15M13.700 14.500L16.200 15" /></I>,
+  collect: <I><path d="M4 8.500A1.500 1.500 0 0 1 5.500 7H8l1.200-2h5.600L16 7h2.500A1.500 1.500 0 0 1 20 8.500v9a1.500 1.500 0 0 1-1.500 1.500h-13A1.500 1.500 0 0 1 4 17.500z" /><circle cx="12" cy="13" r="3.200" /></I>,
   logs: <I><path d="M5 4.5h14M5 9.5h14M5 14.5h9M5 19.5h6" /></I>,
   settings: <I><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></I>,
   help: <I><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01" /></I>,
@@ -26,6 +27,7 @@ const MAIN: [keyof typeof ICONS, string, string | null][] = [
   ["brand", "White label", "/dashboard/white-label"],
   ["key", "API Keys", "/dashboard/api-keys"],
   ["webhook", "Webhooks", "/dashboard/webhooks"],
+  ["collect", "Collection", "/dashboard/collection"],
   ["logs", "Logs", "/dashboard/logs"],
 ];
 const SETTING: [keyof typeof ICONS, string, string][] = [["settings", "Settings", "/dashboard/settings"], ["help", "Support & Help", "/dashboard/support"]];
