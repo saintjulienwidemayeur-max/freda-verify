@@ -1,0 +1,73 @@
+import io
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from app.services import face
+from tests.conftest import auth, first_org, register
+from tests.test_media import bearer
+
+FACES = Path(__file__).resolve().parents[2] / "public" / "faces"
+pytestmark = pytest.mark.skipif(not face.available(), reason="face models (/opt/face-models) or opencv not installed")
+
+
+def jpg(name):
+    b = io.BytesIO()
+    Image.open(FACES / f"{name}.webp").convert("RGB").save(b, "JPEG", quality=92)
+    return b.getvalue()
+
+
+def test_same_person_scores_high_and_different_people_low():
+    same = face.compare(jpg("man-doc"), jpg("man-selfie"))
+    other = face.compare(jpg("man-doc"), jpg("woman-selfie"))
+    assert same.status == "compared" and same.band == "high" and same.score > 0.6
+    assert other.status == "compared" and other.band == "low" and other.score < face.COSINE_THRESHOLD
+    assert face.band(0.40) == "possible"
+
+
+def test_no_face_and_garbage_are_reported_not_raised():
+    blank = io.BytesIO()
+    Image.new("RGB", (400, 300), "white").save(blank, "JPEG")
+    assert face.compare(jpg("man-doc"), blank.getvalue()).status == "no_selfie"
+    assert face.compare(blank.getvalue(), jpg("man-selfie")).status == "no_doc_face"
+    assert face.compare(b"not an image", jpg("man-selfie")).status == "error"
+
+
+def _submit(client, selfie):
+    t = register(client, "owner@o.example", "Org O")
+    org = first_org(client, t)
+    key = client.post(f"/api/v1/organizations/{org['id']}/api-keys", json={"name": "k", "env": "test"}, headers=auth(t)).json()["secret"]
+    v = client.post("/api/v1/verifications", json={}, headers=bearer(key)).json()
+    h = {**bearer(v["session_token"]), "Content-Type": "image/jpeg"}
+    client.post("/api/v1/session/consent", headers=h)
+    for kind, data in (("document_front", jpg("man-doc")), ("document_back", jpg("man-doc")), ("selfie", selfie)):
+        assert client.put(f"/api/v1/session/media/{kind}?doc_type=id&country=HT", content=data, headers=h).status_code == 204
+    assert client.post("/api/v1/session/complete", headers=h).status_code == 204
+    return t, org, v
+
+
+def test_submission_runs_the_comparison_and_reviewers_see_an_advisory_score(client):
+    t, org, v = _submit(client, jpg("man-selfie"))
+    r = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks", headers=auth(t)).json()
+    assert r["face_available"] and r["face"]["status"] == "compared" and r["face"]["band"] == "high"
+    assert "embedding" not in str(r["face"]).lower()                                   # no biometric template is stored or returned
+    again = client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks/face", headers=auth(t))
+    assert again.status_code == 200 and again.json()["face"]["status"] == "compared"
+    actions = [a["action"] for a in client.get(f"/api/v1/organizations/{org['id']}/audit-logs", headers=auth(t)).json()]
+    assert "verification.face_compared" in actions
+
+
+def test_a_different_person_is_flagged_low_and_nothing_is_decided_automatically(client):
+    t, org, v = _submit(client, jpg("woman-selfie"))
+    r = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks", headers=auth(t)).json()
+    assert r["face"]["band"] == "low"
+    assert client.get(f"/api/v1/verifications/{v['id']}?organization_id={org['id']}", headers=auth(t)).json()["status"] == "MANUAL_REVIEW"   # still waiting for a human
+
+
+def test_other_tenants_cannot_read_or_rerun(client):
+    t, org, v = _submit(client, jpg("man-selfie"))
+    other = register(client, "x@x.example", "Org X")
+    base = f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks"
+    assert client.get(base, headers=auth(other)).status_code == 404
+    assert client.post(base + "/face", headers=auth(other)).status_code == 404

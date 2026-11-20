@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 1440         # default lifetime of a verification session link
     media_retention_days: int = 0           # 0 = photos are KEPT until a person deletes them (default). > 0 = auto-delete that many days after upload
     media_max_bytes: int = 2 * 1024 * 1024  # per photo
+    brevo_api_key: str | None = None        # Brevo (Sendinblue) transactional e-mail API key; mail is disabled when unset. Secret: environment variable only
+    mail_from_email: str = "no-reply@fredaverify.com"   # must be a sender/domain verified in Brevo (SPF/DKIM)
+    mail_from_name: str = "Freda Verify"
+    notify_on_submit: bool = True           # e-mail owners/admins when a customer submits a verification (no personal data in the message)
     session_rate_limit: int = 120           # requests / minute / session token
 
     @field_validator("database_url")

@@ -3,7 +3,7 @@ import uuid
 from datetime import timedelta
 
 import pyotp
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -28,7 +28,7 @@ from app.core.security import (
 from app.db.session import get_db
 from app.models import Membership, Organization, PasswordResetToken, RecoveryCode, RefreshSession, Role, User, now
 from app.schemas import ForgotIn, LoginIn, MfaCodeIn, MfaDisableIn, MfaRequiredOut, MfaVerifyIn, RefreshIn, RegisterIn, ResetIn, TokensOut, UserOut
-from app.services import audit
+from app.services import audit, mailer
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = logging.getLogger("fv.auth")
@@ -177,7 +177,7 @@ def me(user: User = Depends(get_current_user)):
 
 
 @router.post("/password/forgot", status_code=202)
-def forgot(body: ForgotIn, request: Request, db: Session = Depends(get_db)):
+def forgot(body: ForgotIn, request: Request, background: BackgroundTasks, db: Session = Depends(get_db)):
     _limit(request, body.email)
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if user and user.is_active:
@@ -185,8 +185,14 @@ def forgot(body: ForgotIn, request: Request, db: Session = Depends(get_db)):
         db.add(PasswordResetToken(user_id=user.id, token_hash=sha256(token), expires_at=now() + timedelta(minutes=30)))
         audit.record(db, request, "auth.password_reset_requested", user_id=user.id)
         db.commit()
-        if get_settings().app_env == "dev":
-            log.warning("[dev only] password reset token for %s: %s", user.email, token)   # production: send by e-mail provider (not wired yet)
+        if mailer.enabled():
+            link = f"{get_settings().hosted_url.rstrip('/')}/reset-password?token={token}"
+            # sent AFTER the response (background task) so the answer and its timing are identical whether or not the account exists
+            background.add_task(mailer.send_email, [user.email], "Reset your Freda Verify password",
+                                "Someone asked to reset the password of your Freda Verify account. The link below works once and expires in 30 minutes.\nIf it was not you, ignore this e-mail: your password is unchanged.",
+                                ("Choose a new password", link))
+        elif get_settings().app_env == "dev":
+            log.warning("[dev only] password reset token for %s: %s", user.email, token)
         else:
             log.info("password reset requested (no e-mail provider configured)")
     return {"message": "If an account exists for this e-mail, a reset link has been sent."}   # identical response either way

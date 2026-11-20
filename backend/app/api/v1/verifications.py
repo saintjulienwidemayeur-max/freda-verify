@@ -24,9 +24,9 @@ from app.core.deps import PERMS, OrgCtx, Principal, get_principal, org_access
 from app.core.errors import AppError, forbidden, not_found, unauthorized
 from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
-from app.models import Branding, BrandingLogo, Membership, Verification, VerificationCheck, VerificationMedia, now
+from app.models import Branding, BrandingLogo, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, ocr
+from app.services import audit, face, mailer, ocr
 from app.services.images import read_limited, sniff_ok
 
 router = APIRouter(tags=["verifications"])
@@ -155,6 +155,28 @@ def give_consent(request: Request, v: Verification = Depends(get_session), db: S
     return Response(status_code=204)
 
 
+# ───────── e-mail notification (Brevo) ─────────
+def notify_submission(verification_id: uuid.UUID) -> int:
+    """Tells the owners and admins of the organization that a customer submitted a verification. No personal data in the message: only the business's own reference
+    and a link to the dashboard (the reader signs in to see anything). Returns the number of recipients (0 when mail is disabled or nobody can be notified)."""
+    s = get_settings()
+    if not s.notify_on_submit or not mailer.enabled():
+        return 0
+    with SessionLocal() as db:
+        v = db.get(Verification, verification_id)
+        if not v:
+            return 0
+        emails = [e for (e,) in db.execute(select(User.email).join(Membership, Membership.user_id == User.id).where(
+            Membership.organization_id == v.organization_id, Membership.role.in_(("owner", "admin")), User.is_active.is_(True)))]
+        ref = f" (reference: {v.reference})" if v.reference else ""
+        ok = mailer.send_email(emails, "A verification is ready for your review",
+                               f"A customer submitted their documents{ref}. It is waiting for a manual review in your Freda Verify dashboard.",
+                               ("Open the dashboard", f"{s.hosted_url.rstrip('/')}/dashboard/verifications"))
+        audit.record(db, None, "verification.notified", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"recipients": len(emails), "sent": ok})
+        db.commit()
+        return len(emails) if ok else 0
+
+
 # ───────── MRZ reading (server-side OCR) ─────────
 def run_mrz_check(verification_id: uuid.UUID, db: Session | None = None) -> VerificationCheck | None:
     """Reads the MRZ from the document photos (every document photo is tried, the best reading wins) and stores the encrypted outcome."""
@@ -191,6 +213,40 @@ def run_mrz_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
     finally:
         if own:
             db.close()
+
+
+def run_face_check(verification_id: uuid.UUID, db: Session | None = None) -> VerificationCheck | None:
+    """Compares the portrait on the document with the selfie (advisory similarity score, nothing stored but the number). Never decides anything."""
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        v = db.get(Verification, verification_id)
+        if not v:
+            return None
+        rows = {m.kind: m for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "selfie"))))}
+        if "document_front" not in rows or "selfie" not in rows:
+            return None
+        out = face.compare(decrypt_bytes(rows["document_front"].data), decrypt_bytes(rows["selfie"].data))
+        payload = {"score": out.score, "band": out.band, "doc_faces": out.doc_faces, "selfie_faces": out.selfie_faces, "threshold": face.COSINE_THRESHOLD, "model": "SFace 2021dec + YuNet 2023mar"}
+        row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face")) or VerificationCheck(
+            verification_id=v.id, organization_id=v.organization_id, kind="face")
+        row.status, row.source, row.data, row.created_at = out.status, "doc+selfie", encrypt_bytes(json.dumps(payload).encode()), now()
+        db.add(row)
+        audit.record(db, None, "verification.face_compared", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": out.status})
+        db.commit()
+        return row
+    except Exception:  # noqa: BLE001  never break the submission
+        db.rollback()
+        return None
+    finally:
+        if own:
+            db.close()
+
+
+def _face_out(row: VerificationCheck | None) -> dict | None:
+    if not row:
+        return None
+    return {"status": row.status, "created_at": row.created_at, **json.loads(decrypt_bytes(row.data))}
 
 
 def _check_out(row: VerificationCheck | None) -> dict | None:
@@ -258,6 +314,8 @@ def complete_session(request: Request, background: BackgroundTasks, v: Verificat
     audit.record(db, request, "verification.submitted", org_id=v.organization_id, target_type="verification", target_id=v.id)
     db.commit()
     background.add_task(run_mrz_check, v.id)                  # after the response: the end user never waits for OCR
+    background.add_task(run_face_check, v.id)
+    background.add_task(notify_submission, v.id)
     return Response(status_code=204)
 
 
@@ -317,7 +375,21 @@ def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
     row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz"))
     audit.record(db, request, "verification.checks_viewed", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
-    return {"engine_available": ocr.available(), "mrz": _check_out(row)}
+    frow = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face"))
+    return {"engine_available": ocr.available(), "mrz": _check_out(row), "face_available": face.available(), "face": _face_out(frow)}
+
+
+@router.post("/organizations/{org_id}/verifications/{verification_id}/checks/face")
+def rerun_face(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """Re-runs the advisory face comparison now (needs the document front and the selfie)."""
+    v = _owned(db, ctx, verification_id)
+    have = {k for (k,) in db.execute(select(VerificationMedia.kind).where(VerificationMedia.verification_id == v.id))}
+    if not {"document_front", "selfie"} <= have:
+        raise AppError(409, "missing_photos", "The document front and the selfie are both needed")
+    audit.record(db, request, "verification.face_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
+    db.commit()
+    row = run_face_check(v.id, db)
+    return {"face_available": face.available(), "face": _face_out(row)}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/mrz")

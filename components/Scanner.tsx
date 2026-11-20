@@ -12,7 +12,7 @@ export type ScanText = {
 
 const TICK = 140;                       // analysis interval (ms)
 const NEED = 1100;                      // good time before the automatic capture (ms)
-const BLUR_MIN = 30, DARK = 55, BRIGHT = 250, GLARE = 0.3, QUAD_MOVE = 0.025;   // a pale passport page is bright but not glare: only clipped pixels count
+const BLUR_MIN = 30, DARK = 55, BRIGHT = 252, GLARE = 0.5, QUAD_MOVE = 0.025;   // a pale passport page is bright but not glare: only clipped pixels count
 
 /**
  * Document scanner with automatic capture (document side only; the selfie uses FaceScanner).
@@ -51,7 +51,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
     if (err || engine !== "ready") return;
     const work = document.createElement("canvas"), det = document.createElement("canvas");
     let prev: Float32Array | null = null, prevQuad: Quad | null = null, goodMs = 0, miss = 0, stop = false, cooldown = 0, timer: ReturnType<typeof setTimeout>;
-    let lastGuide = 0, guideOk = 0, guideWhy: Reject | null = null;
+    let lastGuide = 0, guideOk = 0, guideWhy: Reject | null = null, steadyMs = 0;
     const t0 = performance.now(), manualTimer = setTimeout(() => setShowManual(true), 5000);
     manualRef.current = () => {
       const v = vid.current, box = wrap.current?.getBoundingClientRect();
@@ -96,6 +96,8 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x, l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - W] - g[i + W]; m += l; m2 += l * l; n++; }
       const sharp = m2 / n - (m / n) ** 2;
       const dark = mean < DARK, glare = mean > BRIGHT || hot / (W * H) > GLARE, blur = sharp < BLUR_MIN;
+      let motion = 99;                                                    // mean absolute pixel change since the previous analysed frame
+      if (prev && prev.length === g.length) { let acc = 0; for (let i = 0; i < g.length; i++) acc += Math.abs(g[i] - prev[i]); motion = acc / g.length; }
       prev = g;
 
       const DW = 320, DH = Math.round((DW * vh) / vw);
@@ -120,7 +122,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       // PASSPORT fallback when no page outline is found (page held open, busy background, plastic sleeve...): the user aligns the photo page with the frame
       // and we validate the frame area itself with the same strict checks (photo on the left + the two MRZ lines). Never used for ID cards (no content check on the back).
       const quadGood = !!q && aspectOk(kind, q.ratio);
-      if (kind === "passport" && !quadGood && !dark && !glare && !blur && !cooling && !fired.current && performance.now() - lastGuide > 1300) {
+      if (kind === "passport" && !quadGood && !dark && !blur && !cooling && !fired.current && performance.now() - lastGuide > 1300) {
         lastGuide = performance.now();
         const gc = document.createElement("canvas"); gc.width = Math.round(sw); gc.height = Math.round(sh);
         gc.getContext("2d")!.drawImage(v, sx, sy, sw, sh, 0, 0, gc.width, gc.height);
@@ -134,10 +136,14 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
           }
         } else { guideOk = Math.max(0, guideOk - 1); guideWhy = gv.reject; }       // one noisy frame must not erase the progress
       }
-      if (quadGood) { guideOk = 0; guideWhy = null; }
+      if (quadGood) { guideOk = 0; guideWhy = null; steadyMs = 0; }
+      // PASSPORT automatic capture when the frame checks cannot confirm (real phones: glare, sleeve, hand shake): if the page is held steady, sharp and lit for ~3 s,
+      // take the picture anyway. The SERVER then decides (it refuses a photo without readable MRZ text), so this never accepts a wrong document by itself.
+      if (kind === "passport" && !quadGood && !dark && !blur && !cooling && !fired.current && motion < 7) steadyMs += TICK; else steadyMs = 0;   // brightness is not a blocker here: a pale page is normal and the server judges the photo
+      if (steadyMs >= 3000 && !fired.current) { steadyMs = 0; cooldown = performance.now() + 6000; manualRef.current(); }
       const ok = placement === "ok" && !dark && !glare && !blur && stable && !cooling;
       if (ok) { goodMs += TICK; miss = 0; } else if (++miss > 1) { goodMs = 0; }
-      setGood(goodMs > 0 || guideOk > 0); setProg(Math.min(1, Math.max(goodMs / NEED, guideOk / 2)));
+      setGood(goodMs > 0 || guideOk > 0); setProg(Math.min(1, Math.max(goodMs / NEED, guideOk / 2, steadyMs / 3000)));
       if (placement !== "ok" || goodMs === 0) { if (!cooling) setRej(null); }
       const guideHint = kind === "passport" && !quadGood
         ? (guideOk > 0 ? tx.guideChecking : guideWhy === "face" ? tx.rejFace : guideWhy === "mrz" ? tx.rejMrz : tx.fitFrame) : null;

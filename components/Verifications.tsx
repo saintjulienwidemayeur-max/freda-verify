@@ -6,7 +6,8 @@ import { can, useAuth } from "@/lib/auth";
 type V = { id: string; status: string; env: string; reference: string | null; consent_given: boolean; created_at: string; expires_at: string; submitted_at: string | null; decided_at: string | null; decision_reason: string | null; media_count: number };
 type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string | null };
 type Mrz = { format: string; document_type: string; issuing_country: string; surname: string; given_names: string; document_number: string; nationality: string; birth_date: string | null; sex: string; expiry_date: string | null; checks: Record<string, boolean>; all_checks_passed: boolean; expired: boolean | null; ocr_corrections: number; warnings: string[] };
-type Checks = { engine_available: boolean; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
+type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string };
+type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie" };
 
@@ -73,6 +74,30 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
               {r.warnings.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-[#B54708]">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
             </div>); })()}
           <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. One check digit is a single digit: a wrong reading passes it about 1 time in 10, so compare the document number with the photo, especially for a single reading. Nationality, sex and names have no check digit. Valid check digits show the text is internally consistent, not that the document is genuine. Accuracy was measured on generated pages and checked on only two real documents: treat it as advice.</p>
+        </div>
+      )}
+
+      {admin && media && media.length > 0 && (
+        <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="Face comparison">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-display text-sm font-bold">Face comparison: document photo vs selfie (advisory)</h3>
+            <button disabled={busy} onClick={() => void act(async () => { const r = await api<{ face: Face | null }>(`${base}/checks/face`, { method: "POST" }); setChecks((c) => (c ? { ...c, face: r.face } : c)); })} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Compare again</button>
+          </div>
+          {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
+          {checks && checks.face_available === false && <p className="mt-2 text-sm text-[#B54708]">The comparison engine is not installed on the server.</p>}
+          {checks && checks.face_available !== false && !checks.face && <p className="mt-2 text-sm text-navy/55">Not computed yet (it needs the document front and the selfie). Use “Compare again”.</p>}
+          {checks?.face?.status === "no_doc_face" && <p className="mt-2 text-sm text-navy/60">No face could be found on the document photo. Look at the photos yourself.</p>}
+          {checks?.face?.status === "no_selfie" && <p className="mt-2 text-sm text-navy/60">No face could be found on the selfie. Look at the photos yourself.</p>}
+          {checks?.face?.status === "error" && <p className="mt-2 text-sm text-[#B54708]">The comparison failed on these images.</p>}
+          {checks?.face?.status === "compared" && checks.face.score !== null && (
+            <div className="mt-3 text-sm">
+              <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${checks.face.band === "high" ? "bg-[#E7F7EF] text-[#067647]" : checks.face.band === "possible" ? "bg-[#FEF3E2] text-[#B54708]" : "bg-[#FDECEA] text-[#B42318]"}`}>
+                {checks.face.band === "high" ? "Similar" : checks.face.band === "possible" ? "Uncertain" : "Different"} · similarity {checks.face.score.toFixed(2)}
+              </span>
+              <span className="ml-2 text-xs text-navy/50">threshold {checks.face.threshold} · {checks.face.model}</span>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-navy/45">Experimental and advisory only: a person decides. The model was not measured on our customers (skin tones, ages, photo quality), and a small printed photo is harder to match than a selfie. Always look at the two photos. No face template is stored, only this number.</p>
         </div>
       )}
 

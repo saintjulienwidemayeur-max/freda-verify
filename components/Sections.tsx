@@ -28,7 +28,7 @@ export function Services() {
     <Sec title="Tous les contrôles d'identité, dans un seul flux." sub="Feuille de route : seules les démos de capture sont utilisables aujourd'hui, rien ne produit encore de verdict de vérification.">
       <Grid items={[
         ["Vérification de documents · démo", "Capture guidée dans le navigateur (cadrage, passeport avec photo et lignes MRZ). Rien n'est envoyé ni authentifié ; la lecture OCR et le contrôle d'authenticité sont prévus."],
-        ["Visage · démo", "Défi de rotation de la tête dans le navigateur. Ce n'est pas une détection de vivacité certifiée ; la comparaison selfie / document est prévue."],
+        ["Visage · démo", "Défi de rotation de la tête dans le navigateur (pas une détection de vivacité certifiée). La comparaison selfie / photo du document fournit un score indicatif au réviseur humain ; elle n'est pas mesurée sur nos clients et ne décide de rien."],
         ["Vérification d'adresse · prévu", "Non disponible."],
         ["Filtrage AML · prévu", "Aucune liste de sanctions ou de PEP n'est branchée à ce jour. Les sources de données restent à choisir."],
         ["KYB · prévu", "Non disponible."],
