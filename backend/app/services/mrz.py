@@ -90,9 +90,12 @@ def _date(yymmdd: str, birth: bool) -> date | None:
         return None
 
 
+NAME_NOISE = "names zone contained digits (OCR noise, dropped): names are unreliable"
+
+
 def _names(raw: str) -> tuple[str, str]:
     surname, _, given = raw.partition("<<")
-    return surname.replace("<", " ").strip(), given.replace("<", " ").strip()
+    return " ".join(surname.replace("<", " ").split()), " ".join(given.replace("<", " ").split())
 
 
 def _ok(field_value: str, digit: str, optional: bool = False) -> bool:
@@ -147,7 +150,11 @@ def parse_mrz(lines: list[str], fix_ocr: bool = True) -> MrzResult:
         warnings.append("expiry date is not a valid calendar date")
     if sex not in ("M", "F", "<", "X"):
         warnings.append("unexpected sex marker")
-    surname, given = _names(a(names_raw) if fix_ocr else names_raw)
+    nm = a(names_raw) if fix_ocr else names_raw
+    if any(c.isdigit() for c in nm):
+        warnings.append(NAME_NOISE)
+        nm = "".join("<" if c.isdigit() else c for c in nm)
+    surname, given = _names(nm)
     return MrzResult(
         format=fmt, document_type=dtype.replace("<", ""), issuing_country=country, surname=surname, given_names=given,
         document_number=doc_no.replace("<", ""), nationality=nat, birth_date=bd.isoformat() if bd else None, sex="X" if sex == "<" else sex,

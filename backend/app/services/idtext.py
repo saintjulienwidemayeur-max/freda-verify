@@ -205,7 +205,7 @@ def extract(text: str, today: date | None = None) -> dict:
 def merge_trusted(fields: dict, back_text: str | None, mrz: dict | None) -> tuple[dict, dict]:
     """Completes the fields read from the card FRONT with (1) the printed text of the BACK (only fields still missing) and (2) the machine-readable zone of the back, but only the
     values whose own ICAO check digit passed (a birth date or expiry date whose digit is valid is far more reliable than printed-text OCR). The MRZ values take priority.
-    The second returned dict says where each value came from. The names of a card MRZ are NOT used (no check digit protects them)."""
+    The second returned dict says where each value came from. MRZ names are only a fallback when the front gave none and the reading has no digit noise."""
     out = dict(fields)
     src = {k: "front_text" for k in out}
     if back_text:
@@ -213,12 +213,16 @@ def merge_trusted(fields: dict, back_text: str | None, mrz: dict | None) -> tupl
             if k not in out:
                 out[k], src[k] = val, "back_text"
     checks = (mrz or {}).get("checks") or {}
-    if mrz and checks:
+    if mrz:
         whole = bool(checks.get("composite")) and checks.get("birth_date") and checks.get("expiry_date")
         if checks.get("birth_date") and mrz.get("birth_date"):
             out["birth_date"], src["birth_date"] = mrz["birth_date"], "mrz"
         if checks.get("expiry_date") and mrz.get("expiry_date"):
             out["expiry_date"], src["expiry_date"] = mrz["expiry_date"], "mrz"
+        mrz_name = " ".join(x for x in (mrz.get("given_names"), mrz.get("surname")) if x).strip()
+        clean = mrz_name and not any("names zone contained digits" in w for w in mrz.get("warnings") or []) and mrz_name.replace(" ", "").isalpha()
+        if clean and "name" not in out and len(mrz_name.split()) >= 2:
+            out["name"], src["name"] = mrz_name, "mrz_unchecked"      # fallback only: no check digit protects names
         if (checks.get("document_number") or whole) and mrz.get("document_number"):
             out["document_number"], src["document_number"] = mrz["document_number"], "mrz"
     return out, src

@@ -52,3 +52,19 @@ def test_merge_trusted_ignores_mrz_dates_when_digit_fails_and_fills_from_back():
     mrz = {"checks": {"birth_date": False, "expiry_date": False, "document_number": False, "composite": False}, "birth_date": "2003-11-01"}
     f, src = merge_trusted({"name": "A B"}, "Date de naissance 05/06/1990", mrz)
     assert f["birth_date"] == "1990-06-05" and src["birth_date"] == "back_text"
+
+
+def test_mrz_name_digits_dropped_and_not_used_as_fallback():
+    from app.services.mrz import parse_mrz
+    r = parse_mrz(["IDHTI0D2FTC5620".ljust(30, "<"), "0311015M3301156HTI".ljust(29, "<") + "0", "3SAINT<4ULIEN<<WIDEMYEUR".ljust(30, "<")]).to_dict()
+    assert not any(c.isdigit() for c in r["surname"] + r["given_names"])
+    assert any("digits" in w for w in r["warnings"])
+    from app.services.idtext import merge_trusted
+    f, _ = merge_trusted({}, None, {**r, "checks": {"birth_date": True}})
+    assert "name" not in f
+
+
+def test_mrz_clean_name_is_fallback_when_front_has_none():
+    from app.services.idtext import merge_trusted
+    f, src = merge_trusted({}, None, {"checks": {}, "surname": "SAINT JULIEN", "given_names": "WIDEMYEUR", "warnings": []})
+    assert f["name"] == "WIDEMYEUR SAINT JULIEN" and src["name"] == "mrz_unchecked"
