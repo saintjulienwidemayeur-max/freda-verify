@@ -177,9 +177,9 @@ class VerificationMedia(Base):
     """A photo uploaded by the end user. `data` is Fernet-encrypted; photos are deleted at `purge_after` (retention) or on request.
     There is no automated analysis of these images: a human reviews them in the dashboard."""
     __tablename__ = "verification_media"
-    __table_args__ = (UniqueConstraint("verification_id", "kind"), Index("ix_media_purge", "purge_after"))
+    __table_args__ = (UniqueConstraint("verification_id", "kind"), Index("ix_media_purge", "purge_after"), Index("ix_verification_media_verification_id", "verification_id"))
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    verification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("verifications.id"), ondelete="CASCADE"), index=True)
+    verification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("verifications.id"), ondelete="CASCADE"))
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(String(16))                      # document_front | document_back | selfie
     doc_type: Mapped[str | None] = mapped_column(String(8), nullable=True)
@@ -195,9 +195,9 @@ class VerificationMedia(Base):
 class VerificationCheck(Base):
     """Result of a server-side check on the uploaded photos. `data` is Fernet-encrypted JSON (it contains names, birth date and document number)."""
     __tablename__ = "verification_checks"
-    __table_args__ = (UniqueConstraint("verification_id", "kind"),)
+    __table_args__ = (UniqueConstraint("verification_id", "kind"), Index("ix_verification_checks_verification_id", "verification_id"))
     id: Mapped[uuid.UUID] = mapped_column(Uuid, **_PK)
-    verification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("verifications.id"), ondelete="CASCADE"), index=True)
+    verification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("verifications.id"), ondelete="CASCADE"))
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(fk("organizations.id"), ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(String(16))                      # mrz
     status: Mapped[str] = mapped_column(String(12))                    # read | unreadable | unavailable
