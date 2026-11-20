@@ -72,7 +72,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
               {r.ocr_corrections > 0 && <p className="mt-2 text-xs text-[#B54708]">{r.ocr_corrections} character(s) were auto-corrected (typical OCR confusions): compare with the photo.</p>}
               {r.warnings.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-[#B54708]">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
             </div>); })()}
-          <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. One check digit is a single digit: a wrong reading passes it about 1 time in 10, so compare the document number with the photo, especially for a single reading. Nationality, sex and names have no check digit. Valid check digits show the text is internally consistent, not that the document is genuine. Tested on generated pages only, never on real passports.</p>
+          <p className="mt-3 text-xs text-navy/45">Read by OCR from the photo; it can contain errors. One check digit is a single digit: a wrong reading passes it about 1 time in 10, so compare the document number with the photo, especially for a single reading. Nationality, sex and names have no check digit. Valid check digits show the text is internally consistent, not that the document is genuine. Accuracy was measured on generated pages and checked on only two real documents: treat it as advice.</p>
         </div>
       )}
 
