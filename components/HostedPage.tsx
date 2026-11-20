@@ -161,7 +161,7 @@ export default function HostedPage() {
   const progress = step === "welcome" ? 0 : step === "done" ? 1 : (idx + 1) / (order.length + 1);
   const prev = () => { if (step === "country") setStep("welcome"); else if (idx > 0) setStep(order[idx - 1]); setCam(false); };
 
-  const setShot = useCallback(async (key: "front" | "back" | "selfie", blob: Blob, extra?: Blob[]) => {
+  const setShot = useCallback(async (key: "front" | "back" | "selfie", blob: Blob, extra?: Blob[], video?: Blob) => {
     setBusy(true); setSendErr(false);
     if (token) {   // real session: the photo is sent (encrypted at rest, reviewed by a person) BEFORE it is accepted on screen
       try {
@@ -174,6 +174,9 @@ export default function HostedPage() {
         }
       } catch { setSendErr(true); setBusy(false); setCam(false); return; }
       // extra frontal frames of the selfie (best effort: a failure here never blocks the verification; they only feed the experimental live-capture score)
+      if (key === "selfie" && video && video.size > 1024 && video.size <= 8 * 1024 * 1024) {      // challenge clip for the human reviewer (best effort)
+        void sessionFetch("/session/media/selfie_video", token, { method: "PUT", headers: { "Content-Type": video.type || "video/webm" }, body: video }).catch(() => null);
+      }
       if (key === "selfie" && extra?.length) {
         await Promise.all(extra.slice(0, 2).map((b, i) => sessionFetch(`/session/media/selfie_${i + 2}`, token, { method: "PUT", headers: { "Content-Type": b.type }, body: b }).catch(() => null)));
       }
@@ -254,7 +257,7 @@ export default function HostedPage() {
       {cam ? (
         <div className="mt-4 flex min-h-[380px] flex-1 flex-col">
           {isSelfie
-            ? <FaceScanner onShot={(b, extra) => setShot(key, b, extra)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} blink={blinkOn} />
+            ? <FaceScanner onShot={(b, extra, video) => setShot(key, b, extra, video)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} blink={blinkOn} />
             : <Scanner kind={kind ?? "id"} side={key === "back" ? "back" : "front"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} />}
         </div>
       ) : s ? (

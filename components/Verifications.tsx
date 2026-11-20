@@ -10,7 +10,7 @@ type Face = { status: string; score: number | null; band: string | null; doc_fac
 type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number>; min_frame?: number | null; frames?: { status: string; real_probability: number | null }[] };
 type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
-const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie", selfie_2: "Selfie · frame 2", selfie_3: "Selfie · frame 3" };
+const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie", selfie_2: "Selfie · frame 2", selfie_3: "Selfie · frame 3", selfie_video: "Challenge video" };
 
 type Verdict = { level: "pass" | "review" | "fail"; title: string; reasons: { ok: boolean; text: string }[] };
 /** Recommendation shown to the reviewer ONLY. It never decides: a person presses Approve or Reject. It is built from the two advisory checks, so it says nothing about liveness, authenticity or AML. */
@@ -86,7 +86,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         {media?.map((m) => (
           <figure key={m.kind} className="rounded-xl border border-[#e3eaf8] p-2">
-            {imgs[m.kind] ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={imgs[m.kind]} alt={LABEL[m.kind]} className="max-h-56 w-full rounded-lg object-contain bg-[#F6F8FC]" /> : <div className="grid h-32 place-items-center rounded-lg bg-[#F6F8FC] text-xs text-navy/40">{admin ? "Loading…" : "Hidden"}</div>}
+            {imgs[m.kind] ? /* eslint-disable-next-line @next/next/no-img-element */ (m.kind === "selfie_video" ? <video src={imgs[m.kind]} controls playsInline muted className="max-h-56 w-full rounded-lg bg-black" aria-label={LABEL[m.kind]} /> : <img src={imgs[m.kind]} alt={LABEL[m.kind]} className="max-h-56 w-full rounded-lg object-contain bg-[#F6F8FC]" />) : <div className="grid h-32 place-items-center rounded-lg bg-[#F6F8FC] text-xs text-navy/40">{admin ? "Loading…" : "Hidden"}</div>}
             <figcaption className="mt-1.5 text-xs text-navy/60"><b>{LABEL[m.kind]}</b>{m.doc_type ? ` · ${m.doc_type}` : ""}{m.country ? ` · ${m.country}` : ""}<br />{m.purge_after ? `Deleted automatically on ${new Date(m.purge_after).toLocaleDateString()}` : "Kept until a person deletes it"}</figcaption>
           </figure>
         ))}

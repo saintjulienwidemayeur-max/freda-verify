@@ -77,7 +77,7 @@ function BlinkGuide({ accent }: { accent: string }) {
  *  2. task 1: turn the head LEFT or RIGHT (random);  task 2: turn the OTHER way, or blink (random). Between tasks the user must look straight again.
  * Basic challenge only: NOT certified liveness (a good replay/deepfake or a mask can still pass). If MediaPipe cannot load it FAILS CLOSED (error + retry).
  */
-export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debug, blink: allowBlink = false }: { onShot: (b: Blob, extra?: Blob[]) => void; onCancel: () => void; tx: FaceText; accent: string; radius: number; debug?: boolean; blink?: boolean }) {
+export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debug, blink: allowBlink = false }: { onShot: (b: Blob, extra?: Blob[], video?: Blob) => void; onCancel: () => void; tx: FaceText; accent: string; radius: number; debug?: boolean; blink?: boolean }) {
   const wrap = useRef<HTMLDivElement>(null), vid = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState(false), [engine, setEngine] = useState<"loading" | "mp" | "fail">("loading"), [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<"align" | "task" | "done">("align");
@@ -104,6 +104,21 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
   useEffect(() => {
     if (err || engine !== "mp") return;
     let stop = false, timer: ReturnType<typeof setTimeout>;
+    // short clip of the challenge for the HUMAN reviewer (low bitrate, no audio). Best effort: unsupported browsers simply skip it.
+    let rec: MediaRecorder | null = null; const chunks: BlobPart[] = []; let recType = "";
+    const startRec = () => {
+      try {
+        const st = vid.current?.srcObject as MediaStream | null; if (!st || typeof MediaRecorder === "undefined") return;
+        recType = ["video/webm;codecs=vp8", "video/webm", "video/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+        if (!recType) return;
+        rec = new MediaRecorder(st, { mimeType: recType, videoBitsPerSecond: 500_000 }); rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); }; rec.start(1000);
+        setTimeout(() => { if (rec && rec.state === "recording") rec.stop(); }, 40_000);   // hard cap
+      } catch { rec = null; }
+    };
+    const stopRec = (): Promise<Blob | undefined> => new Promise((res) => {
+      if (!rec || rec.state === "inactive") return res(chunks.length ? new Blob(chunks, { type: recType.split(";")[0] }) : undefined);
+      rec.onstop = () => res(chunks.length ? new Blob(chunks, { type: recType.split(";")[0] }) : undefined); try { rec.stop(); } catch { res(undefined); }
+    });
     let goodMs = 0, miss = 0, hold = 0, taskStart = 0, still: Blob | null = null, extras: Blob[] = [], midTaken = false, cur: "align" | "task" | "done" = "align", idx = 0, baseline = 0, sawOpen = false, needFront = false, frontHold = 0;
     let seq: [Task, Task] = pickTasks(allowBlink); setTasks(seq);
     let bl: [number, number] = [0, 0], blN = 0;   // open-eye blink baseline learnt while the user looks straight
@@ -144,7 +159,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
         if (goodMs >= ALIGN_MS) {
           still = await snap(); if (!still) { goodMs = 0; return; }
           baseline = f.yawDeg !== undefined ? f.yawDeg : (f.ratio ?? 0) * (TURN_DEG / TURN_RATIO);   // the user's own "straight" pose
-          cur = "task"; setPhase("task"); idx = 0; setTaskIdx(0); setProg(0); setGood(false); setWrong(false);
+          startRec(); cur = "task"; setPhase("task"); idx = 0; setTaskIdx(0); setProg(0); setGood(false); setWrong(false);
           taskStart = performance.now(); hold = 0; sawOpen = false; needFront = false; setLookFront(false); setHint(promptFor(seq[0]));
         }
         return;
@@ -186,7 +201,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
       if (achieved) {
         if (idx === 0) { idx = 1; setTaskIdx(1); needFront = true; frontHold = 0; setProg(0); setWrong(false); setHint(tx.faceFront); setLookFront(true); return; }
         fired.current = true; cur = "done"; setPhase("done"); setFlash(true); setHint(tx.turnOk); setGood(true); setProg(1);
-        setTimeout(() => onShot(still!, extras.slice(0, 2)), 450);
+        setTimeout(async () => { const clip = await stopRec(); onShot(still!, extras.slice(0, 2), clip); }, 450);
         return;
       }
       if (elapsed > TASK_TIMEOUT) {                      // time out: new random content for the current step

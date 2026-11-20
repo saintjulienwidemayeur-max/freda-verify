@@ -24,3 +24,14 @@ async def read_limited(request: Request, limit: int) -> bytes:
         if len(buf) > limit:
             raise AppError(413, "file_too_large", f"The file must be {limit // 1024} KB or smaller")
     return bytes(buf)
+
+
+def sniff_video(ctype: str, data: bytes) -> bool:
+    """WebM (EBML header) or MP4/MOV ('ftyp' box). The declared type must match the bytes; anything else is refused."""
+    if len(data) < 1024:
+        return False
+    if ctype == "video/webm":
+        return data[:4] == b"\x1a\x45\xdf\xa3"
+    if ctype == "video/mp4":
+        return data[4:8] == b"ftyp"
+    return False

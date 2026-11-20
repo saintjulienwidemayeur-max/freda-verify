@@ -27,7 +27,7 @@ from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
 from app.services import audit, face, mailer, ocr, pad, webhooks
-from app.services.images import read_limited, sniff_ok
+from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
 SESSION_PREFIX = "fvs_"
@@ -324,8 +324,9 @@ def _check_out(row: VerificationCheck | None) -> dict | None:
 
 
 # ───────── photos uploaded by the end user (session token) ─────────
-KINDS = ("document_front", "document_back", "selfie", "selfie_2", "selfie_3")     # selfie_2/3: extra frontal frames for the experimental PAD score (optional)
+KINDS = ("document_front", "document_back", "selfie", "selfie_2", "selfie_3", "selfie_video")     # selfie_2/3: extra frontal frames for the experimental PAD score (optional)
 SELFIE_KINDS = ("selfie", "selfie_2", "selfie_3")
+VIDEO_KIND = "selfie_video"          # short clip of the head-turn challenge, for the HUMAN reviewer (no automatic analysis)
 DOC_TYPES = ("id", "passport", "license")
 
 
@@ -343,15 +344,20 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
     if kind not in KINDS:
         raise not_found("Unknown kind")
     _open_for_upload(v)
-    if kind not in SELFIE_KINDS and doc_type not in DOC_TYPES:
+    if kind not in SELFIE_KINDS and kind != VIDEO_KIND and doc_type not in DOC_TYPES:
         raise AppError(422, "validation_error", "doc_type must be id, passport or license for documents")
     if kind == "document_back" and doc_type == "passport":
         raise AppError(422, "validation_error", "A passport has no back side")
     s = get_settings()
     ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
-    data = await read_limited(request, s.media_max_bytes)
-    if not sniff_ok(ctype, data):
-        raise AppError(422, "invalid_image", "Use a JPEG, PNG or WebP photo")
+    if kind == VIDEO_KIND:
+        data = await read_limited(request, s.media_video_max_bytes)
+        if not sniff_video(ctype, data):
+            raise AppError(422, "invalid_video", "Use a short WebM or MP4 video")
+    else:
+        data = await read_limited(request, s.media_max_bytes)
+        if not sniff_ok(ctype, data):
+            raise AppError(422, "invalid_image", "Use a JPEG, PNG or WebP photo")
     if kind == "document_front" and doc_type == "passport" and ocr.available():
         # authoritative content gate: a passport photo page must contain machine-readable-zone text. The in-browser check is only a heuristic (a real national ID card
         # passed it in testing), so the server refuses a photo in which no MRZ-shaped text can be read (the check digits are NOT required here: OCR may be imperfect).
@@ -360,8 +366,8 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
             raise AppError(422, "mrz_not_found", "The two lines of characters at the bottom of the passport page could not be read")
     purge_expired_media(db)
     db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
-    db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind not in SELFIE_KINDS else None,
-                             country=country if kind not in SELFIE_KINDS else None, content_type=ctype, size=len(data), sha256=__import__("hashlib").sha256(data).hexdigest(),
+    db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind not in SELFIE_KINDS and kind != VIDEO_KIND else None,
+                             country=country if kind not in SELFIE_KINDS and kind != VIDEO_KIND else None, content_type=ctype, size=len(data), sha256=__import__("hashlib").sha256(data).hexdigest(),
                              data=encrypt_bytes(data), purge_after=(now() + timedelta(days=s.media_retention_days)) if s.media_retention_days > 0 else None))
     audit.record(db, request, "verification.media_uploaded", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"kind": kind, "size": len(data)})
     db.commit()

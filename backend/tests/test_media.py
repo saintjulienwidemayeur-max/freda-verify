@@ -170,3 +170,27 @@ def test_passport_front_without_mrz_text_is_refused_by_the_server(client):
     assert r.status_code == 422 and "mrz_not_found" in r.text                 # e.g. a national ID card held as a passport
     assert up(client, tok, "document_front", PASSPORT_PAGE, q="?doc_type=passport&country=HT").status_code == 204
     assert up(client, tok, "document_front", blank.getvalue(), q="?doc_type=id&country=HT").status_code == 204   # ID cards are not gated (no MRZ on the front)
+
+
+WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 2048
+MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 2048
+
+
+def test_challenge_video_is_optional_validated_encrypted_and_viewable_by_the_reviewer(client):
+    t, org, _, v = setup(client)
+    tok = v["session_token"]
+    client.post("/api/v1/session/consent", headers=bearer(tok))
+    assert up(client, tok, "selfie_video", WEBM, "video/webm").status_code == 204
+    assert up(client, tok, "selfie_video", MP4, "video/mp4").status_code == 204                    # replaces the previous clip
+    assert up(client, tok, "selfie_video", b"not a video" * 200, "video/webm").status_code == 422   # type must match the bytes
+    assert up(client, tok, "selfie_video", JPG, "image/jpeg").status_code == 422
+    assert up(client, tok, "selfie_video", b"\x1a\x45\xdf\xa3" + b"\x00" * (9 * 1024 * 1024), "video/webm").status_code == 413
+    with get_engine().connect() as c:
+        assert b"ftypmp42" not in b"".join(r[0] for r in c.execute(text("select data from freda_verify.verification_media")).all())
+    # the clip does not replace or count as a required photo
+    assert up(client, tok, "document_front", PASSPORT_PAGE, q="?doc_type=passport&country=HT").status_code == 204
+    assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 422          # selfie still required
+    assert up(client, tok, "selfie").status_code == 204
+    assert client.post("/api/v1/session/complete", headers=bearer(tok)).status_code == 204
+    r = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/media/selfie_video", headers=auth(t))
+    assert r.status_code == 200 and r.headers["content-type"] == "video/mp4" and r.content == MP4 and r.headers["cache-control"] == "private, no-store"
