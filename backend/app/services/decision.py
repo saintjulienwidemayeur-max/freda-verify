@@ -65,8 +65,7 @@ def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | No
             unc.append("pad_" + (pad.get("status", "missing") if pad else "missing"))
         elif pad.get("band") == "low" or pad["real_probability"] < 0.5:
             unc.append("pad_low")
-    if duplicate:
-        unc.append("duplicate_document")                             # the same document number was already submitted in this organization
+    # `duplicate` (the same document number was submitted before) is INFORMATION only: a person may verify with the same document as many times as they want
     if hard:
         return Verdict("REJECTED", hard)
     if not unc:

@@ -169,11 +169,11 @@ def test_face_and_extracted_reads_the_identity_from_the_card_itself():
     assert card(idfields={**IDF_OK, "plausible": {"name": False, "birth_date": True, "document_number": False}}).codes == ["id_name", "id_number"]
     assert card(idfields={**IDF_OK, "plausible": {**IDF_OK["plausible"], "expired": True}}).codes == ["id_expired_printed"]
     assert card(idfields=IDF_OK, face={"status": "compared", "score": 0.2, "band": "low"}).decision is None
-    assert card(idfields=IDF_OK, duplicate=True).codes == ["duplicate_document"]
+    assert card(idfields=IDF_OK, duplicate=True).decision == "APPROVED"                          # re-using the same document never blocks
     # if the business ALSO declared data and the card disagrees, a person looks
     assert card(idfields=IDF_OK, idtext={"status": "compared", "fields": 2, "matched": 1}).codes == ["id_data_mismatch"]
     assert card(idfields=IDF_OK, idtext={"status": "compared", "fields": 2, "matched": 2}).decision == "APPROVED"
-    assert d(duplicate=True).codes == ["duplicate_document"]                                        # also for passports
+    assert d(duplicate=True).decision == "APPROVED"                                                 # also for passports
 
 
 CIN_TEXT = "NOM: WIDEMAYEUR\nPRENOM(S): SAINT JULIEN\nDATE DE NAISSANCE: 01/11/2003\nNIF: 00-89-06-2024-5\n"

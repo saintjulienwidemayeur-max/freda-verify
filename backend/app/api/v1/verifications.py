@@ -252,7 +252,10 @@ def run_mrz_check(verification_id: uuid.UUID, db: Session | None = None) -> Veri
         best: tuple[int, str, ocr.OcrOutcome] | None = None
         outcome = ocr.OcrOutcome("unreadable")
         source = None
-        for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "document_back")))):
+        medias = list(db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "document_back")))))
+        if any(m.kind == "document_front" and m.doc_type in ("id", "license") for m in medias):
+            medias = [m for m in medias if m.kind == "document_back"] or medias       # a card's MRZ is on the BACK: do not spend several OCR passes on the front
+        for m in medias:
             o = ocr.read_mrz(decrypt_bytes(m.data))
             if o.status == "unavailable":
                 outcome, source, best = o, None, None
@@ -351,7 +354,10 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
             if not v or not front or front.doc_type not in ("id", "license"):
                 return
             front_img = decrypt_bytes(front.data)
-            ptext, ttext = paddle.read_text(front_img), idtext.read_text(front_img)
+            ptext = paddle.read_text(front_img)
+            pf = idtext.extract(ptext) if ptext else {}
+            fast = bool(pf) and all(idtext.plausible(pf).get(k) for k in ("name", "birth_date", "document_number")) and not v.expected_enc
+            ttext = None if fast else idtext.read_text(front_img)          # FAST PATH: PaddleOCR already gave a plausible name, birth date and number: skip the slow Tesseract pass (up to 25 s)
             text = ptext or ttext
             back = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_back"))
             mrz_row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz"))
@@ -428,7 +434,7 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
             else:
                 v.decision_reason = ("auto: needs review (" + ",".join(verdict.codes) + ")")[:200]
             audit.record(db, None, "verification.auto_decided" if verdict.decision else "verification.auto_review", org_id=v.organization_id, target_type="verification", target_id=v.id,
-                         meta={"decision": verdict.decision, "codes": verdict.codes})
+                         meta={"decision": verdict.decision, "codes": verdict.codes, "repeat_document": dup})
             db.commit()
         for h in hooks:
             webhooks.deliver(h)
