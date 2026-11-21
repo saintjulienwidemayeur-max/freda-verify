@@ -52,6 +52,49 @@ def _lines(result) -> str:
     return "\n".join(" ".join(t for _, _, _, t in sorted(ln, key=lambda b: b[2])) for ln in lines)
 
 
+def read_boxes(image: bytes) -> list[tuple[float, float, float, float, str]] | None:
+    """Text boxes (x0, y0, x1, y1, text) in pixels of the (possibly downscaled) image, for layout-aware extraction. None when unavailable. Never raises."""
+    if not available():
+        return None
+    try:
+        import cv2
+        import numpy as np
+        a = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        if a is None:
+            return None
+        k = MAX_SIDE / max(a.shape[:2])
+        if k < 1:
+            a = cv2.resize(a, None, fx=k, fy=k, interpolation=cv2.INTER_AREA)
+        def run(img):
+            with _lock:
+                eng = _get()
+                if eng is None:
+                    return None
+                res, _ = eng(img)
+            out = []
+            for box, text, _score in res or []:
+                xs, ys = [p[0] for p in box], [p[1] for p in box]
+                out.append((float(min(xs)), float(min(ys)), float(max(xs)), float(max(ys)), str(text)))
+            return out
+
+        out = run(a)
+        if out is None:
+            return None
+        tall = sum(1 for b in out if (b[3] - b[1]) > 1.5 * (b[2] - b[0]))
+        if len(out) >= 4 and tall > len(out) / 2:                                     # photo taken sideways: the text lines are vertical, try both quarter turns
+            def score(bx):
+                return sum(len(b[4]) for b in bx if (b[2] - b[0]) > (b[3] - b[1])) + 50 * sum(1 for b in bx if "HAITI" in b[4].upper() or "IDENTIFICATION" in b[4].upper())
+            cands = [out] + [r for r in (run(cv2.rotate(a, rot)) for rot in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE)) if r]
+            out = max(cands, key=score)
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def boxes_to_text(boxes) -> str:
+    return _lines([([[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]], b[4], 1.0) for b in boxes]) if boxes else ""
+
+
 def read_text(image: bytes) -> str | None:
     """Printed text of a whole document photo; None when the engine, the image or the reading is unavailable. Never raises."""
     if not available():

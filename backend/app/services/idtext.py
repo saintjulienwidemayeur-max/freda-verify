@@ -299,3 +299,99 @@ def plausible(fields: dict, today: date | None = None) -> dict:
         except ValueError:
             pass
     return {"name": ok_name, "birth_date": ok_birth, "document_number": ok_number, "expired": expired}
+
+
+# ───────── layout-aware extraction for the Haitian CIN (text boxes from PaddleOCR) ─────────
+# Layout seen on the ONI specimen and on 20 real cards: photo on the left; a middle column 'Prénom / Non' -> first name, 'Nom / Siyati' -> surname,
+# 'Lieu de naissance', 'Date d'émission', signature; a right column 'Numéro de carte' -> card number, 'Sexe', 'Nationalité', 'Date de naissance',
+# 'Date d'expiration', 'Numéro d'identification unique' -> 10 digits. OCR often garbles the LABELS, so values are found by geometry + value shape.
+_DATE_BOX = re.compile(r"^(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{4})$")
+
+
+def _near(word: str, key: str, tol: int = 1) -> bool:
+    return abs(len(word) - len(key)) <= tol and _lev(word, key, tol) <= tol
+
+
+def _has_label(t: str, *keys: str) -> bool:
+    ws = re.findall(r"[A-Z]+", _norm(t))
+    return any(_near(w, k, 1 if len(k) < 7 else 2) for w in ws for k in keys)
+
+
+_LABEL_KEYS = ("PRENOM", "PRENON", "SIYATI", "NAISSANCE", "NOM", "SEXE", "SEKS", "NATIONALITE", "NASYONALITE", "EMISSION", "EXPIRATION", "SIGNATURE",
+               "TITULAIRE", "NUMERO", "NIMEWO", "IDENTIFICATION", "IDANTIFIKASYON", "UNIQUE", "INIK", "CARTE", "REPUBLIQUE", "REPIBLIK", "LIEU", "KOTE", "DAT", "FINI")
+
+
+_GLUED_LABEL = re.compile(r"PRENOM|[A-Z0-9]{1,6}[7TIL1|]NON\b|N[O0][MN][7TIL1|]?S[I1]YAT")   # 'Prénom / Non' or 'Nom / Siyati' with the '/' read as 7, T, I, 1...
+
+
+def _is_label(t: str) -> bool:
+    return "/" in t or _has_label(t, *_LABEL_KEYS) or bool(_GLUED_LABEL.search(_norm(t).replace(" ", "")))
+
+
+def _name_value(t: str) -> str | None:
+    words = [w for w in _norm(t).replace("-", " ").split() if w.isalpha() and len(w) >= 2 and w not in HEADER_WORDS]
+    return " ".join(words) if words and not _is_label(t) else None
+
+
+def extract_boxes(boxes, today: date | None = None) -> dict:
+    """Fields of a Haitian CIN front from PaddleOCR boxes (x0, y0, x1, y1, text). Returns {} when the layout is not recognised (no surname label found)."""
+    today = today or date.today()
+    if not boxes:
+        return {}
+    W = max(b[2] for b in boxes) or 1.0
+    out: dict = {}
+    bs = sorted(boxes, key=lambda b: (b[1], b[0]))
+    sur_lab = next((b for b in bs if _has_label(b[4], "SIYATI") and not _has_label(b[4], "SIGNATURE", "TITULAIRE", "TITILE")), None)
+    if sur_lab is None:                                                                        # 'Siyati' garbled: a box that STARTS with the word NOM (not 'Prénom / Non', not 'Numéro')
+        sur_lab = next((b for b in bs if re.match(r"\s*N[O0][MN]\b", _norm(b[4])) and not _has_label(b[4], "PRENOM", "PRENON", "NUMERO")), None)
+    if sur_lab is None:
+        return {}
+    h = max(sur_lab[3] - sur_lab[1], 1.0)
+    col = lambda b: abs(b[0] - sur_lab[0]) < 0.06 * W                                          # noqa: E731  same column as the surname label
+
+    cy = lambda b: (b[1] + b[3]) / 2                                                           # noqa: E731  box centres: robust to a tilted photo where boxes overlap vertically
+    below = [b for b in bs if col(b) and cy(b) > cy(sur_lab) + 0.3 * h and b[1] <= sur_lab[3] + 2.2 * h and b is not sur_lab]
+    surname = next((v for v in (_name_value(b[4]) for b in below) if v), None)
+    above = [b for b in sorted(bs, key=cy, reverse=True) if col(b) and cy(b) < cy(sur_lab) - 0.3 * h and sur_lab[1] - b[3] < 4 * h]
+    firsts: list[str] = []
+    for b in above:                                                                            # the value boxes stacked just above the surname label (a long first name can take 2 lines)
+        v = _name_value(b[4])
+        if not v:
+            if firsts or _is_label(b[4]) or any(c.isdigit() for c in b[4]):
+                break
+            continue
+        firsts.append(v)
+    first = " ".join(reversed(firsts)) or None
+    if first or surname:
+        out["name"] = " ".join(x for x in (first, surname) if x)
+        out["first_name"], out["surname"] = first, surname
+
+    dates = []
+    for b in bs:
+        m = _DATE_BOX.match(re.sub(r"\s+", "", b[4]).replace("O", "0"))
+        if m:
+            try:
+                dates.append((date(int(m.group(3)), int(m.group(2)), int(m.group(1))), b))
+            except ValueError:
+                pass
+    births = [d for d, _ in dates if 1900 <= d.year and (today - d).days / 365.25 >= 14]
+    if births:
+        out["birth_date"] = min(births).isoformat()
+    later = [d for d, _ in dates if d > today]
+    if later:
+        out["expiry_date"] = max(later).isoformat()
+    for b in bs:
+        raw = re.sub(r"[\s\-]", "", _norm(b[4]))
+        if re.fullmatch(r"\d{10}", raw) and "national_id" not in out:
+            out["national_id"] = raw
+            continue
+        if b[0] > sur_lab[0] + 0.15 * W and cy(b) < cy(sur_lab) and "card_number" not in out:      # right column, above the names: 'Numéro de carte' (alone or glued to its label)
+            for tok in _norm(b[4]).replace("/", " ").split():
+                if re.fullmatch(r"[A-Z0-9]{8,10}", tok) and sum(c.isdigit() for c in tok) >= 2 and sum(c.isalpha() for c in tok) >= 1:
+                    out["card_number"] = tok
+                    break
+    if out.get("card_number"):
+        out["document_number"] = out["card_number"]
+    elif out.get("national_id"):
+        out["document_number"] = out["national_id"]
+    return out

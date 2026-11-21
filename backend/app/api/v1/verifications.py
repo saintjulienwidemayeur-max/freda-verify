@@ -358,8 +358,10 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
             if not v or not front or front.doc_type not in ("id", "license"):
                 return
             front_img = decrypt_bytes(front.data)
-            ptext = paddle.read_text(front_img)
-            pf = idtext.extract(ptext) if ptext else {}
+            boxes = paddle.read_boxes(front_img)                              # ONE PaddleOCR pass gives both the layout (boxes) and the text
+            ptext = paddle.boxes_to_text(boxes) if boxes is not None else None
+            layout = idtext.extract_boxes(boxes) if boxes else {}             # Haitian CIN layout (label -> value by position): measured far better than line text on real cards
+            pf = {**(idtext.extract(ptext) if ptext else {}), **layout}
             fast = bool(pf) and all(idtext.plausible(pf).get(k) for k in ("name", "birth_date", "document_number")) and not v.expected_enc
             ttext = None if fast else idtext.read_text(front_img)          # FAST PATH: PaddleOCR already gave a plausible name, birth date and number: skip the slow Tesseract pass (up to 25 s)
             text = ptext or ttext
@@ -369,6 +371,9 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
             back_img = decrypt_bytes(back.data) if back else None
             back_text = (paddle.read_text(back_img) or idtext.read_text(back_img)) if back_img else None
             printed, printed_src, agree = idtext.combine_engines(ptext, ttext)
+            for k, val in layout.items():
+                if val and k in ("name", "first_name", "surname", "birth_date", "expiry_date", "document_number", "card_number", "national_id"):
+                    printed[k], printed_src[k] = val, "paddle_layout"
             fields, sources = idtext.merge_trusted(printed, back_text, mrz_res, printed_src)
             if text:
                 if v.expected_enc:
