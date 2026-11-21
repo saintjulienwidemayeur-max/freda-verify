@@ -255,7 +255,7 @@ export default function FaceScanner({ onShot, onCancel, tx, accent, radius, debu
           ? <TurnGuide dir={task.dir} accent={accent} wrong={wrong} label={task.dir === "left" ? tx.dirL : tx.dirR} />
           : <BlinkGuide accent={accent} />)}
 
-        <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-black/65 px-4 py-3 text-center text-sm font-medium text-white backdrop-blur" role="status">
+        <div className={`absolute inset-x-3 bottom-3 rounded-2xl px-4 py-3 text-center text-sm font-semibold text-white backdrop-blur ${engine !== "mp" ? "bg-black/65" : good || phase === "done" ? "bg-[#12B76A]/90" : wrong || phase === "align" ? "bg-[#B42318]/90" : "bg-black/65"}`} role="status">   {/* green = OK, red = something to fix, dark = instruction */}
           {engine === "loading" ? tx.faceLoading : hint}
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full transition-all duration-150" style={{ width: `${prog * 100}%`, background: phase === "task" && !wrong ? accent : good ? "#12B76A" : accent }} /></div>
           <div className="mt-1.5 text-[10px] uppercase tracking-widest text-white/60">{tx.auto} · MediaPipe</div>

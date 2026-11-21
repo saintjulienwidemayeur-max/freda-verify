@@ -26,7 +26,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
   const wrap = useRef<HTMLDivElement>(null), vid = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState(false), [engine, setEngine] = useState<"loading" | "ready" | "fail">("loading"), [attempt, setAttempt] = useState(0);
   const [hint, setHint] = useState(tx.loading), [prog, setProg] = useState(0), [good, setGood] = useState(false), [flash, setFlash] = useState(false);
-  const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState(""), [diag, setDiag] = useState(""), [showManual, setShowManual] = useState(false);
+  const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState(""), [diag, setDiag] = useState(""), [showManual, setShowManual] = useState(false), [hintOk, setHintOk] = useState(false);
   const manualRef = useRef<() => void>(() => {});
   const fired = useRef(false), cvRef = useRef<any>(null), lmRef = useRef<any>(null), lastQuad = useRef<Quad | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const wantFace = needsFace(kind, side);
@@ -144,6 +144,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       if (steadyMs >= 3000 && !fired.current) { steadyMs = 0; cooldown = performance.now() + 6000; manualRef.current(); }
       const ok = placement === "ok" && !dark && !glare && !blur && stable && !cooling;
       if (ok) { goodMs += TICK; miss = 0; } else if (++miss > 1) { goodMs = 0; }
+      setHintOk((placement === "ok" && !dark && !glare && !blur && stable) || guideOk > 0);
       setGood(goodMs > 0 || guideOk > 0); setProg(Math.min(1, Math.max(goodMs / NEED, guideOk / 2, steadyMs / 3000)));
       if (placement !== "ok" || goodMs === 0) { if (!cooling) setRej(null); }
       const guideHint = kind === "passport" && !quadGood
@@ -205,7 +206,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
             <b className="block">{tx.docRej}</b>{rejText}
           </div>
         )}
-        <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-black/65 px-4 py-3 text-center text-sm font-medium text-white backdrop-blur" role="status">
+        <div className={`absolute inset-x-3 bottom-3 rounded-2xl px-4 py-3 text-center text-sm font-semibold text-white backdrop-blur ${engine === "loading" ? "bg-black/65" : hintOk ? "bg-[#12B76A]/90" : "bg-[#B42318]/90"}`} role="status">   {/* green = the document is OK, red = something to fix */}
           {engine === "loading" ? tx.loading : hint}
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full transition-all duration-150" style={{ width: `${prog * 100}%`, background: good ? "#12B76A" : accent }} /></div>
           <div className="mt-1.5 text-[10px] uppercase tracking-widest text-white/60">{tx.auto} · {diag || "…"}</div>
