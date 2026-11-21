@@ -76,9 +76,11 @@ export async function validateFile(cv: any, lm: FaceLandmarker | null, kind: Doc
   let crop: HTMLCanvasElement;
   if (q && aspectOk(kind, q.ratio)) crop = rectify(cv, full, q);
   else if (!q && aspectOk(kind, full.width / full.height)) crop = full.width >= full.height ? full : rotate90(full);   // already a tight crop of the page (no visible outline): the face and MRZ checks below still apply
+  else if (kind !== "passport") crop = full;      // photo from the gallery where the card is not tightly framed: the server's legibility gate and checks judge it
   else return { ok: false, reject: "shape" };
   const v = validateDoc(cv, lm, kind, side, crop);
-  if (!v.ok) return v;
+  if (!v.ok && kind === "passport") return v;    // passports stay strict here (the server also gates them by MRZ text); ID cards / licences go to the server's checks
+  if (!v.ok) crop = full;
   const blob = await new Promise<Blob | null>((res) => crop.toBlob((b) => res(b), "image/jpeg", 0.92));
   return blob ? { ok: true, blob } : { ok: false, reject: "shape" };
 }

@@ -301,7 +301,7 @@ export default function HostedPage() {
             {!isSelfie && (
               <label className="block w-full cursor-pointer py-3.5 text-center text-[15px] font-semibold" style={{ border: `1px solid ${line}`, borderRadius: r }}>
                 {busy ? "…" : t.upload}
-                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" disabled={busy}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy}
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f && f.size < 15 * 1024 * 1024) void uploadDoc(key as "front" | "back", f); }} />
               </label>
             )}
