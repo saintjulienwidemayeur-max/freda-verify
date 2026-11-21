@@ -36,7 +36,8 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
     setEngine("loading"); setErr(false);
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+        try { await stream.getVideoTracks()[0]?.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }); } catch { /* not supported (e.g. iOS Safari): the phone's own autofocus is used */ }
         if (dead) { stream.getTracks().forEach((t) => t.stop()); return; }
         if (vid.current) { vid.current.srcObject = stream; await vid.current.play().catch(() => {}); }
       } catch { if (!dead) setErr(true); }
@@ -148,7 +149,8 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       const guideHint = kind === "passport" && !quadGood
         ? (guideOk > 0 ? tx.guideChecking : guideWhy === "face" ? tx.rejFace : guideWhy === "mrz" ? tx.rejMrz : tx.fitFrame) : null;
       setHint(
-        guideHint && placement !== "ok" && (placement === "none" || placement === "wrong") ? guideHint
+        blur && !dark ? tx.blur                                           // a blurry frame is the usual reason no outline is found: say that first (out of focus, often because the card is too close)
+        : guideHint && placement !== "ok" && (placement === "none" || placement === "wrong") ? guideHint
         : placement === "none" ? tx.place : placement === "wrong" ? (kind === "passport" ? tx.showPassport : tx.showId) : placement === "small" ? tx.closer : placement === "big" ? tx.far : placement === "off" ? tx.center
         : dark ? tx.dark : glare ? tx.glare : blur ? tx.blur : !stable ? tx.hold : tx.found);
       setDiag(`${placement}${kind === "passport" && !quadGood ? ` · frame check: ${guideOk > 0 ? "ok " + guideOk + "/2" : guideWhy ?? "…"}` : ""}${dark ? " · dark" : glare ? " · bright" : blur ? " · blurry" : ""}`);
