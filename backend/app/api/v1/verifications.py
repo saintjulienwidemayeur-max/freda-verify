@@ -27,7 +27,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, face, idtext, mailer, ocr, pad, webhooks
+from app.services import audit, decision, face, idtext, mailer, ocr, pad, paddle, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -350,17 +350,27 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
             front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front")) if v else None
             if not v or not front or front.doc_type not in ("id", "license"):
                 return
-            text = idtext.read_text(decrypt_bytes(front.data))
+            front_img = decrypt_bytes(front.data)
+            ptext, ttext = paddle.read_text(front_img), idtext.read_text(front_img)
+            text = ptext or ttext
             back = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_back"))
             mrz_row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz"))
             mrz_res = (_load(mrz_row) or {}).get("result") if mrz_row and mrz_row.status == "read" else None
-            back_text = idtext.read_text(decrypt_bytes(back.data)) if back else None
-            fields, sources = idtext.merge_trusted(idtext.extract(text) if text else {}, back_text, mrz_res)
+            back_img = decrypt_bytes(back.data) if back else None
+            back_text = (paddle.read_text(back_img) or idtext.read_text(back_img)) if back_img else None
+            printed, printed_src, agree = idtext.combine_engines(ptext, ttext)
+            fields, sources = idtext.merge_trusted(printed, back_text, mrz_res, printed_src)
             if text:
-                cmp_status, cmp_payload = ("compared", idtext.compare(json.loads(decrypt_bytes(v.expected_enc)), text)) if v.expected_enc else ("no_expected", {})
+                if v.expected_enc:
+                    exp = json.loads(decrypt_bytes(v.expected_enc))
+                    cands = [idtext.compare(exp, t) for t in (ptext, ttext) if t]
+                    cmp_status, cmp_payload = "compared", max(cands, key=lambda c: (c.get("matched", 0), c.get("name", 0)))
+                else:
+                    cmp_status, cmp_payload = "no_expected", {}
             else:
                 cmp_status, cmp_payload = "unreadable", {}
-            ext_payload = {"fields": fields, "plausible": idtext.plausible(fields) if fields else None, "sources": sources, "country": front.country}
+            engines = [n for n, t in (("paddle", ptext), ("tesseract", ttext)) if t]
+            ext_payload = {"fields": fields, "plausible": idtext.plausible(fields) if fields else None, "sources": sources, "engines": engines, "engines_agree": agree, "country": front.country}
             if fields.get("document_number"):
                 v.doc_hash = _doc_hash(v.organization_id, fields["document_number"])
             for kind, status, payload in (("idtext", cmp_status, cmp_payload), ("idfields", "extracted" if fields else "unreadable", ext_payload)):

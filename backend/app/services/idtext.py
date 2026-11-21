@@ -202,12 +202,39 @@ def extract(text: str, today: date | None = None) -> dict:
     return out
 
 
-def merge_trusted(fields: dict, back_text: str | None, mrz: dict | None) -> tuple[dict, dict]:
+def combine_engines(paddle_text: str | None, tess_text: str | None, today: date | None = None) -> tuple[dict, dict, dict]:
+    """Extracts the printed fields with BOTH readers. PaddleOCR (PP-OCR) is preferred per field when it gives a plausible value, else Tesseract, else whichever exists.
+    Returns (fields, sources, agree) where agree[field] is True when both engines gave the same value (more confidence, not proof)."""
+    fp = extract(paddle_text, today) if paddle_text else {}
+    ft = extract(tess_text, today) if tess_text else {}
+    fields: dict = {}
+    src: dict = {}
+    agree: dict = {}
+    for k in ("name", "birth_date", "document_number", "expiry_date"):
+        a, b = fp.get(k), ft.get(k)
+        if a is None and b is None:
+            continue
+        if k == "name" and a and b:
+            same = name_score(a, b) >= 0.8 and name_score(b, a) >= 0.8
+        elif k == "document_number" and a and b:
+            same = re.sub(r"[^A-Z0-9]", "", a.upper()) == re.sub(r"[^A-Z0-9]", "", b.upper())
+        else:
+            same = a == b
+        if a and b:
+            agree[k] = same
+        pk = {"name": "name", "birth_date": "birth_date", "document_number": "document_number"}.get(k)
+        ok_a = a is not None and (pk is None or bool(plausible({k: a}, today)[pk]))
+        use_a = a is not None and (b is None or ok_a)
+        fields[k], src[k] = (a, "paddle") if use_a else (b, "tesseract")
+    return fields, src, agree
+
+
+def merge_trusted(fields: dict, back_text: str | None, mrz: dict | None, front_sources: dict | None = None) -> tuple[dict, dict]:
     """Completes the fields read from the card FRONT with (1) the printed text of the BACK (only fields still missing) and (2) the machine-readable zone of the back, but only the
     values whose own ICAO check digit passed (a birth date or expiry date whose digit is valid is far more reliable than printed-text OCR). The MRZ values take priority.
     The second returned dict says where each value came from. MRZ names are only a fallback when the front gave none and the reading has no digit noise."""
     out = dict(fields)
-    src = {k: "front_text" for k in out}
+    src = {k: (front_sources or {}).get(k, "front_text") for k in out}
     if back_text:
         for k, val in extract(back_text).items():
             if k not in out:

@@ -22,7 +22,7 @@ RUN if [ "$INSTALL_PAD" = "1" ]; then mkdir -p /opt/pad-models \
  && echo "b32929adc2d9c34b9486f8c4c7bc97c1b69bc0ea9befefc380e4faae4e463907  /opt/pad-models/MiniFASNetV2.onnx" | sha256sum -c - \
  && echo "ebab7f90c7833fbccd46d3a555410e78d969db5438e169b6524be444862b3676  /opt/pad-models/MiniFASNetV1SE.onnx" | sha256sum -c -; fi
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt && pip install --no-deps rapidocr-onnxruntime==1.2.3
 RUN useradd --system --uid 10001 --no-create-home app
 COPY alembic.ini .
 COPY alembic ./alembic
