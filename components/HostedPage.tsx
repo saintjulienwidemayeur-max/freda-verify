@@ -170,6 +170,7 @@ export default function HostedPage() {
         const r = await sessionFetch(`/session/media/${key === "selfie" ? "selfie" : `document_${key}`}${q}`, token, { method: "PUT", headers: { "Content-Type": blob.type }, body: blob });
         if (!r.ok) {
           const code = ((await r.json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
+          if (code === "unreadable_document") { setUpErr("light"); setBusy(false); setCam(false); return; }   // too dark / blurry / no text: ask for a retake in a bright place
           if (code === "mrz_not_found") { setUpErr("mrz"); setBusy(false); setCam(false); return; }   // the server could not read the passport's two bottom lines
           throw new Error(String(r.status));
         }
@@ -305,7 +306,7 @@ export default function HostedPage() {
             {sendErr && <p role="alert" className="mt-3 rounded-xl p-3 text-sm" style={{ background: "#FDECEA", color: "#B42318" }}>{t.sendFail}</p>}
             {upErr && !isSelfie && (
               <div className="rounded-2xl px-4 py-3 text-sm font-medium text-white" style={{ background: "#B42318" }} role="alert">
-                <b className="block">{t.docRej}</b>{upErr === "shape" ? t.rejShape : upErr === "face" ? t.rejFace : upErr === "mrz" ? t.rejMrz : t.rejUnavail}
+                <b className="block">{t.docRej}</b>{upErr === "shape" ? t.rejShape : upErr === "face" ? t.rejFace : upErr === "mrz" ? t.rejMrz : upErr === "light" ? t.rejLight : t.rejUnavail}
               </div>
             )}
           </div>

@@ -27,7 +27,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, face, idtext, mailer, ocr, pad, paddle, webhooks
+from app.services import audit, decision, docquality, face, idtext, mailer, ocr, pad, paddle, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -497,6 +497,10 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
         found = await run_in_threadpool(ocr.read_mrz, data, True)
         if found.status != "read":
             raise AppError(422, "mrz_not_found", "The two lines of characters at the bottom of the passport page could not be read")
+    if kind in ("document_front", "document_back") and doc_type in ("id", "license"):
+        why = await run_in_threadpool(docquality.check, data)
+        if why:
+            raise AppError(422, "unreadable_document", "The photo is not clear enough to read: retake it in a bright place, flat and steady", details=[{"reason": why}])
     purge_expired_media(db)
     db.execute(delete(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == kind))
     db.add(VerificationMedia(verification_id=v.id, organization_id=v.organization_id, kind=kind, doc_type=doc_type if kind not in SELFIE_KINDS and kind != VIDEO_KIND else None,

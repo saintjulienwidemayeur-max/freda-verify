@@ -18,3 +18,4 @@ ignore = ["S101", "B008"]          # asserts in tests, FastAPI Depends() in defa
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["docquality_real: use the real photo-legibility gate (default tests bypass it)"]

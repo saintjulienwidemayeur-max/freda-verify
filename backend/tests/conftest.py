@@ -35,6 +35,14 @@ def _schema():
 
 
 @pytest.fixture(autouse=True)
+def _no_legibility_gate(request, monkeypatch):
+    """The fake test photos would be refused by the real legibility gate; it has its own tests (test_docquality.py)."""
+    if "docquality_real" not in request.keywords:
+        from app.services import docquality
+        monkeypatch.setattr(docquality, "check", lambda image, need_text=True: None)
+
+
+@pytest.fixture(autouse=True)
 def _clean():
     ratelimit.reset_memory()
     with get_engine().begin() as c:
