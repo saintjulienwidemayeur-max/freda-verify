@@ -191,7 +191,7 @@ export default function HostedPage() {
   const drop = (key: "front" | "back" | "selfie") => setShots((s) => { if (s[key]) { URL.revokeObjectURL(s[key]!.url); urls.current.delete(s[key]!.url); } const n = { ...s }; delete n[key]; return n; });
   const wipe = () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); setShots({}); };
   // open the scanner automatically on each capture step; auto-advance after a fresh good capture
-  useEffect(() => { setUpErr(null); setCam((step === "front" || step === "back" || step === "selfie") && !shots[step]); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setUpErr(null); setCam(step === "selfie" && !shots[step]); }, [step]);   // documents: first tell the person WHICH SIDE to show, the camera opens when they tap the button // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (step !== "front" && step !== "back" && step !== "selfie") return;
     const s = shots[step];
@@ -291,6 +291,7 @@ export default function HostedPage() {
               {isSelfie
                 ? <span className="mx-auto block h-40 w-32 rounded-[50%] border-[3px] border-dashed" style={{ borderColor: c.color }} />
                 : <span className="mx-auto grid h-16 w-24 place-items-center rounded-xl border-[3px] border-dashed" style={{ borderColor: c.color, color: c.color }}><Ic d={DOC_ICON[kind ?? "id"]} className="h-7 w-7" /></span>}
+              {!isSelfie && kind !== "passport" && <span className="mt-4 inline-block rounded-full px-4 py-1.5 text-sm font-extrabold uppercase tracking-wide text-white" style={{ background: c.color }}>{key === "front" ? t.frontT : t.backT}</span>}
               <p className="mt-4 text-sm" style={{ color: mut }}>{isSelfie ? t.selfieTips : t.tips}</p>
             </div>
           </div>
