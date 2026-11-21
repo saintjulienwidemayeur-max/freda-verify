@@ -137,9 +137,9 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
         } else { guideOk = Math.max(0, guideOk - 1); guideWhy = gv.reject; }       // one noisy frame must not erase the progress
       }
       if (quadGood) { guideOk = 0; guideWhy = null; steadyMs = 0; }
-      // PASSPORT automatic capture when the frame checks cannot confirm (real phones: glare, sleeve, hand shake): if the page is held steady, sharp and lit for ~3 s,
-      // take the picture anyway. The SERVER then decides (it refuses a photo without readable MRZ text), so this never accepts a wrong document by itself.
-      if (kind === "passport" && !quadGood && !dark && !blur && !cooling && !fired.current && motion < 7) steadyMs += TICK; else steadyMs = 0;   // brightness is not a blocker here: a pale page is normal and the server judges the photo
+      // AUTOMATIC capture when no outline can be confirmed (real phones: busy background, hand, glare, sleeve, hand shake): if the document is held steady, sharp and lit in the frame for ~3 s,
+      // take the picture anyway (passports AND ID cards). The SERVER then decides (passport: readable MRZ text; cards: legibility gate, then face/data checks), so this never accepts a wrong document by itself.
+      if (!quadGood && !dark && !blur && !cooling && !fired.current && motion < 7) steadyMs += TICK; else steadyMs = 0;   // brightness is not a blocker here: a pale page is normal and the server judges the photo
       if (steadyMs >= 3000 && !fired.current) { steadyMs = 0; cooldown = performance.now() + 6000; manualRef.current(); }
       const ok = placement === "ok" && !dark && !glare && !blur && stable && !cooling;
       if (ok) { goodMs += TICK; miss = 0; } else if (++miss > 1) { goodMs = 0; }
