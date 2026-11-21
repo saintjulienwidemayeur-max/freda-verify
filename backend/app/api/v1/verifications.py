@@ -414,7 +414,7 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
                 v.doc_hash = _doc_hash(v.organization_id, mrz_row["result"].get("document_number", ""))
             dup = bool(v.doc_hash and db.scalar(select(func.count()).select_from(Verification).where(
                 Verification.organization_id == v.organization_id, Verification.doc_hash == v.doc_hash, Verification.id != v.id,
-                Verification.status.in_(("APPROVED", "MANUAL_REVIEW", "REJECTED")))))
+                Verification.status.in_(("APPROVED", "MANUAL_REVIEW")))))
             idf = {"status": rows["idfields"].status, **_load(rows["idfields"])} if rows.get("idfields") else None
             verdict = decision.decide(duplicate=dup, idfields=idf, face_min=pol["face_min"], require_pad=pol["require_pad"], uncertain=pol["uncertain"], id_cards=pol["id_cards"],
                                       idtext=({"status": rows["idtext"].status, **_load(rows["idtext"])} if rows.get("idtext") else None), mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,

@@ -183,6 +183,18 @@ def _key(res: MrzResult) -> tuple:
     return (res.document_number, res.birth_date, res.expiry_date, res.nationality, res.issuing_country, res.sex)
 
 
+def _run_paddle(crop, run) -> bool:
+    """Feeds the PP-OCR reading of the MRZ crop to the same candidate / check-digit pipeline (it is only a source of TEXT: the ICAO check digits still decide)."""
+    from app.core.config import get_settings
+    from app.services import paddle
+    if not get_settings().paddle_mrz_enabled or not paddle.available():
+        return False
+    buf = io.BytesIO()
+    crop.convert("RGB").save(buf, "PNG")
+    text = paddle.read_text(buf.getvalue())
+    return bool(text) and run(text)
+
+
 def read_mrz(image: bytes, quick: bool = False) -> OcrOutcome:
     """Several independent readings (two crops × two preprocessings, then small rotations). A reading counts as a VOTE only when every ICAO check
     digit passes; the outcome carries how many independent readings agree (`agreeing`). One check digit is just one digit (a wrong text passes it
@@ -206,10 +218,13 @@ def read_mrz(image: bytes, quick: bool = False) -> OcrOutcome:
     def run(variant) -> bool:
         """One Tesseract pass. Returns True once two independent readings agree."""
         nonlocal best
-        try:
-            text = pytesseract.image_to_string(variant, lang=reading_lang(), config=_CONFIG, timeout=25)
-        except Exception:  # noqa: BLE001  timeout or engine failure: the other variants may still work
-            return False
+        if isinstance(variant, str):
+            text = variant                                              # text already read by another engine
+        else:
+            try:
+                text = pytesseract.image_to_string(variant, lang=reading_lang(), config=_CONFIG, timeout=25)
+            except Exception:  # noqa: BLE001  timeout or engine failure: the other variants may still work
+                return False
         seen: set[tuple] = set()
         for cand in candidates(text):
             try:
@@ -248,6 +263,8 @@ def read_mrz(image: bytes, quick: bool = False) -> OcrOutcome:
                     break
             if done:
                 break
+        if not done and not quick:
+            done = _run_paddle(prep(0.45), run)                         # a second, independent engine (PP-OCR) votes before the slower rotations
         if not done and not quick:                                      # tilted upload (the in-browser crop is upright): small rotations
             wide = prep(0.45)
             for angle in (-2, 2, -4, 4, -6, 6):
