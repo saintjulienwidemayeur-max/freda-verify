@@ -193,7 +193,7 @@ export default function HostedPage() {
   // open the scanner automatically on each capture step; auto-advance after a fresh good capture
   useEffect(() => { setUpErr(null); setCam(step === "selfie" && !shots[step]); }, [step]);   // documents: first tell the person WHICH SIDE to show, the camera opens when they tap the button // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (step !== "front" && step !== "back" && step !== "selfie") return;
+    if (step !== "selfie") return;                  // documents: NO auto-advance, the person looks at the photo and decides (Retake / Continue)
     const s = shots[step];
     if (!s || fresh.current !== s.url || issues(s.q, T[c.lang]).length > 0) return;
     const tm = setTimeout(() => { fresh.current = null; if (step === "selfie") void finish(); else setStep(order[order.indexOf(step) + 1]); }, step === "selfie" ? 250 : 1300);
@@ -279,6 +279,7 @@ export default function HostedPage() {
           <img src={s.url} alt={title} className={`max-h-[46vh] w-full rounded-2xl object-contain ${isSelfie ? "aspect-[3/4] object-cover" : ""}`} style={{ background: soft }} />
           {!bad && <p className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: c.color }}><Ic d="M5 12.5l4.500 4.500L19 7.500" className="h-4 w-4" />{t.scanDone}</p>}
           <Chips s={s} />
+          {!isSelfie && <p className="rounded-xl px-3 py-2 text-sm font-medium" style={{ background: tint, color: mut }}>{t.checkPhoto}</p>}
           <div className="mt-auto space-y-2 pt-2">
             <Btn onClick={() => { fresh.current = null; drop(key); setCam(true); }} ghost={!bad}>{t.retake}</Btn>
             {bad ? <button type="button" onClick={next} className="w-full py-2 text-sm font-semibold" style={{ color: c.color }}>{t.useAnyway}</button> : <Btn onClick={next}>{t.cont}</Btn>}
