@@ -123,7 +123,10 @@ def compare(expected: dict, text: str) -> dict:
 # ───────── extraction of the identity data printed on an ID card / licence (no declared data needed) ─────────
 HEADER_WORDS = {"REPUBLIQUE", "REPIBLIK", "AYITI", "HAITI", "CARTE", "KAT", "IDENTITE", "IDANTITE", "NATIONALE", "NASYONAL", "DIDENTIFICATION", "D", "IDENTIFICATION", "ONI",
                 "NOM", "SIYATI", "PRENOM", "PRENOMS", "SEXE", "SEKS", "DATE", "NAISSANCE", "NESANS", "LIEU", "LOKAL", "NUMERO", "NIF", "CIN", "EXPIRATION", "EXPIRE", "VALABLE", "JUSQU",
-                "AU", "DE", "DU", "LA", "LE", "ET", "SIGNATURE", "PERMIS", "CONDUIRE", "DRIVER", "LICENSE", "LICENCE", "NATIONALITE", "HAITIENNE", "HAITIEN", "M", "F"}
+                "AU", "DE", "DU", "LA", "LE", "ET", "SIGNATURE", "PERMIS", "CONDUIRE", "DRIVER", "LICENSE", "LICENCE", "NATIONALITE", "HAITIENNE", "HAITIEN", "M", "F",
+                # labels of the Haitian CIN (bilingual French / Kreyòl, from the ONI specimen): 'Prénom / Non', 'Nom / Siyati', 'Dat ou fèt', 'Kote ou fèt', 'Dat kat la fini'...
+                "NON", "DAT", "OU", "FET", "KOTE", "FINI", "NASYONALITE", "AYISYEN", "NIMEWO", "IDANTIFIKASYON", "INIK", "UNIQUE", "EMISSION", "TITULAIRE",
+                "DAYITI", "DEPARTEMENT", "COMMUNE", "TITILE"}
 _DATE = re.compile(r"(?<!\d)(\d{1,2})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{4}|\d{2})(?!\d)")
 _NUM = re.compile(r"(?<![A-Z0-9])((?:[A-Z]{0,3}\d[\dA-Z \-]{6,18}\d))(?![A-Z0-9])")
 
@@ -190,6 +193,24 @@ def extract(text: str, today: date | None = None) -> dict:
     exp = [d for d, ln in ds if re.search(r"EXPIR|VALABLE|VALID|JUSQU", _norm(ln))] or [d for d, _ in ds if d > today]
     if exp:
         out["expiry_date"] = max(exp).isoformat()
+    # labelled numbers on the Haitian CIN: 'Numéro de carte / Nimewo kat la' (alphanumeric, also the number of the MRZ on the back) and
+    # 'Numéro d'identification unique / Nimewo idantifikasyon inik' (10 digits, the person's permanent number)
+    def labelled(label_re: str, value_re: str) -> str | None:
+        for i, ln in enumerate(lines):
+            m = re.search(label_re, _norm(ln))
+            if not m:
+                continue
+            for cand in [_norm(ln)[m.end():]] + [_norm(x) for x in lines[i + 1:i + 3]]:
+                v = re.search(value_re, cand.replace(" ", "")) if cand else None
+                if v:
+                    return v.group(0)
+        return None
+    card_no = labelled(r"NIMEWO KAT|NUMERO DE CARTE", r"(?=(?:[A-Z]*\d){2})[A-Z0-9]{8,10}")
+    nid = labelled(r"IDANTIFIKASYON INIK|IDENTIFICATION UNIQUE", r"\d{9,12}")
+    if card_no:
+        out["card_number"] = card_no
+    if nid:
+        out["national_id"] = nid
     nums = []
     for ln in lines:
         n = ln.upper()
@@ -197,7 +218,9 @@ def extract(text: str, today: date | None = None) -> dict:
             raw = re.sub(r"[ \-]", "", m.group(1))
             if len(raw) >= 8 and sum(c.isdigit() for c in raw) >= 6 and not _DATE.fullmatch(m.group(1).strip()):
                 nums.append((bool(re.search(r"NIF|NUMERO|CIN|N°|NO\b", n)), raw))
-    if nums:
+    if out.get("card_number"):
+        out["document_number"] = out["card_number"]                      # the number that is also in the MRZ of the back
+    elif nums:
         out["document_number"] = sorted(nums, key=lambda t: (not t[0], -len(t[1])))[0][1]
     return out
 

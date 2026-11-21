@@ -130,7 +130,7 @@ def _identity(db: Session, v: Verification) -> dict | None:
     if "idfields" in rows and rows["idfields"].status == "extracted":
         d = json.loads(decrypt_bytes(rows["idfields"].data))
         f = d.get("fields", {})
-        return {"source": "printed_text", "document_type": "id_card", "full_name": f.get("name"), "birth_date": f.get("birth_date"), "document_number": f.get("document_number"),
+        return {"source": "printed_text", "document_type": "id_card", "full_name": f.get("name"), "birth_date": f.get("birth_date"), "document_number": f.get("document_number"), "national_id": f.get("national_id"),
                 "expiry_date": f.get("expiry_date"), "issuing_country": d.get("country"), "plausible": d.get("plausible"), "field_sources": d.get("sources"), "unverified": True}
     return None
 
@@ -381,8 +381,8 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
                 cmp_status, cmp_payload = "unreadable", {}
             engines = [n for n, t in (("paddle", ptext), ("tesseract", ttext)) if t]
             ext_payload = {"fields": fields, "plausible": idtext.plausible(fields) if fields else None, "sources": sources, "engines": engines, "engines_agree": agree, "country": front.country}
-            if fields.get("document_number"):
-                v.doc_hash = _doc_hash(v.organization_id, fields["document_number"])
+            if fields.get("national_id") or fields.get("document_number"):
+                v.doc_hash = _doc_hash(v.organization_id, fields.get("national_id") or fields["document_number"])      # the permanent national number when printed (the card number changes on reissue)
             for kind, status, payload in (("idtext", cmp_status, cmp_payload), ("idfields", "extracted" if fields else "unreadable", ext_payload)):
                 row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == kind)) or VerificationCheck(
                     verification_id=v.id, organization_id=v.organization_id, kind=kind)
