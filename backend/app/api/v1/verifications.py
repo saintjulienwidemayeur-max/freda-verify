@@ -117,17 +117,21 @@ def _identity(db: Session, v: Verification) -> dict | None:
     """The identity data the system READ from the document (passport MRZ, or the printed text of an ID card). Personal data for the business that asked for the KYC (API key / dashboard);
     never in webhooks. `source` tells how reliable it is: `mrz` (check digits) or `printed_text` (OCR, unverified)."""
     rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind.in_(("mrz", "idfields"))))}
-    if "mrz" in rows and rows["mrz"].status == "read":
+    front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
+    is_card = bool(front and front.doc_type in ("id", "license"))
+    # ID card / licence: the identity is the PRINTED text completed with the back MRZ fields whose own check digit passed (idfields); the raw MRZ of a card is often misread (names, nationality)
+    # and must not be returned as 'the identity'. Passports: the MRZ itself.
+    if "mrz" in rows and rows["mrz"].status == "read" and not (is_card and "idfields" in rows and rows["idfields"].status == "extracted"):
         res = (json.loads(decrypt_bytes(rows["mrz"].data)).get("result") or {})
         if res:
-            return {"source": "mrz", "document_type": "passport", "full_name": f'{res.get("given_names", "")} {res.get("surname", "")}'.strip(), "birth_date": res.get("birth_date"),
+            return {"source": "mrz", "document_type": "id_card" if is_card else "passport", "full_name": f'{res.get("given_names", "")} {res.get("surname", "")}'.strip(), "birth_date": res.get("birth_date"),
                     "sex": res.get("sex"), "document_number": res.get("document_number"), "expiry_date": res.get("expiry_date"), "issuing_country": res.get("issuing_country"),
                     "nationality": res.get("nationality"), "check_digits_valid": bool(res.get("all_checks_passed"))}
     if "idfields" in rows and rows["idfields"].status == "extracted":
         d = json.loads(decrypt_bytes(rows["idfields"].data))
         f = d.get("fields", {})
         return {"source": "printed_text", "document_type": "id_card", "full_name": f.get("name"), "birth_date": f.get("birth_date"), "document_number": f.get("document_number"),
-                "expiry_date": f.get("expiry_date"), "issuing_country": d.get("country"), "plausible": d.get("plausible"), "unverified": True}
+                "expiry_date": f.get("expiry_date"), "issuing_country": d.get("country"), "plausible": d.get("plausible"), "field_sources": d.get("sources"), "unverified": True}
     return None
 
 
