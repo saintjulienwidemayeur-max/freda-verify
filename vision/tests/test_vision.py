@@ -16,7 +16,7 @@ H = {"Authorization": f"Bearer {TOKEN}"}
 
 
 def settings(**kw):
-    base = dict(token=TOKEN, env="dev", engine="fake", llm_url="http://x", llm_model="m", max_upload_bytes=2_000_000, max_pixels=20_000_000, max_side=1344,
+    base = dict(token=TOKEN, env="dev", engine="fake", llm_url="http://x", llm_model="m", max_upload_bytes=2_000_000, max_pixels=20_000_000, max_side=1344,  # noqa: C408
                 timeout_s=5, max_concurrent=2, max_queued=3, rate_per_minute=1000)
     base.update(kw)
     return Settings(**base)

@@ -28,7 +28,7 @@ class Engine(Protocol):
     async def ready(self) -> bool: ...
 
 
-_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.I)
+_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
 def parse_answer(text: str) -> ModelAnswer:
@@ -37,7 +37,7 @@ def parse_answer(text: str) -> ModelAnswer:
         start, end = t.index("{"), t.rindex("}")
         data = json.loads(t[start:end + 1])
         return ModelAnswer.model_validate(data)
-    except Exception as e:  # noqa: BLE001  malformed / invalid / hostile output: never echoed back
+    except Exception as e:
         raise ModelError("model output is not valid") from e
 
 
@@ -76,7 +76,7 @@ class OpenAICompatEngine:
             raise ModelError(f"model server answered {r.status_code}")
         try:
             content = r.json()["choices"][0]["message"]["content"]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise ModelError("unexpected model server answer") from e
         return parse_answer(content if isinstance(content, str) else "")
 

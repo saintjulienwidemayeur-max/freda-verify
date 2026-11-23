@@ -7,7 +7,15 @@ import time
 import uuid
 from collections import defaultdict, deque
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse
 
 from . import imaging
@@ -67,7 +75,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         return JSONResponse({"status": "ready" if ok else "model_unavailable", "engine": app.state.engine.name, "model": app.state.engine.model}, status_code=200 if ok else 503)
 
     @app.post("/api/v1/vision/analyze", response_model=AnalyzeResult)
-    async def analyze(request: Request, image: UploadFile = File(...), document_type: DocType = Form(...), instructions: str | None = Form(default=None, max_length=300),
+    async def analyze(request: Request, image: UploadFile = File(...), document_type: DocType = Form(...), instructions: str | None = Form(default=None, max_length=300),  # noqa: B008
                       _: str = Depends(auth)):
         rid = "vis_" + uuid.uuid4().hex[:16]
         t0 = time.monotonic()

@@ -39,7 +39,7 @@ def load(data: bytes, max_pixels: int) -> Image.Image:
         return img.convert("RGB")
     except ImageError:
         raise
-    except Exception as e:  # noqa: BLE001  corrupt / truncated / bomb
+    except Exception as e:
         raise ImageError("invalid_image", "The image cannot be read") from e
 
 
