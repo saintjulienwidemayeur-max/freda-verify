@@ -27,7 +27,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, docquality, face, idtext, mailer, ocr, pad, paddle, webhooks
+from app.services import audit, decision, docquality, face, idtext, mailer, ocr, pad, paddle, vision, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -606,7 +606,9 @@ def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
     return {"engine_available": ocr.available(), "mrz": _check_out(row), "face_available": face.available(), "face": _face_out(frow),
             "pad_available": pad.available(), "pad": _face_out(lrow),
             "idtext": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext"))),
-            "idfields": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idfields")))}
+            "idfields": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idfields"))),
+            "vision_available": vision.available(),
+            "vision": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "vision")))}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/face")
@@ -631,6 +633,31 @@ def rerun_pad(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depend
     audit.record(db, request, "verification.pad_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
     return {"pad_available": pad.available(), "pad": _face_out(run_pad_check(v.id, db))}
+
+
+@router.post("/organizations/{org_id}/verifications/{verification_id}/checks/vision")
+def run_vision(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depends(org_access("media:read")), db: Session = Depends(get_db)):
+    """On demand (reviewer): the self-hosted vision model describes the document front. ADVISORY ONLY: never used by the automatic decision, stored encrypted, can be wrong."""
+    v = _owned(db, ctx, verification_id)
+    if not vision.available():
+        raise AppError(503, "vision_not_configured", "The private Vision AI service is not configured")
+    front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
+    if not front:
+        raise AppError(409, "missing_photos", "The document photo is needed")
+    dt = {"id": "id_card", "license": "driver_license", "passport": "passport"}.get(front.doc_type or "", "other")
+    try:
+        out = vision.analyze(decrypt_bytes(front.data), dt)
+        status = out.get("status", "failed") if isinstance(out.get("status"), str) else "failed"
+        payload = {k: out.get(k) for k in ("status", "document_type", "extracted_text", "fields", "image_quality", "missing_information", "suspicious_visual_anomalies", "confidence", "model", "engine")}
+    except vision.VisionUnavailable:
+        status, payload = "unavailable", {}
+    row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "vision")) or VerificationCheck(
+        verification_id=v.id, organization_id=v.organization_id, kind="vision")
+    row.status, row.source, row.data, row.created_at = status, "document_front", encrypt_bytes(json.dumps(payload).encode()), now()
+    db.add(row)
+    audit.record(db, request, "verification.vision_read", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"status": status})
+    db.commit()
+    return {"vision_available": True, "vision": _face_out(row)}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/recheck", status_code=202)

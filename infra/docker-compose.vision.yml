@@ -1,0 +1,56 @@
+# Private Vision AI stack: vLLM (Qwen3-VL on OUR GPU) + the Vision API. Needs an NVIDIA GPU host with the NVIDIA Container Toolkit.
+# Start:  docker compose -f infra/docker-compose.yml -f infra/docker-compose.vision.yml --env-file infra/.env up -d --build
+# Nothing here is published on a public port: `vllm` has no ports at all, `vision` is reachable only from the compose network (and 127.0.0.1 for local tests).
+# The model is downloaded ONCE into the `hfcache` volume (run `docker compose ... run --rm vllm-init` once, or let vllm fetch it on its first start) and reused after restarts.
+name: freda-verify
+services:
+  vllm-init:                       # one-shot: pre-download the weights into the cache volume (the only step that needs internet access to huggingface.co)
+    image: python:3.12-slim
+    profiles: ["init"]
+    environment:
+      HF_HOME: /models
+      HF_HUB_ENABLE_HF_TRANSFER: "0"
+    volumes: [hfcache:/models]
+    command: ["sh", "-c", "pip install -q huggingface_hub && python -c \"from huggingface_hub import snapshot_download as d; d('${FV_VISION_MODEL:-Qwen/Qwen3-VL-4B-Instruct}')\""]
+
+  vllm:
+    image: vllm/vllm-openai:latest   # pin an exact tag after the first successful test on your GPU
+    command: ["--model", "${FV_VISION_MODEL:-Qwen/Qwen3-VL-4B-Instruct}", "--max-model-len", "${FV_VISION_MAX_LEN:-8192}", "--gpu-memory-utilization", "${FV_VISION_GPU_UTIL:-0.85}",
+              "--limit-mm-per-prompt", "{\"image\": 1}", "--max-num-seqs", "${FV_VISION_CONCURRENCY:-2}"]
+    environment:
+      HF_HOME: /models
+      HF_HUB_OFFLINE: "${FV_VISION_OFFLINE:-0}"      # set to 1 once the weights are in the cache: the server then never contacts the internet
+    volumes: [hfcache:/models]
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    restart: unless-stopped
+    networks: [visionnet]
+
+  vision:
+    build: ../vision
+    environment:
+      FV_VISION_ENV: ${FV_APP_ENV:-dev}
+      FV_VISION_TOKEN: ${FV_VISION_TOKEN:?set FV_VISION_TOKEN (>= 32 random characters) in infra/.env}
+      FV_VISION_ENGINE: openai
+      FV_VISION_LLM_URL: http://vllm:8000
+      FV_VISION_MODEL: ${FV_VISION_MODEL:-Qwen/Qwen3-VL-4B-Instruct}
+      FV_VISION_CONCURRENCY: ${FV_VISION_CONCURRENCY:-2}
+    depends_on: [vllm]
+    ports: ["127.0.0.1:8100:8100"]
+    restart: unless-stopped
+    networks: [visionnet, default]
+
+  backend:                          # the main API reaches the Vision API over the internal network only
+    environment:
+      FV_VISION_URL: http://vision:8100
+      FV_VISION_TOKEN: ${FV_VISION_TOKEN}
+    networks: [visionnet, default]
+
+networks:
+  visionnet:
+    internal: true                  # no route to the internet from this network
+volumes:
+  hfcache:

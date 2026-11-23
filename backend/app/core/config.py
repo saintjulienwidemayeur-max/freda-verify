@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     media_retention_days: int = 0           # 0 = photos are KEPT until a person deletes them (default). > 0 = auto-delete that many days after upload
     media_max_bytes: int = 2 * 1024 * 1024  # per photo
     decision_default_mode: str = "auto"                 # decision mode of an organization that never saved a policy (manual | auto)
+    vision_url: str = ""                              # internal Vision AI service (Qwen3-VL on our own GPU); empty = disabled
+    vision_token: str = ""
+    vision_timeout_s: float = 130.0
     paddle_ocr_enabled: bool = True                  # PP-OCR models (rapidocr-onnxruntime) for the printed text of ID cards; Tesseract is used when off or unavailable
     paddle_mrz_enabled: bool = True                  # PP-OCR as an extra, independent reader of the MRZ (see ocr.read_mrz); measured 2026-11-21 on synthetic pages (see CLAUDE.md)
     decision_default_id_cards: str = "face_and_extracted"   # review | face_and_extracted | face_and_data | face_only
