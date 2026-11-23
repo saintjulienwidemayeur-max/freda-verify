@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { aspectOk, detectCard, loadCv, rectify, type DocKind, type Quad } from "./cardDetect";
 import { needsFace, validateDoc, type Reject, type Side } from "./docValidate";
-import { loadFace } from "./faceDetect";
+import { detectFace, loadFace } from "./faceDetect";
 
 export type ScanText = {
   place: string; face: string; hold: string; dark: string; glare: string; blur: string; auto: string; done: string; capNow: string; denied: string; cancel: string;
@@ -28,6 +28,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
   const [hint, setHint] = useState(tx.loading), [prog, setProg] = useState(0), [good, setGood] = useState(false), [flash, setFlash] = useState(false);
   const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState(""), [diag, setDiag] = useState(""), [showManual, setShowManual] = useState(true), [hintOk, setHintOk] = useState(false);
   const manualRef = useRef<() => void>(() => {});
+  const softFails = useRef(0);
   const fired = useRef(false), cvRef = useRef<any>(null), lmRef = useRef<any>(null), lastQuad = useRef<Quad | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const wantFace = needsFace(kind, side);
 
@@ -62,6 +63,13 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       const sx = ((cw - rw) / 2 + ox) / s, sy = ((ch - rh) / 2 + oy) / s, sw = rw / s, sh = rh / s;
       const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
       c.getContext("2d")!.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      // quick look after a MANUAL shot of an ID card / licence front: is a face photo visible at all? If not, say so and let the person retake. After 2 such refusals the photo is
+      // accepted anyway (the face detector can miss a small or worn portrait; the server's checks and the reviewer decide).
+      if (kind !== "passport" && side === "front" && lmRef.current && softFails.current < 2) {
+        let seen = true;
+        try { seen = detectFace(lmRef.current, c).count >= 1; } catch { seen = true; }
+        if (!seen) { softFails.current++; setRej("face"); cooldown = performance.now() + 2500; return; }
+      }
       fired.current = true; setFlash(true); setRej(null);
       c.toBlob((b) => { if (b) onShot(b); else fired.current = false; }, "image/jpeg", 0.92);   // the server still checks a passport page for its MRZ text
     };
