@@ -317,7 +317,7 @@ def run_face_check(verification_id: uuid.UUID, db: Session | None = None) -> Ver
             out = face.FaceOutcome("compared", round(mean, 4), face.band(mean), main.doc_faces, main.selfie_faces)
         else:
             out = main
-        payload = {"score": out.score, "band": out.band, "doc_faces": out.doc_faces, "selfie_faces": out.selfie_faces, "threshold": face.COSINE_THRESHOLD, "model": "SFace 2021dec + YuNet 2023mar",
+        payload = {"score": out.score, "band": out.band, "doc_faces": out.doc_faces, "selfie_faces": out.selfie_faces, "threshold": face.active_threshold(), "model": face.model_name(),
                    "frames": [o.score for o in done], "aggregate": "mean" if len(done) > 1 else "single"}
         row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face")) or VerificationCheck(
             verification_id=v.id, organization_id=v.organization_id, kind="face")

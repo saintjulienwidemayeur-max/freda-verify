@@ -117,7 +117,7 @@ def main() -> None:
         kf, ka = sum(1 for g in genuine if g < t), sum(1 for i in impostor if i >= t)
         lf, hf = wilson(kf, len(genuine))
         la, ha = wilson(ka, len(impostor))
-        mark = "   <- current product threshold" if abs(t - face.COSINE_THRESHOLD) < 1e-9 else ""
+        mark = "   <- current product threshold" if abs(t - face.active_threshold()) < 1e-9 else ""
         print(f"  {t:5.3f}    {kf:3d}/{len(genuine):<4d} = {100 * kf / max(1, len(genuine)):5.1f} %  [{100 * lf:4.1f}-{100 * hf:5.1f}]      {ka:4d}/{len(impostor):<5d} = {100 * ka / max(1, len(impostor)):5.2f} %  [{100 * la:4.2f}-{100 * ha:5.2f}]{mark}")
     for target in (0.01, 0.001):
         if len(impostor) >= 1 / target:
@@ -128,8 +128,8 @@ def main() -> None:
     if len(by_group) > 1 or "(none)" not in by_group:
         print("\ngenuine scores by group (labels YOU assigned, with consent):")
         for g, xs in sorted(by_group.items()):
-            kf = sum(1 for x in xs if x < face.COSINE_THRESHOLD)
-            print(f"  {g:20s} n={len(xs):3d}  median={statistics.median(xs):.3f}  below {face.COSINE_THRESHOLD}: {kf}/{len(xs)}")
+            kf = sum(1 for x in xs if x < face.active_threshold())
+            print(f"  {g:20s} n={len(xs):3d}  median={statistics.median(xs):.3f}  below {face.active_threshold()}: {kf}/{len(xs)}")
         print("  (small groups prove nothing: look at the intervals before concluding that the model is worse for a group)")
     print("\nweakest genuine pairs (look at these photos):")
     for s, label in sorted(weakest)[:8]:

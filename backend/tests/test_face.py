@@ -108,3 +108,26 @@ def test_extra_selfie_frames_are_averaged(client):
     assert r["aggregate"] == "mean" and len(r["frames"]) == 3
     assert min(r["frames"]) <= r["score"] <= max(r["frames"]) and abs(r["score"] - sum(r["frames"]) / 3) < 1e-3
     assert h  # silence unused
+
+
+def test_arcface_is_off_without_a_model_and_a_measured_threshold(monkeypatch, tmp_path):
+    monkeypatch.delenv("FV_FACE_ARCFACE_PATH", raising=False)
+    monkeypatch.delenv("FV_FACE_ARCFACE_THRESHOLD", raising=False)
+    assert not face.arcface_active() and face.active_threshold() == face.COSINE_THRESHOLD and "SFace" in face.model_name()
+    f = tmp_path / "m.onnx"
+    f.write_bytes(b"x")
+    monkeypatch.setenv("FV_FACE_ARCFACE_PATH", str(f))
+    assert not face.arcface_active()                              # a model file alone is not enough: the threshold must be measured and set
+    monkeypatch.setenv("FV_FACE_ARCFACE_THRESHOLD", "0.30")
+    assert face.arcface_active() and face.active_threshold() == 0.30
+    assert face.band(0.29) == "low" and face.band(0.31) == "possible" and face.band(0.45) == "high"
+    monkeypatch.setenv("FV_FACE_ARCFACE_THRESHOLD", "abc")
+    assert not face.arcface_active()
+
+
+def test_arcface_alignment_maps_the_landmarks_onto_the_template():
+    import numpy as np
+    img = np.full((300, 300, 3), 128, np.uint8)
+    row = [0, 0, 0, 0, 100, 120, 200, 120, 150, 170, 110, 220, 190, 220, 0.9]            # x, y, w, h, 5 landmarks (ints / floats), score
+    out = face._arc_align(img, row)
+    assert out.shape == (112, 112, 3)

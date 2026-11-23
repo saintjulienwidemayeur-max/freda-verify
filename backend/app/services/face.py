@@ -62,8 +62,64 @@ def _largest(faces):
     return max(faces, key=lambda r: float(r[2]) * float(r[3]))        # x, y, w, h, landmarks..., score
 
 
+# ───────── optional ArcFace recognizer (pluggable; OFF unless a model file AND its threshold are configured) ─────────
+# ArcFace-type models (e.g. InsightFace 'buffalo_l' / w600k_r50.onnx, 112x112 input, 512-d output) are generally more accurate than SFace, BUT the pretrained InsightFace models are published
+# for NON-COMMERCIAL RESEARCH ONLY (their README, read 2026-11-23): using them in Freda Verify for customers needs a commercial licence from the authors or another model with a licence that allows it.
+# No weights are shipped or downloaded by this repository. Set FV_FACE_ARCFACE_PATH to a model file you are LICENSED to use, and FV_FACE_ARCFACE_THRESHOLD to a cosine threshold you MEASURED on your own
+# lawful pairs (`python -m tools.face_eval`): SFace's 0.363 does not apply to other models. Without both, SFace stays in use.
+_ARC_DST = [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]]     # standard 112x112 five-point template (right eye, left eye, nose, mouth corners)
+
+
+def _arc_path() -> Path | None:
+    p = os.environ.get("FV_FACE_ARCFACE_PATH", "").strip()
+    return Path(p) if p and Path(p).is_file() else None
+
+
+def arcface_active() -> bool:
+    try:
+        return _arc_path() is not None and float(os.environ.get("FV_FACE_ARCFACE_THRESHOLD", "")) > 0
+    except ValueError:
+        return False
+
+
+def active_threshold() -> float:
+    return float(os.environ["FV_FACE_ARCFACE_THRESHOLD"]) if arcface_active() else COSINE_THRESHOLD
+
+
+def model_name() -> str:
+    return f"ArcFace ({_arc_path().name}) + YuNet 2023mar" if arcface_active() else "SFace 2021dec + YuNet 2023mar"
+
+
+def _arc_align(img, face_row):
+    """112x112 aligned crop from the five YuNet landmarks (similarity transform to the standard template)."""
+    import cv2
+    import numpy as np
+    pts = np.array([[float(face_row[i]), float(face_row[i + 1])] for i in range(4, 14, 2)], dtype=np.float32)
+    m, _ = cv2.estimateAffinePartial2D(pts, np.array(_ARC_DST, dtype=np.float32), method=cv2.LMEDS)
+    if m is None:
+        raise ValueError("alignment failed")
+    return cv2.warpAffine(img, m, (112, 112), borderValue=0)
+
+
+_arc_net = None
+
+
+def _arc_embed(img, face_row):
+    import cv2
+    import numpy as np
+    global _arc_net
+    if _arc_net is None:
+        _arc_net = cv2.dnn.readNetFromONNX(str(_arc_path()))
+    blob = cv2.dnn.blobFromImage(_arc_align(img, face_row), 1 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True)
+    _arc_net.setInput(blob)
+    v = _arc_net.forward().astype(np.float32).ravel()
+    return v / (np.linalg.norm(v) + 1e-12)
+
+
 def band(score: float) -> str:
-    return "high" if score >= HIGH else "possible" if score >= COSINE_THRESHOLD else "low"
+    thr = active_threshold()
+    high = thr + (HIGH - COSINE_THRESHOLD)                 # same distance above the threshold as SFace's 'strong' band (uncalibrated for other models)
+    return "high" if score >= high else "possible" if score >= thr else "low"
 
 
 _lock = threading.Lock()          # OpenCV's detector keeps per-call state (input size): one comparison at a time per process
@@ -89,6 +145,8 @@ def embed(image: bytes, all_faces: bool = False) -> tuple[list, int]:
         det, rec = _models()
         faces = _faces(det, img)
         picked = faces if all_faces else ([_largest(faces)] if faces else [])
+        if arcface_active():
+            return [_arc_embed(img, f) for f in picked], len(faces)
         return [rec.feature(rec.alignCrop(img, f)) for f in picked], len(faces)
 
 
@@ -103,6 +161,9 @@ def _dominant(image: bytes) -> bool:
 
 def cosine(a, b) -> float:
     import cv2
+    if arcface_active():
+        import numpy as np
+        return float(np.dot(np.asarray(a).ravel(), np.asarray(b).ravel()))          # both are L2-normalised
     with _lock:
         return float(_models()[1].match(a, b, cv2.FaceRecognizerSF_FR_COSINE))
 
