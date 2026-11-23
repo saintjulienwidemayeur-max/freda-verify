@@ -27,7 +27,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, docquality, face, idtext, mailer, ocr, pad, paddle, provenance, vision, webhooks
+from app.services import audit, decision, docquality, face, forensics, idtext, mailer, ocr, pad, paddle, provenance, vision, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -399,12 +399,43 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
         return
 
 
+def run_forensics_check(verification_id: uuid.UUID, db: Session | None = None) -> VerificationCheck | None:
+    """Pixel hints (photo of a screen, local edit) on the document photos. ADVISORY: a flag sends the case to a person, it never rejects. Thresholds uncalibrated (see services/forensics.py)."""
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        v = db.get(Verification, verification_id)
+        if not v:
+            return None
+        sides = db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "document_back"))).order_by(VerificationMedia.kind)).all()
+        if not sides:
+            return None
+        per = {m.kind: forensics.analyse(decrypt_bytes(m.data)) for m in sides}
+        reasons = sorted({r for o in per.values() for r in o.get("reasons", [])})
+        scored = [o for o in per.values() if o.get("status") == "scored"]
+        payload = {"per_side": per, "reasons": reasons, "flagged": bool(reasons), "calibrated": False}
+        row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "forensics")) or VerificationCheck(
+            verification_id=v.id, organization_id=v.organization_id, kind="forensics")
+        row.status, row.source, row.data, row.created_at = ("scored" if scored else "unavailable"), "documents", encrypt_bytes(json.dumps(payload).encode()), now()
+        db.add(row)
+        audit.record(db, None, "verification.forensics_scored", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"flagged": bool(reasons)})
+        db.commit()
+        return row
+    except Exception:  # noqa: BLE001  never break the submission
+        db.rollback()
+        return None
+    finally:
+        if own:
+            db.close()
+
+
 def run_pipeline(verification_id: uuid.UUID) -> None:
     """After submission: MRZ reading, face comparison and the experimental PAD score, one after the other (one process, little RAM), then the automatic decision if the organization enabled it."""
     run_mrz_check(verification_id)
     run_idtext_check(verification_id)
     run_face_check(verification_id)
     run_pad_check(verification_id)
+    run_forensics_check(verification_id)
     auto_decide(verification_id)
 
 
@@ -434,7 +465,9 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
             verdict = decision.decide(duplicate=dup, idfields=idf, face_min=pol["face_min"], require_pad=pol["require_pad"], uncertain=pol["uncertain"], id_cards=pol["id_cards"],
                                       idtext=({"status": rows["idtext"].status, **_load(rows["idtext"])} if rows.get("idtext") else None), mrz=mrz_row.get("result") if rows.get("mrz") and rows["mrz"].status == "read" else None,
                                       agreeing=int(mrz_row.get("agreeing", 0)), face=({"status": rows["face"].status, **_load(rows["face"])} if rows.get("face") else None),
-                                      pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None)
+                                      pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None,
+                                      forensics=_load(rows["forensics"]) if rows.get("forensics") else None,
+                                      has_video=bool(db.scalar(select(func.count()).select_from(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == VIDEO_KIND))))
             reason = ("auto: " + ",".join(verdict.codes))[:200]
             hooks: list[uuid.UUID] = []
             if verdict.decision:
@@ -611,6 +644,7 @@ def get_checks(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
             "pad_available": pad.available(), "pad": _face_out(lrow),
             "idtext": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idtext"))),
             "idfields": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idfields"))),
+            "forensics": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "forensics"))),
             "vision_available": vision.available(),
             "vision": _face_out(db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "vision")))}
 

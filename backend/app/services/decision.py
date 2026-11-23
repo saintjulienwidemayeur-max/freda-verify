@@ -17,7 +17,7 @@ class Verdict:
 
 
 def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | None, agreeing: int, face: dict | None, pad: dict | None, doc_type: str | None,
-           id_cards: str = "face_and_extracted", idtext: dict | None = None, idfields: dict | None = None, duplicate: bool = False) -> Verdict:
+           id_cards: str = "face_and_extracted", idtext: dict | None = None, idfields: dict | None = None, duplicate: bool = False, forensics: dict | None = None, has_video: bool = True) -> Verdict:
     hard: list[str] = []
     unc: list[str] = []
     is_card = doc_type in ("id", "license")
@@ -65,6 +65,11 @@ def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | No
             unc.append("pad_" + (pad.get("status", "missing") if pad else "missing"))
         elif pad.get("band") == "low" or pad["real_probability"] < 0.5:
             unc.append("pad_low")
+    # pixel hints (photo of a screen / local edit) and a missing challenge video can never approve by themselves: a person looks
+    if forensics and forensics.get("flagged"):
+        unc.append("doc_suspect")
+    if not has_video:
+        unc.append("no_challenge_video")
     # `duplicate` (the same document number was submitted before) is INFORMATION only: a person may verify with the same document as many times as they want
     if hard:
         return Verdict("REJECTED", hard)

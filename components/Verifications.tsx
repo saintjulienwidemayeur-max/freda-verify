@@ -10,7 +10,7 @@ type Mrz = { format: string; document_type: string; issuing_country: string; sur
 type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string };
 type IdText = { status: string; fields?: number; matched?: number; name?: number; number?: boolean; birth?: boolean };
 type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number>; min_frame?: number | null; frames?: { status: string; real_probability: number | null }[] };
-type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; idtext?: IdText | null; idfields?: { status: string; fields?: { name?: string; birth_date?: string; document_number?: string; expiry_date?: string }; plausible?: { name: boolean; birth_date: boolean; document_number: boolean; expired: boolean } } | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
+type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; forensics?: { status: string; flagged?: boolean; reasons?: string[] } | null; idtext?: IdText | null; idfields?: { status: string; fields?: { name?: string; birth_date?: string; document_number?: string; expiry_date?: string }; plausible?: { name: boolean; birth_date: boolean; document_number: boolean; expired: boolean } } | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
 const CHECK_LABEL: Record<string, string> = { document_number: "Document number", birth_date: "Birth date", expiry_date: "Expiry date", optional_data: "Optional data", composite: "Overall (composite)" };
 const LABEL: Record<string, string> = { document_front: "Document · front", document_back: "Document · back", selfie: "Selfie", selfie_2: "Selfie · frame 2", selfie_3: "Selfie · frame 3", selfie_video: "Challenge video" };
 
@@ -197,6 +197,16 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
               <span className="ml-2 text-xs text-navy/50">{Object.entries(checks.pad.per_model).map(([k, x]) => `${k} ${Math.round(x * 100)} %`).join(" · ")}{checks.pad.frames && checks.pad.frames.length > 1 ? ` · ${checks.pad.frames.filter((f) => f.status === "scored").length}/${checks.pad.frames.length} frames, worst ${checks.pad.min_frame != null ? Math.round(checks.pad.min_frame * 100) : "-"} %` : ""}</span>
             </div>)}
           <p className="mt-3 text-xs leading-relaxed text-navy/50">Experimental and advisory: a person decides. It is NOT certified liveness. It looks at one still image for signs of a printed photo or a screen; it has not been tested on masks, deepfakes or a virtual camera, nor measured on our users (skin tones, phones, lighting), and its thresholds are not calibrated. A good score does not prove the person was present. This is separate from the face comparison above.</p>
+        </div>
+      )}
+      {checks?.forensics && (
+        <div className="mt-4 rounded-2xl border border-[#e3eaf8] bg-white p-4">
+          <h3 className="font-display text-sm font-bold">Document photo hints (experimental)</h3>
+          {checks.forensics.status !== "scored" ? <p className="mt-2 text-sm text-navy/55">Could not be computed.</p>
+            : checks.forensics.flagged
+              ? <p className="mt-2 text-sm font-semibold text-[#B54708]">Possible signs: {(checks.forensics.reasons ?? []).map((r) => r === "possible_screen_photo" ? "photo of a screen" : "local edit").join(", ")}. Look at the photo closely.</p>
+              : <p className="mt-2 text-sm text-navy/70">No sign found by these simple checks (this does NOT prove the document is genuine).</p>}
+          <p className="mt-3 text-xs leading-relaxed text-navy/50">Advisory hints from image statistics (screen pattern, uneven compression). Thresholds were tuned on synthetic images only, not on real phone photos; a good screen photo or a careful edit is NOT detected, and worn or glossy cards can be flagged by mistake. A flag only sends the case to a person.</p>
         </div>
       )}
 
