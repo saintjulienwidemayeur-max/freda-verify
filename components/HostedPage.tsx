@@ -268,7 +268,8 @@ export default function HostedPage() {
       <h2 className="mt-4 font-display text-2xl font-extrabold leading-tight tracking-tight">{title}</h2>
       <p className="mt-1 text-[15px]" style={{ color: mut }}>{sub}</p>
       {cam ? (
-        <div className="mt-4 flex min-h-[380px] flex-1 flex-col">
+        <div className="relative mt-4 flex min-h-[380px] flex-1 flex-col">
+          {busy && <div className="absolute inset-0 z-10 grid place-items-center rounded-2xl bg-black/60 text-center text-sm font-semibold text-white" role="status">{t.scanGuide}</div>}   {/* the photo is being sent and checked */}
           {isSelfie
             ? <FaceScanner onShot={(b, extra, video) => setShot(key, b, extra, video)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} blink={blinkOn} />
             : <Scanner kind={kind ?? "id"} side={key === "back" ? "back" : "front"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} />}

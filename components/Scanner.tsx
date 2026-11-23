@@ -26,7 +26,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
   const wrap = useRef<HTMLDivElement>(null), vid = useRef<HTMLVideoElement>(null);
   const [err, setErr] = useState(false), [engine, setEngine] = useState<"loading" | "ready" | "fail">("loading"), [attempt, setAttempt] = useState(0);
   const [hint, setHint] = useState(tx.loading), [prog, setProg] = useState(0), [good, setGood] = useState(false), [flash, setFlash] = useState(false);
-  const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState(""), [diag, setDiag] = useState(""), [showManual, setShowManual] = useState(false), [hintOk, setHintOk] = useState(false);
+  const [quad, setQuad] = useState<[number, number][] | null>(null), [rej, setRej] = useState<Reject | null>(null), [dbg, setDbg] = useState(""), [diag, setDiag] = useState(""), [showManual, setShowManual] = useState(true), [hintOk, setHintOk] = useState(false);
   const manualRef = useRef<() => void>(() => {});
   const fired = useRef(false), cvRef = useRef<any>(null), lmRef = useRef<any>(null), lastQuad = useRef<Quad | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const wantFace = needsFace(kind, side);
@@ -53,7 +53,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
     const work = document.createElement("canvas"), det = document.createElement("canvas");
     let prev: Float32Array | null = null, prevQuad: Quad | null = null, goodMs = 0, miss = 0, stop = false, cooldown = 0, timer: ReturnType<typeof setTimeout>;
     let lastGuide = 0, guideOk = 0, guideWhy: Reject | null = null, steadyMs = 0;
-    const t0 = performance.now(), manualTimer = setTimeout(() => setShowManual(true), 2500);
+    const t0 = performance.now(), manualTimer = setTimeout(() => setShowManual(true), 0);       // the shutter button is ALWAYS available
     manualRef.current = () => {
       const v = vid.current, box = wrap.current?.getBoundingClientRect();
       if (!v || !box || !v.videoWidth || fired.current) return;
