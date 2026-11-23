@@ -452,7 +452,9 @@ def run_crosscheck(verification_id: uuid.UUID, db: Session | None = None) -> Ver
         if not v or not front or not mrz_row or mrz_row.status != "read":
             return None
         res = (_load(mrz_row) or {}).get("result") or {}
-        if not res.get("all_checks_passed"):
+        ck = res.get("checks") or {}
+        trusted = res.get("all_checks_passed") or (front.doc_type in ("id", "license") and all(ck.get(k) for k in ("document_number", "birth_date", "expiry_date")))
+        if not trusted:                                   # cards: the composite digit can fail on a cut-off optional-data zone while the three field digits are fine
             return None
         mrz_name = f"{res.get('given_names', '')} {res.get('surname', '')}".strip()
         if front.doc_type in ("id", "license"):
@@ -463,7 +465,8 @@ def run_crosscheck(verification_id: uuid.UUID, db: Session | None = None) -> Ver
             printed = ((idf or {}).get("fields") or {}).get("name")
             if not printed or not mrz_name or ((idf or {}).get("sources") or {}).get("name", "").startswith("mrz"):
                 return None
-            sc = min(idtext.name_score(printed, mrz_name), idtext.name_score(mrz_name, printed))   # both ways: no extra or missing name word
+            sc = max(min(idtext.name_score(printed, mrz_name), idtext.name_score(mrz_name, printed)),    # both ways: no extra or missing name word
+                     idtext.letters_overlap(printed, mrz_name))                                          # lenient: OCR read '<' as K and one letter wrong
             out = {"fields": 1, "matched": 1 if sc >= 0.8 else 0, "name": round(sc, 2), "side": "card_front_vs_back_mrz"}
             status = "compared"
         else:

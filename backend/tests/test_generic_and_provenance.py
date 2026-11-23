@@ -42,3 +42,9 @@ def test_mrz_filler_read_as_k_is_repaired_without_touching_real_names():
     assert _names(_filler_k("SAINT<JULIENK<WIAEMAYEURKK<<<")) == ("SAINT JULIEN", "WIAEMAYEUR")
     assert _names(_filler_k("DUPONT<<ERIK<<<<<")) == ("DUPONT", "ERIK")
     assert _names(_filler_k("ERIK<<JOHN<<<<")) == ("ERIK", "JOHN")
+
+
+def test_letters_overlap_tolerates_k_for_filler_but_not_a_different_name():
+    from app.services.idtext import letters_overlap
+    assert letters_overlap("WIDEMAYEUR SAINT JULIEN", "SAINTKJULIEN WIAEMAYEURK") >= 0.9      # real owner reading: K for '<' and D read as A
+    assert letters_overlap("WIDEMAYEUR SAINT JULIEN", "JEAN PIERRE PAUL") < 0.7

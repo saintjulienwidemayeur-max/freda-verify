@@ -46,6 +46,17 @@ def name_score(expected: str, text: str) -> float:
     return hit / len(words)
 
 
+def letters_overlap(a: str, b: str) -> float:
+    """Order-insensitive, K-tolerant similarity of two names: share of the letters (K excluded: OCR reads the MRZ filler '<' as K) that both contain. Used ONLY as a lenient
+    second opinion for the printed-name vs MRZ-name cross-check, where OCR noise (K for '<', one wrong letter) breaks word-by-word matching. It does not see word order,
+    so a swap of surname and given name is not detected: the result is advisory, a person decides."""
+    from collections import Counter
+    ca = Counter(c for c in _norm(a) if c.isalpha() and c != "K")
+    cb = Counter(c for c in _norm(b) if c.isalpha() and c != "K")
+    n = max(sum(ca.values()), sum(cb.values()))
+    return sum((ca & cb).values()) / n if n else 0.0
+
+
 def number_match(expected: str, text: str) -> bool:
     """The declared document number appears in the text (spaces / dashes ignored, one wrong character allowed from 8 characters up)."""
     e = re.sub(r"[^A-Z0-9]", "", _norm(expected).replace(" ", ""))
