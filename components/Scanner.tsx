@@ -10,8 +10,8 @@ export type ScanText = {
   scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string;
 };
 
-const TICK = 140;                       // analysis interval (ms)
-const NEED = 1100;                      // good time before the automatic capture (ms)
+const TICK = 100;                       // analysis interval (ms)
+const NEED = 500;                       // good time before the automatic capture (ms): short, the person can retake after the capture anyway
 const BLUR_MIN = 30, DARK = 55, BRIGHT = 252, GLARE = 0.5, QUAD_MOVE = 0.025;   // a pale passport page is bright but not glare: only clipped pixels count
 
 /**
@@ -53,7 +53,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
     const work = document.createElement("canvas"), det = document.createElement("canvas");
     let prev: Float32Array | null = null, prevQuad: Quad | null = null, goodMs = 0, miss = 0, stop = false, cooldown = 0, timer: ReturnType<typeof setTimeout>;
     let lastGuide = 0, guideOk = 0, guideWhy: Reject | null = null, steadyMs = 0;
-    const t0 = performance.now(), manualTimer = setTimeout(() => setShowManual(true), 5000);
+    const t0 = performance.now(), manualTimer = setTimeout(() => setShowManual(true), 2500);
     manualRef.current = () => {
       const v = vid.current, box = wrap.current?.getBoundingClientRect();
       if (!v || !box || !v.videoWidth || fired.current) return;
@@ -141,11 +141,11 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       // AUTOMATIC capture when no outline can be confirmed (real phones: busy background, hand, glare, sleeve, hand shake): if the document is held steady, sharp and lit in the frame for ~3 s,
       // take the picture anyway (passports AND ID cards). The SERVER then decides (passport: readable MRZ text; cards: legibility gate, then face/data checks), so this never accepts a wrong document by itself.
       if (!quadGood && !dark && !blur && !cooling && !fired.current && motion < 7) steadyMs += TICK; else steadyMs = 0;   // brightness is not a blocker here: a pale page is normal and the server judges the photo
-      if (steadyMs >= 3000 && !fired.current) { steadyMs = 0; cooldown = performance.now() + 6000; manualRef.current(); }
+      if (steadyMs >= 1500 && !fired.current) { steadyMs = 0; cooldown = performance.now() + 4000; manualRef.current(); }
       const ok = placement === "ok" && !dark && !glare && !blur && stable && !cooling;
       if (ok) { goodMs += TICK; miss = 0; } else if (++miss > 1) { goodMs = 0; }
       setHintOk((placement === "ok" && !dark && !glare && !blur && stable) || guideOk > 0);
-      setGood(goodMs > 0 || guideOk > 0); setProg(Math.min(1, Math.max(goodMs / NEED, guideOk / 2, steadyMs / 3000)));
+      setGood(goodMs > 0 || guideOk > 0); setProg(Math.min(1, Math.max(goodMs / NEED, guideOk / 2, steadyMs / 1500)));
       if (placement !== "ok" || goodMs === 0) { if (!cooling) setRej(null); }
       const guideHint = kind === "passport" && !quadGood
         ? (guideOk > 0 ? tx.guideChecking : guideWhy === "face" ? tx.rejFace : guideWhy === "mrz" ? tx.rejMrz : tx.fitFrame) : null;

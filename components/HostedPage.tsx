@@ -135,7 +135,7 @@ export default function HostedPage() {
     if (!(tk && API_URL)) setReady(true);
   }, []);
   // start loading the heavy engines as soon as the user reaches the document step, so the scanners open instantly
-  useEffect(() => { if (step === "document" || step === "front" || step === "back") { loadCv().catch(() => {}); loadFace().catch(() => {}); } }, [step]);
+  useEffect(() => { if (step === "country" || step === "document" || step === "front" || step === "back") { loadCv().catch(() => {}); loadFace().catch(() => {}); } }, [step]);
   useEffect(() => () => { urls.current.forEach((u) => URL.revokeObjectURL(u)); urls.current.clear(); }, []);
   useEffect(() => { document.documentElement.lang = c.lang; }, [c.lang]);
 
