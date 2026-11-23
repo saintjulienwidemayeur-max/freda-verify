@@ -10,6 +10,7 @@ MRZ reading: after submission, a background task reads the machine-readable zone
 ICAO 9303 check digits (app.services.mrz). The result is stored encrypted and shown to reviewers as advice; it never decides anything.
 """
 import json
+import logging
 import uuid
 from datetime import timedelta
 
@@ -34,7 +35,16 @@ router = APIRouter(tags=["verifications"])
 SESSION_PREFIX = "fvs_"
 
 
+PROCESSING_MAX = timedelta(minutes=10)        # automatic checks normally take < 2 min; background work is lost on a restart, so a stuck case must reach a person
+
+
+def _stale(v: Verification) -> bool:
+    return v.status == "PROCESSING" and (v.submitted_at is None or v.submitted_at + PROCESSING_MAX <= now())
+
+
 def _status(v: Verification) -> str:
+    if _stale(v):
+        return "MANUAL_REVIEW"
     return "EXPIRED" if v.status == "PENDING" and v.expires_at <= now() else v.status
 
 
@@ -485,13 +495,29 @@ def run_crosscheck(verification_id: uuid.UUID, db: Session | None = None) -> Ver
 
 def run_pipeline(verification_id: uuid.UUID) -> None:
     """After submission: MRZ reading, face comparison and the experimental PAD score, one after the other (one process, little RAM), then the automatic decision if the organization enabled it."""
-    run_mrz_check(verification_id)
-    run_idtext_check(verification_id)
-    run_crosscheck(verification_id)
-    run_face_check(verification_id)
-    run_pad_check(verification_id)
-    run_forensics_check(verification_id)
-    auto_decide(verification_id)
+    try:
+        run_mrz_check(verification_id)
+        run_idtext_check(verification_id)
+        run_crosscheck(verification_id)
+        run_face_check(verification_id)
+        run_pad_check(verification_id)
+        run_forensics_check(verification_id)
+        auto_decide(verification_id)
+    finally:
+        settle_processing(verification_id)                    # whatever happened above, a verification must not stay 'in progress': a person takes over
+
+
+def settle_processing(verification_id: uuid.UUID) -> None:
+    """PROCESSING -> MANUAL_REVIEW when the pipeline is over and no automatic decision was made (manual mode, uncertain case, engine failure). Never raises."""
+    try:
+        with SessionLocal() as db:
+            v = db.get(Verification, verification_id)
+            if v and v.status == "PROCESSING":
+                v.status = "MANUAL_REVIEW"
+                audit.record(db, None, "verification.awaiting_review", org_id=v.organization_id, target_type="verification", target_id=v.id)
+                db.commit()
+    except Exception:  # noqa: BLE001
+        logging.getLogger("freda").warning("could not settle a PROCESSING verification")
 
 
 def _load(row) -> dict | None:
@@ -506,7 +532,7 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
             if not v:
                 return None
             pol = _policy_values(db.get(DecisionPolicy, v.organization_id))
-            if pol["mode"] != "auto" or v.status != "MANUAL_REVIEW":
+            if pol["mode"] != "auto" or v.status not in ("PROCESSING", "MANUAL_REVIEW"):
                 return None
             rows = {r.kind: r for r in db.scalars(select(VerificationCheck).where(VerificationCheck.verification_id == v.id))}
             front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front"))
@@ -615,7 +641,7 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
 
 @router.post("/session/complete", status_code=204)
 def complete_session(request: Request, background: BackgroundTasks, v: Verification = Depends(get_session), db: Session = Depends(get_db)):
-    """Submits the verification for HUMAN review (MANUAL_REVIEW). Requires the selfie and the document photo(s)."""
+    """Submits the verification: status PROCESSING while the automatic checks run, then APPROVED / REJECTED (automatic mode) or MANUAL_REVIEW (a person decides). Requires the selfie and the document photo(s)."""
     _open_for_upload(v)
     rows = {m.kind: m for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id))}
     front = rows.get("document_front")
@@ -623,7 +649,7 @@ def complete_session(request: Request, background: BackgroundTasks, v: Verificat
     missing = [k for k in ("document_front", "selfie") if k not in rows] + (["document_back"] if need_back and "document_back" not in rows else [])
     if missing:
         raise AppError(422, "incomplete", "Missing photos: " + ", ".join(missing))
-    v.status, v.submitted_at = "MANUAL_REVIEW", now()
+    v.status, v.submitted_at = "PROCESSING", now()          # the automatic checks are running; the pipeline ends in APPROVED / REJECTED / MANUAL_REVIEW
     audit.record(db, request, "verification.submitted", org_id=v.organization_id, target_type="verification", target_id=v.id)
     hooks = webhooks.queue(db, v.organization_id, "verification.submitted", v)
     db.commit()
@@ -676,7 +702,7 @@ def decide(verification_id: uuid.UUID, body: DecisionIn, request: Request, backg
     """Manual decision by an owner/admin on a submitted verification. This is a human decision, not an automated result."""
     v = _owned(db, ctx, verification_id)
     automatic = v.status in ("APPROVED", "REJECTED") and v.decided_by is None and v.decided_at is not None
-    if v.status != "MANUAL_REVIEW" and not automatic:
+    if v.status != "MANUAL_REVIEW" and not _stale(v) and not automatic:
         raise AppError(409, "not_reviewable", "Only submitted verifications awaiting review, or decided automatically, can be decided by a person")
     v.status, v.decided_at, v.decided_by, v.decision_reason = body.decision, now(), ctx.user.id, (body.reason or None)
     audit.record(db, request, "verification.decided", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id, meta={"decision": body.decision, "override_of_automatic": automatic})
@@ -758,7 +784,7 @@ def run_vision(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
 def recheck(verification_id: uuid.UUID, request: Request, background: BackgroundTasks, ctx: OrgCtx = Depends(org_access("verifications:decide")), db: Session = Depends(get_db)):
     """Runs every automatic check again and then the automatic decision (if the organization enabled it). Useful when the server restarted before the checks finished (nothing is retried after a restart)."""
     v = _owned(db, ctx, verification_id)
-    if v.status != "MANUAL_REVIEW":
+    if v.status not in ("MANUAL_REVIEW", "PROCESSING"):
         raise AppError(409, "not_reviewable", "Only verifications awaiting review can be re-checked")
     audit.record(db, request, "verification.rechecked", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()

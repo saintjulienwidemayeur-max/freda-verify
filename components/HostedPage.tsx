@@ -253,16 +253,16 @@ export default function HostedPage() {
       try { const r = await sessionFetch("/session/complete", token, { method: "POST" }); if (!r.ok) throw new Error(String(r.status)); } catch { setSendErr(true); setBusy(false); return; }
       setBusy(false);
     }
-    if (token) setResult("MANUAL_REVIEW");
+    if (token) setResult("PROCESSING");
     wipe(); setStep("done");
   };
 
   // after submission the outcome comes from a person: poll for it (every 8 s, up to ~20 min) and show it as soon as it is decided
   useEffect(() => {
-    if (step !== "done" || !token || (result !== "MANUAL_REVIEW" && result !== "PENDING")) return;
+    if (step !== "done" || !token || (result !== "MANUAL_REVIEW" && result !== "PROCESSING" && result !== "PENDING")) return;
     let n = 0; const iv = setInterval(async () => {
       if (++n > 150) return clearInterval(iv);
-      try { const r = await sessionFetch("/session", token); if (r.ok) { const d = (await r.json()) as { status?: string }; if (d.status && d.status !== "MANUAL_REVIEW") setResult(d.status); } } catch { /* keep waiting */ }
+      try { const r = await sessionFetch("/session", token); if (r.ok) { const d = (await r.json()) as { status?: string }; if (d.status && d.status !== "MANUAL_REVIEW" && d.status !== "PROCESSING") setResult(d.status); } } catch { /* keep waiting */ }
     }, 8000);
     return () => clearInterval(iv);
   }, [step, token, result]);

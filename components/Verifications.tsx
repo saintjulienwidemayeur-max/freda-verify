@@ -63,7 +63,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
     return () => { live = false; made.forEach((u) => URL.revokeObjectURL(u)); };
   }, [base, admin, v.media_count]);
   // The readings run in the background a few seconds after the customer submits: poll (max ~2 min) until both results exist, so the reviewer does not see a stale "Not read yet".
-  const waiting = admin && !!media && media.length > 0 && v.status === "MANUAL_REVIEW" && (!checks || !checks.mrz || (checks.face_available !== false && !checks.face) || (checks.pad_available !== false && !checks.pad));
+  const waiting = admin && !!media && media.length > 0 && (v.status === "MANUAL_REVIEW" || v.status === "PROCESSING") && (!checks || !checks.mrz || (checks.face_available !== false && !checks.face) || (checks.pad_available !== false && !checks.pad));
   useEffect(() => {
     if (!waiting) return;
     let live = true, tries = 0;
@@ -77,7 +77,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
   return (
     <section className="mt-4 rounded-2xl border border-[#e3eaf8] bg-white p-5" aria-label="Verification review">
       <div className="flex items-start justify-between gap-3">
-        <div><h2 className="font-display text-lg font-bold">{v.reference ?? "Verification"} <span className={`ml-2 rounded-full px-2.5 py-0.5 font-mono text-xs ${BADGE[v.status] ?? ""}`}>{v.status}</span></h2>
+        <div><h2 className="font-display text-lg font-bold">{v.reference ?? "Verification"} <span className={`ml-2 rounded-full px-2.5 py-0.5 font-mono text-xs ${BADGE[v.status] ?? ""}`}>{STATUS_LABEL[v.status] ?? v.status}</span></h2>
           <p className="mt-1 font-mono text-[11px] text-navy/50">{v.id}</p></div>
         <button onClick={onClose} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-sm hover:bg-ice">Close</button>
       </div>
@@ -211,7 +211,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
       )}
 
       {v.decision_reason && <p className="mt-3 text-sm">Decision note: {v.decision_reason}</p>}
-      {admin && v.status === "MANUAL_REVIEW" && <button disabled={busy} onClick={() => void act(() => api(`${base}/recheck`, { method: "POST" }))} className="mt-2 rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Run all checks again{checks && !checks.mrz ? " (checks missing)" : ""}</button>}
+      {admin && (v.status === "MANUAL_REVIEW" || v.status === "PROCESSING") && <button disabled={busy} onClick={() => void act(() => api(`${base}/recheck`, { method: "POST" }))} className="mt-2 rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Run all checks again{checks && !checks.mrz ? " (checks missing)" : ""}</button>}
       {admin && (v.status === "MANUAL_REVIEW" || (v.decision_reason ?? "").startsWith("auto:")) && (
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[#e3eaf8] pt-4">
           <label className="min-w-[14rem] flex-1 text-sm font-medium">Note (optional)<input value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} className="mt-1.5 block w-full rounded-xl border border-[#d6e2ff] px-3 py-2 text-sm font-normal" /></label>
@@ -226,7 +226,8 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
     </section>
   );
 }
-const BADGE: Record<string, string> = { PENDING: "bg-[#FEF3E2] text-[#B54708]", EXPIRED: "bg-[#EEF0F4] text-navy/60", APPROVED: "bg-[#E7F7EF] text-[#067647]", REJECTED: "bg-[#FDECEA] text-[#B42318]", MANUAL_REVIEW: "bg-[#EEF4FF] text-blue" };
+const BADGE: Record<string, string> = { PENDING: "bg-[#FEF3E2] text-[#B54708]", EXPIRED: "bg-[#EEF0F4] text-navy/60", APPROVED: "bg-[#E7F7EF] text-[#067647]", REJECTED: "bg-[#FDECEA] text-[#B42318]", MANUAL_REVIEW: "bg-[#EEF4FF] text-blue", PROCESSING: "bg-[#FFF6E0] text-[#B54708]" };
+const STATUS_LABEL: Record<string, string> = { PROCESSING: "IN PROGRESS", MANUAL_REVIEW: "NEEDS REVIEW" };
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function Verifications() {
@@ -301,7 +302,7 @@ export default function Verifications() {
               <tr key={v.id} className="border-t border-[#e3eaf8]">
                 <td className="p-3 font-mono text-xs">{when(v.created_at)}</td><td className="p-3">{v.reference ?? <span className="text-navy/40">—</span>}</td>
                 <td className="p-3 font-mono text-xs">{v.env}</td>
-                <td className="p-3"><span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${BADGE[v.status] ?? ""}`}>{v.status}</span></td>
+                <td className="p-3"><span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${BADGE[v.status] ?? ""}`}>{STATUS_LABEL[v.status] ?? v.status}</span></td>
                 <td className="p-3 text-xs">{v.media_count || "—"}</td><td className="p-3 font-mono text-xs">{when(v.expires_at)}</td>
                 <td className="p-3"><button onClick={() => setOpen(open === v.id ? null : v.id)} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice">{open === v.id ? "Hide" : "Open"}</button></td>
               </tr>

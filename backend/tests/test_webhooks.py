@@ -73,7 +73,7 @@ def test_submit_and_decision_are_delivered_signed_without_personal_data(client):
     ts, sig = (p.split("=", 1)[1] for p in c["headers"]["Freda-Signature"].split(","))
     assert hmac.compare_digest(sig, hmac.new(h["secret"].encode(), f"{ts}.".encode() + c["body"], hashlib.sha256).hexdigest())
     body = json.loads(c["body"])["data"]
-    assert body["verification_id"] == v["id"] and body["reference"] == "c1" and body["status"] == "MANUAL_REVIEW"
+    assert body["verification_id"] == v["id"] and body["reference"] == "c1" and body["status"] == "PROCESSING"
     r = client.post(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/decision", json={"decision": "APPROVED", "reason": "private note"}, headers=auth(t))
     assert r.status_code == 200
     types = [json.loads(x["body"])["type"] for x in FakeClient.calls]
