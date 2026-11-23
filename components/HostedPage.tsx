@@ -14,17 +14,28 @@ import { API_URL } from "@/lib/api";
 const ALLOW_GALLERY = process.env.NEXT_PUBLIC_ALLOW_GALLERY === "1";
 
 /** Overlay shown while a document photo is sent and checked: a card being scanned + patience messages that change every 2.5 s. */
-function Checking({ msgs, color }: { msgs: string[]; color: string }) {
+function Checking({ msgs, color, face }: { msgs: string[]; color: string; face?: boolean }) {
   const [i, setI] = useState(0);
   useEffect(() => { const id = setInterval(() => setI((n) => (n + 1) % msgs.length), 2500); return () => clearInterval(id); }, [msgs.length]);
   return (
     <div className="absolute inset-0 z-10 grid place-items-center rounded-2xl bg-black/70 px-6 text-center text-white" role="status" aria-live="polite">
       <div>
-        <div className="relative mx-auto h-28 w-44 overflow-hidden rounded-xl border-2 border-white/80 bg-white/10">
-          <span className="absolute left-3 top-4 h-16 w-12 rounded-md bg-white/25" />
-          {[16, 30, 44, 58].map((y) => <span key={y} className="absolute right-4 h-2 rounded-full bg-white/30" style={{ top: y, left: 72 }} />)}
-          <span className="absolute inset-x-0 h-1 animate-[fv-scan_1.6s_ease-in-out_infinite] rounded-full" style={{ background: color, boxShadow: `0 0 14px 3px ${color}` }} />
-        </div>
+        {face ? (
+          <div className="relative mx-auto h-40 w-32 overflow-hidden rounded-[50%] border-2 border-white/80 bg-white/10">   {/* face scan: oval + face outline */}
+            <svg viewBox="0 0 64 80" className="absolute inset-0 h-full w-full text-white/40" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+              <ellipse cx="32" cy="36" rx="15" ry="19" /><circle cx="26" cy="33" r="1.6" fill="currentColor" /><circle cx="38" cy="33" r="1.6" fill="currentColor" />
+              <path d="M32 36v6M27 46q5 3 10 0" strokeLinecap="round" /><path d="M10 80q2-14 22-16q20 2 22 16" />
+            </svg>
+            {[[22, 30], [42, 30], [32, 44], [24, 50], [40, 50]].map(([x, y]) => <span key={`${x}-${y}`} className="absolute h-1.5 w-1.5 animate-pulse rounded-full" style={{ left: `${x / 0.64}%`, top: `${y / 0.8}%`, background: color }} />)}
+            <span className="absolute inset-x-0 h-1 animate-[fv-scan_1.6s_ease-in-out_infinite] rounded-full" style={{ background: color, boxShadow: `0 0 14px 3px ${color}` }} />
+          </div>
+        ) : (
+          <div className="relative mx-auto h-28 w-44 overflow-hidden rounded-xl border-2 border-white/80 bg-white/10">
+            <span className="absolute left-3 top-4 h-16 w-12 rounded-md bg-white/25" />
+            {[16, 30, 44, 58].map((y) => <span key={y} className="absolute right-4 h-2 rounded-full bg-white/30" style={{ top: y, left: 72 }} />)}
+            <span className="absolute inset-x-0 h-1 animate-[fv-scan_1.6s_ease-in-out_infinite] rounded-full" style={{ background: color, boxShadow: `0 0 14px 3px ${color}` }} />
+          </div>
+        )}
         <p key={i} className="mt-5 animate-[fv-fade_.4s_ease-out] text-base font-semibold">{msgs[i]}</p>
         <div className="mt-3 flex justify-center gap-1.5">{msgs.map((_, k) => <span key={k} className={`h-1.5 w-1.5 rounded-full ${k === i ? "bg-white" : "bg-white/35"}`} />)}</div>
       </div>
@@ -306,7 +317,7 @@ export default function HostedPage() {
       <p className="mt-1 text-[15px]" style={{ color: mut }}>{sub}</p>
       {cam ? (
         <div className="relative mt-4 flex min-h-[380px] flex-1 flex-col">
-          {busy && <Checking msgs={t.waitMsgs} color={c.color} />}   {/* the photo is being sent and checked */}
+          {busy && <Checking msgs={isSelfie ? t.waitFace : t.waitMsgs} color={c.color} face={isSelfie} />}   {/* the photo is being sent and checked */}
           {isSelfie
             ? <FaceScanner onShot={(b, extra, video) => setShot(key, b, extra, video)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} blink={blinkOn} />
             : <Scanner kind={kind ?? "id"} side={key === "back" ? "back" : "front"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} />}
