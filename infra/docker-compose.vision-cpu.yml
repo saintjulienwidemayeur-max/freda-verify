@@ -1,0 +1,47 @@
+# Private Vision AI on CPU / small machines: a COMPRESSED (quantised GGUF) Qwen3-VL served by llama.cpp (OpenAI-compatible), + the same Vision API as the GPU stack.
+# Use this instead of docker-compose.vision.yml when there is no GPU. UNTESTED by us (no Docker, no Hugging Face access in the build sandbox): measure speed and accuracy first.
+# Start:  docker compose -f infra/docker-compose.yml -f infra/docker-compose.vision-cpu.yml --env-file infra/.env up -d --build
+# Models (llama.cpp downloads the weights + the vision projector `mmproj` once into the `gguf` volume, then reuses them):
+#   FV_VISION_GGUF=Qwen/Qwen3-VL-2B-Instruct-GGUF:Q4_K_M    smallest sensible choice (default)
+#   FV_VISION_GGUF=Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M    better reading, about twice the memory and time
+name: freda-verify
+services:
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server        # pin an exact tag after the first successful test
+    command: ["-hf", "${FV_VISION_GGUF:-Qwen/Qwen3-VL-2B-Instruct-GGUF:Q4_K_M}", "--host", "0.0.0.0", "--port", "8000",
+              "--ctx-size", "${FV_VISION_CTX:-4096}", "--threads", "${FV_VISION_THREADS:-4}", "--parallel", "1", "--temp", "0"]
+    environment:
+      LLAMA_CACHE: /models
+    volumes: [gguf:/models]
+    restart: unless-stopped
+    networks: [visionnet, default]                   # `default` only so the FIRST start can download the weights; afterwards remove it (docs/vision-service.md)
+
+  vision:
+    build: ../vision
+    environment:
+      FV_VISION_ENV: ${FV_APP_ENV:-dev}
+      FV_VISION_TOKEN: ${FV_VISION_TOKEN:?set FV_VISION_TOKEN (>= 32 random characters) in infra/.env}
+      FV_VISION_ENGINE: openai
+      FV_VISION_LLM_URL: http://llm:8000
+      FV_VISION_MODEL: ${FV_VISION_GGUF:-Qwen/Qwen3-VL-2B-Instruct-GGUF:Q4_K_M}
+      FV_VISION_CONCURRENCY: "1"
+      FV_VISION_QUEUE: "4"
+      FV_VISION_MAX_SIDE: "896"                      # fewer image tokens = much faster on CPU
+      FV_VISION_TIMEOUT_S: "300"                     # CPU inference takes minutes, not seconds
+    depends_on: [llm]
+    ports: ["127.0.0.1:8100:8100"]
+    restart: unless-stopped
+    networks: [visionnet, default]
+
+  backend:
+    environment:
+      FV_VISION_URL: http://vision:8100
+      FV_VISION_TOKEN: ${FV_VISION_TOKEN}
+      FV_VISION_TIMEOUT_S: "320"
+    networks: [visionnet, default]
+
+networks:
+  visionnet:
+    internal: true
+volumes:
+  gguf:

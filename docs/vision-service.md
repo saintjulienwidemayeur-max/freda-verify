@@ -37,3 +37,20 @@ Errors: 401 token, 413 too large, 422 bad image / type, 429 busy or rate limited
 Internal network only (`visionnet` is `internal: true`: no route to the internet; the model server publishes no port); shared-token auth (constant-time compare); the image is re-encoded
 (EXIF stripped) and downscaled before inference; sizes, pixels, concurrency, queue, rate and timeouts are bounded; logs contain request id, size, status and timing, never content;
 nothing is cached; results are stored by the backend like the other checks (Fernet-encrypted, deleted with the verification's data policy). The fake engine is refused in prod.
+
+## Smaller / compressed models (no GPU): `infra/docker-compose.vision-cpu.yml`
+The same Vision API talks to **llama.cpp** (`llama-server`, OpenAI-compatible) serving a **quantised GGUF** build of Qwen3-VL. Nothing else changes (same token, same schema, same backend endpoint).
+
+| Choice | `FV_VISION_GGUF` | Notes (ESTIMATES, nothing measured by us) |
+|---|---|---|
+| Smallest | `Qwen/Qwen3-VL-2B-Instruct-GGUF:Q4_K_M` | about 2-3 GB of RAM with the vision projector; fastest; weakest reading |
+| Better | `Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M` | about 4-5 GB of RAM; roughly twice the time |
+| GPU | `Qwen/Qwen3-VL-4B-Instruct` via vLLM (`docker-compose.vision.yml`) | fastest and best of the three |
+
+* Expect **tens of seconds to minutes per document** on 2-4 CPU cores. That is acceptable only as a background / on-demand reviewer action, never inside the customer's upload request.
+  The compose file lowers the image size (`FV_VISION_MAX_SIDE=896`), runs one request at a time and raises the timeouts for that reason.
+* The first start must download the weights (`-hf` fetches the GGUF and its `mmproj`); the `llm` container is on the `default` network only for that. After the cache volume is filled,
+  remove `default` from `llm` so it has no internet route.
+* **Render:** the container can run as a Render *Private Service* (Docker image of `vision/` and of llama.cpp) but needs at least the **Standard plan (2 GB, $25/month)** for the 2B model and
+  probably **Pro (4 GB, $85/month)** for comfort; the 512 MB plan cannot hold it. Render lists no GPU plans (check with Render support). A separate cheap GPU rental is faster per dollar.
+* Compressed models read worse than the full one. Measure them against the existing PaddleOCR layout reader on lawful Haitian documents before trusting any field.
