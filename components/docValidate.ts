@@ -8,7 +8,7 @@ import { aspectOk, detectCard, rectify, type DocKind } from "./cardDetect";
 import { detectFace } from "./faceDetect";
 
 export type Side = "front" | "back";
-export type Reject = "shape" | "face" | "mrz" | "light" | "unavailable";
+export type Reject = "shape" | "face" | "mrz" | "light" | "cut" | "small" | "unavailable";
 export type Verdict = { ok: true } | { ok: false; reject: Reject };
 
 export const needsFace = (kind: DocKind, side: Side) => kind === "passport" || side === "front";

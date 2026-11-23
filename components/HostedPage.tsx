@@ -194,7 +194,7 @@ export default function HostedPage() {
   const name = c.name.trim() || "Freda Verify"; // default brand when the client has not filled the white label
 
   const scanTx = useMemo(() => ({ place: t.scanPlace, face: t.scanFace, hold: t.scanHold, dark: t.scanDark, glare: t.scanGlare, blur: t.scanBlur, auto: t.scanAuto, done: t.scanDone, capNow: t.capNow, denied: t.camDenied, cancel: t.cancel, loading: t.scanLoading, closer: t.scanCloser, far: t.scanFar, center: t.scanCenter, fitFrame: t.scanFit, capNowBtn: t.capNow, guideChecking: t.scanGuide, found: t.scanFound,
-    scanFail: t.scanFail, retry: t.retry, showPassport: t.showPassport, showId: t.showId, docRej: t.docRej, rejShape: t.rejShape, rejFace: t.rejFace, rejMrz: t.rejMrz, rejUnavail: t.rejUnavail, blinkNow: t.blinkNow, stepAction: t.stepAction, tipMore: t.tipMore,
+    scanFail: t.scanFail, retry: t.retry, showPassport: t.showPassport, showId: t.showId, docRej: t.docRej, rejShape: t.rejShape, rejFace: t.rejFace, rejMrz: t.rejMrz, rejUnavail: t.rejUnavail, rejCut: t.rejCut, rejSmall: t.rejSmall, blinkNow: t.blinkNow, stepAction: t.stepAction, tipMore: t.tipMore,
     faceLoading: t.faceLoading, faceNone: t.faceNone, faceMulti: t.faceMulti, faceSmall: t.faceSmall, faceBig: t.faceBig, faceCenter: t.faceCenter, faceFront: t.faceFront, turnL: t.turnL, turnR: t.turnR, turnWrong: t.turnWrong, turnOk: t.turnOk, turnAgain: t.turnAgain, dirL: t.dirL, dirR: t.dirR, stepFace: t.stepFace, stepTurn: t.stepTurn }), [t]);
   const names = useMemo(() => {
     let dn: Intl.DisplayNames | null = null;
@@ -217,7 +217,8 @@ export default function HostedPage() {
         const r = await sessionFetch(`/session/media/${key === "selfie" ? "selfie" : `document_${key}`}${q}`, token, { method: "PUT", headers: { "Content-Type": blob.type }, body: blob });
         if (!r.ok) {
           const code = ((await r.json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
-          if (code === "unreadable_document") { setUpErr("light"); setBusy(false); setCam(false); return; }   // too dark / blurry / no text: ask for a retake in a bright place
+          if (code === "unreadable_document") { setUpErr("light"); setBusy(false); setCam(false); return; }
+          if (code === "not_camera_photo" || code === "edited_image") { setUpErr("unavailable"); setBusy(false); setCam(false); return; }   // too dark / blurry / no text: ask for a retake in a bright place
           if (code === "mrz_not_found") { setUpErr("mrz"); setBusy(false); setCam(false); return; }   // the server could not read the passport's two bottom lines
           if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 410 && r.status !== 429) { setUpErr("unavailable"); setBusy(false); setCam(false); return; }   // the server refused THIS photo (not a connection problem): do not blame the network
           throw new Error(String(r.status));
@@ -370,7 +371,7 @@ export default function HostedPage() {
             {sendErr && <p role="alert" className="mt-3 rounded-xl p-3 text-sm" style={{ background: "#FDECEA", color: "#B42318" }}>{t.sendFail}</p>}
             {upErr && !isSelfie && (
               <div className="rounded-2xl px-4 py-3 text-sm font-medium text-white" style={{ background: "#B42318" }} role="alert">
-                <b className="block">{t.docRej}</b>{upErr === "shape" ? t.rejShape : upErr === "face" ? t.rejFace : upErr === "mrz" ? t.rejMrz : upErr === "light" ? t.rejLight : t.rejUnavail}
+                <b className="block">{t.docRej}</b>{upErr === "shape" ? t.rejShape : upErr === "face" ? t.rejFace : upErr === "mrz" ? t.rejMrz : upErr === "light" ? t.rejLight : upErr === "cut" ? t.rejCut : upErr === "small" ? t.rejSmall : t.rejUnavail}
               </div>
             )}
           </div>

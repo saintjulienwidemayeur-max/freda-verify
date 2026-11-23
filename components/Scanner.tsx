@@ -7,7 +7,7 @@ import { detectFace, loadFace } from "./faceDetect";
 export type ScanText = {
   place: string; face: string; hold: string; dark: string; glare: string; blur: string; auto: string; done: string; capNow: string; denied: string; cancel: string;
   loading: string; closer: string; far: string; center: string; found: string; fitFrame: string; guideChecking: string; capNowBtn: string;
-  scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string;
+  scanFail: string; retry: string; showPassport: string; showId: string; docRej: string; rejShape: string; rejFace: string; rejMrz: string; rejUnavail: string; rejCut: string; rejSmall: string;
 };
 
 const TICK = 100;                       // analysis interval (ms)
@@ -60,9 +60,22 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
       if (!v || !box || !v.videoWidth || fired.current) return;
       const cw = box.width, ch = box.height, vw = v.videoWidth, vh = v.videoHeight, s = Math.max(cw / vw, ch / vh), ox = (vw * s - cw) / 2, oy = (vh * s - ch) / 2;
       const rw = cw * 0.86, rh = rw / (kind === "passport" ? 1.42 : 1.586);
-      const sx = ((cw - rw) / 2 + ox) / s, sy = ((ch - rh) / 2 + oy) / s, sw = rw / s, sh = rh / s;
+      // the crop is the guide frame PLUS a 7 % margin on every side (inside the video): a well-framed document then shows background all around it, so a document that runs past the frame
+      // (cut corners) can be recognised because its outline touches the border of the photo
+      const pad = 0.07 * rw, px = Math.max(0, (cw - rw) / 2 - pad), py = Math.max(0, (ch - rh) / 2 - pad), pw = Math.min(cw - px, rw + 2 * pad), ph = Math.min(ch - py, rh + 2 * pad);
+      const sx = (px + ox) / s, sy = (py + oy) / s, sw = pw / s, sh = ph / s;
       const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
       c.getContext("2d")!.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      // framing check (only when the card outline IS found; if it is not found the photo is accepted and the server / reviewer judge it): all four corners must be inside the photo with a small margin,
+      // and the document must fill a decent part of the guide
+      try {
+        const q = cvRef.current ? detectCard(cvRef.current, c) : null;
+        if (q) {
+          const outside = q.pts.some(([x, y]) => x < 0.01 || y < 0.01 || x > 0.99 || y > 0.99);       // corners are normalised (0..1)
+          if (outside) { setRej("cut"); cooldown = performance.now() + 2500; return; }
+          if (q.area < 0.38) { setRej("small"); cooldown = performance.now() + 2500; return; }
+        }
+      } catch { /* the check is best effort */ }
       // quick look after a MANUAL shot of an ID card / licence front: is a face photo visible at all? If not, say so and let the person retake. After 2 such refusals the photo is
       // accepted anyway (the face detector can miss a small or worn portrait; the server's checks and the reviewer decide).
       if (kind !== "passport" && side === "front" && lmRef.current && softFails.current < 2) {
@@ -191,7 +204,7 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
   );
 
   const edge = good ? "#12B76A" : "#FFFFFF";
-  const rejText = rej === "shape" ? tx.rejShape : rej === "face" ? tx.rejFace : rej === "mrz" ? tx.rejMrz : rej === "unavailable" ? tx.rejUnavail : "";
+  const rejText = rej === "shape" ? tx.rejShape : rej === "face" ? tx.rejFace : rej === "mrz" ? tx.rejMrz : rej === "cut" ? tx.rejCut : rej === "small" ? tx.rejSmall : rej === "unavailable" ? tx.rejUnavail : "";
   return (
     <div className="flex flex-1 flex-col gap-3">
       <div ref={wrap} className="relative min-h-[380px] flex-1 overflow-hidden rounded-2xl bg-black">
