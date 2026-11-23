@@ -303,11 +303,22 @@ def run_face_check(verification_id: uuid.UUID, db: Session | None = None) -> Ver
         v = db.get(Verification, verification_id)
         if not v:
             return None
-        rows = {m.kind: m for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", "selfie"))))}
+        rows = {m.kind: m for m in db.scalars(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind.in_(("document_front", *SELFIE_KINDS))))}
         if "document_front" not in rows or "selfie" not in rows:
             return None
-        out = face.compare(decrypt_bytes(rows["document_front"].data), decrypt_bytes(rows["selfie"].data))
-        payload = {"score": out.score, "band": out.band, "doc_faces": out.doc_faces, "selfie_faces": out.selfie_faces, "threshold": face.COSINE_THRESHOLD, "model": "SFace 2021dec + YuNet 2023mar"}
+        doc_img = decrypt_bytes(rows["document_front"].data)
+        # the main selfie plus the extra frontal frames (selfie_2 / selfie_3) when they exist: ONE frame is noisy (a score a hair under the threshold can flip with the next frame),
+        # so the score is the MEAN over the frames that could be compared. A mean (not the best frame) does not raise the false-match rate.
+        outs = {k: face.compare(doc_img, decrypt_bytes(rows[k].data)) for k in SELFIE_KINDS if k in rows}
+        main = outs["selfie"]
+        done = [o for o in outs.values() if o.status == "compared" and o.score is not None]
+        if done:
+            mean = sum(o.score for o in done) / len(done)
+            out = face.FaceOutcome("compared", round(mean, 4), face.band(mean), main.doc_faces, main.selfie_faces)
+        else:
+            out = main
+        payload = {"score": out.score, "band": out.band, "doc_faces": out.doc_faces, "selfie_faces": out.selfie_faces, "threshold": face.COSINE_THRESHOLD, "model": "SFace 2021dec + YuNet 2023mar",
+                   "frames": [o.score for o in done], "aggregate": "mean" if len(done) > 1 else "single"}
         row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face")) or VerificationCheck(
             verification_id=v.id, organization_id=v.organization_id, kind="face")
         row.status, row.source, row.data, row.created_at = out.status, "doc+selfie", encrypt_bytes(json.dumps(payload).encode()), now()

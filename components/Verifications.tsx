@@ -7,7 +7,7 @@ import { can, useAuth } from "@/lib/auth";
 type V = { id: string; status: string; env: string; reference: string | null; consent_given: boolean; created_at: string; expires_at: string; submitted_at: string | null; decided_at: string | null; decision_reason: string | null; media_count: number };
 type Media = { kind: string; doc_type: string | null; country: string | null; size: number; purge_after: string | null };
 type Mrz = { format: string; document_type: string; issuing_country: string; surname: string; given_names: string; document_number: string; nationality: string; birth_date: string | null; sex: string; expiry_date: string | null; checks: Record<string, boolean>; all_checks_passed: boolean; expired: boolean | null; ocr_corrections: number; warnings: string[] };
-type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string };
+type Face = { status: string; score: number | null; band: string | null; doc_faces: number; selfie_faces: number; threshold: number; model: string; frames?: number[]; aggregate?: string };
 type IdText = { status: string; fields?: number; matched?: number; name?: number; number?: boolean; birth?: boolean };
 type Pad = { status: string; real_probability: number | null; band: string | null; per_model: Record<string, number>; min_frame?: number | null; frames?: { status: string; real_probability: number | null }[] };
 type Checks = { engine_available: boolean; face_available?: boolean; face?: Face | null; pad_available?: boolean; pad?: Pad | null; forensics?: { status: string; flagged?: boolean; reasons?: string[] } | null; idtext?: IdText | null; idfields?: { status: string; fields?: { name?: string; birth_date?: string; document_number?: string; expiry_date?: string }; plausible?: { name: boolean; birth_date: boolean; document_number: boolean; expired: boolean } } | null; mrz: { status: string; source: string | null; created_at: string; result: Mrz | null; agreeing?: number } | null };
@@ -178,7 +178,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
           {checks?.face?.status === "compared" && checks.face.score !== null && (
             <div className="mt-3 text-sm">
               <span className={`rounded-full px-2.5 py-0.5 font-mono text-xs ${checks.face.band === "high" ? "bg-[#E7F7EF] text-[#067647]" : checks.face.band === "possible" ? "bg-[#FEF3E2] text-[#B54708]" : "bg-[#FDECEA] text-[#B42318]"}`}>
-                {checks.face.band === "high" ? "Strong similarity" : checks.face.band === "possible" ? "Moderate similarity" : "Low similarity"} · score {checks.face.score.toFixed(2)}
+                {checks.face.band === "high" ? "Strong similarity" : checks.face.band === "possible" ? "Moderate similarity" : "Low similarity"} · score {checks.face.score.toFixed(3)}{checks.face.frames && checks.face.frames.length > 1 ? ` (mean of ${checks.face.frames.length} frames: ${checks.face.frames.map((x) => x.toFixed(2)).join(", ")})` : ""}
               </span>
               <span className="ml-2 text-xs text-navy/50">threshold {checks.face.threshold} · {checks.face.model}</span>
               {checks.face.band === "low" && <p className="mt-2 text-xs text-[#B54708]">Below the model threshold. This does not prove it is another person: a small printed passport photo, lighting, angle or blur often lower the score for the same person. Compare the two photos yourself.</p>}

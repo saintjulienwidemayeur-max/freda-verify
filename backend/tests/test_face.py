@@ -88,3 +88,23 @@ def test_selfie_with_two_equal_faces_is_not_scored():
     b2 = io.BytesIO()
     big_and_small.save(b2, "JPEG", quality=92)
     assert face.compare(jpg("man-doc"), b2.getvalue()).status in ("compared", "ambiguous")
+
+
+def test_extra_selfie_frames_are_averaged(client):
+    t, org, v = _submit(client, jpg("man-selfie"))
+    h = {**bearer(v["session_token"]), "Content-Type": "image/jpeg"}
+    from app.api.v1.verifications import run_face_check
+    from app.core.security import encrypt_bytes
+    from app.db.session import SessionLocal
+    from app.models import Verification, VerificationMedia
+    with SessionLocal() as db:                                           # two more frames: the same person and a different person
+        vv = db.get(Verification, v["id"])
+        for kind, name in (("selfie_2", "man-selfie"), ("selfie_3", "woman-selfie")):
+            db.add(VerificationMedia(verification_id=vv.id, organization_id=vv.organization_id, kind=kind, doc_type=None, country=None, content_type="image/jpeg",
+                                     size=1, sha256="x", data=encrypt_bytes(jpg(name))))
+        db.commit()
+        run_face_check(vv.id, db)
+    r = client.get(f"/api/v1/organizations/{org['id']}/verifications/{v['id']}/checks", headers=auth(t)).json()["face"]
+    assert r["aggregate"] == "mean" and len(r["frames"]) == 3
+    assert min(r["frames"]) <= r["score"] <= max(r["frames"]) and abs(r["score"] - sum(r["frames"]) / 3) < 1e-3
+    assert h  # silence unused
