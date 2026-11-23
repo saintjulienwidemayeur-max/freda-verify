@@ -9,6 +9,10 @@ Reason codes carry no personal data.
 """
 from dataclasses import dataclass, field
 
+# hints that can only send a case to a PERSON, never reject it, whatever the organization's 'uncertain' policy: they are advisory signals with known false alarms
+# (OCR noise on printed text, image statistics tuned on synthetic data, a browser without video recording)
+REVIEW_ONLY = {"printed_mrz_mismatch", "doc_suspect", "no_challenge_video"}
+
 
 @dataclass
 class Verdict:
@@ -77,4 +81,6 @@ def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | No
         return Verdict("REJECTED", hard)
     if not unc:
         return Verdict("APPROVED", ["all_checks_passed"])
+    if all(c in REVIEW_ONLY for c in unc):
+        return Verdict(None, unc)
     return Verdict("REJECTED" if uncertain == "reject" else None, unc)

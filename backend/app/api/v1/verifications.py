@@ -460,8 +460,14 @@ def run_crosscheck(verification_id: uuid.UUID, db: Session | None = None) -> Ver
             img = decrypt_bytes(front.data)
             text = paddle.read_text(img) or idtext.read_text(img) or ""
             expected = {"name": mrz_name, "document_number": res.get("document_number"), "birth_date": res.get("birth_date")}
-            out = idtext.compare({k: x for k, x in expected.items() if x}, text) if text else {"fields": 0, "matched": 0}
-            status = "compared" if out.get("fields", 0) >= 2 else "unreadable"
+            cmp = idtext.compare({k: x for k, x in expected.items() if x}, text) if text else {}
+            # PASSPORTS: only a CLEARLY different printed name counts (score < 0.5, e.g. an edited name). A partly read name (0.67-0.75 on real pages because of OCR noise) or a
+            # number / date the OCR did not find is NOT a contradiction: 'not found' is not 'different'.
+            if "name" in cmp:
+                out = {"fields": 1, "matched": 1 if cmp["name"] >= 0.5 else 0, "name": cmp["name"], "number_found": cmp.get("number"), "birth_found": cmp.get("birth")}
+                status = "compared"
+            else:
+                out, status = {"fields": 0, "matched": 0}, "unreadable"
         row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "crosscheck")) or VerificationCheck(
             verification_id=v.id, organization_id=v.organization_id, kind="crosscheck")
         row.status, row.source, row.data, row.created_at = status, "printed_vs_mrz", encrypt_bytes(json.dumps(out).encode()), now()

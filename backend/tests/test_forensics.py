@@ -53,3 +53,12 @@ def test_printed_vs_mrz_mismatch_goes_to_a_person():
     assert decision.decide(**ok, crosscheck={"status": "compared", "fields": 3, "matched": 3}).decision == "APPROVED"
     v = decision.decide(**ok, crosscheck={"status": "compared", "fields": 3, "matched": 2})
     assert v.decision is None and "printed_mrz_mismatch" in v.codes
+
+
+def test_review_only_hints_never_reject_even_with_reject_policy():
+    base = dict(face_min=0.363, require_pad=False, uncertain="reject", face={"status": "compared", "score": 0.44}, pad=None, doc_type="passport", agreeing=2,
+                mrz={"all_checks_passed": True, "checks": {}, "expired": False})
+    v = decision.decide(**base, crosscheck={"status": "compared", "fields": 1, "matched": 0})
+    assert v.decision is None and v.codes == ["printed_mrz_mismatch"]
+    assert decision.decide(**base, forensics={"flagged": True}).decision is None
+    assert decision.decide(**{**base, "face": {"status": "compared", "score": 0.1}}, crosscheck={"status": "compared", "fields": 1, "matched": 0}).decision == "REJECTED"
