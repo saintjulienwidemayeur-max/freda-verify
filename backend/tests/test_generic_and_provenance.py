@@ -29,5 +29,9 @@ def test_text_rules_understand_english_labels():
 
 def test_provenance_refuses_png_and_editor_tags():
     assert provenance.check(b"\x89PNG....", "image/png") == "not_camera_photo"
-    assert provenance.check(b"\xff\xd8\xff\xe1 Adobe Photoshop 25.0 ....", "image/jpeg") == "edited_image"
+    seg = b"Exif\x00\x00Software Adobe Photoshop 25.0"
+    jpeg = b"\xff\xd8" + b"\xff\xe1" + (len(seg) + 2).to_bytes(2, "big") + seg + b"\xff\xda\x00\x02"
+    assert provenance.check(jpeg, "image/jpeg") == "edited_image"
+    adobe14 = b"\xff\xd8\xff\xee\x00\x0eAdobe\x00\x64\x00\x00\x00\x00\x01\xff\xda\x00\x02"      # APP14 'Adobe' marker from an ordinary encoder
+    assert provenance.check(adobe14, "image/jpeg") is None
     assert provenance.check(b"\xff\xd8\xff\xe0 plain camera jpeg", "image/jpeg") is None

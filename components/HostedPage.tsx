@@ -175,6 +175,7 @@ export default function HostedPage() {
           const code = ((await r.json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
           if (code === "unreadable_document") { setUpErr("light"); setBusy(false); setCam(false); return; }   // too dark / blurry / no text: ask for a retake in a bright place
           if (code === "mrz_not_found") { setUpErr("mrz"); setBusy(false); setCam(false); return; }   // the server could not read the passport's two bottom lines
+          if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 410 && r.status !== 429) { setUpErr("unavailable"); setBusy(false); setCam(false); return; }   // the server refused THIS photo (not a connection problem): do not blame the network
           throw new Error(String(r.status));
         }
       } catch { setSendErr(true); setBusy(false); setCam(false); return; }
