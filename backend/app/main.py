@@ -23,6 +23,11 @@ async def lifespan(_: FastAPI):
                 logging.getLogger("freda").info("retention: %s expired photos deleted", n)
     except Exception:  # noqa: BLE001  never block startup on housekeeping (e.g. migrations still running)
         logging.getLogger("freda").warning("retention purge skipped at startup")
+    if get_settings().app_env != "test":                  # load the OCR models in the background so the first photo upload does not wait for them
+        import threading
+
+        from app.services import paddle
+        threading.Thread(target=paddle.warm_up, daemon=True).start()
     yield
 
 

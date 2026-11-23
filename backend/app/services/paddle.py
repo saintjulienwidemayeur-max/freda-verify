@@ -116,3 +116,44 @@ def read_text(image: bytes) -> str | None:
         return _lines(res) if res else ""
     except Exception:  # noqa: BLE001
         return None
+
+
+FAST_SIDE = 960
+
+
+def count_text_fast(image: bytes) -> int | None:
+    """Number of alphanumeric characters found on a DOWNSCALED copy (960 px, no angle classifier): a quick 'is there printed text?' test for the upload gate. None when unavailable."""
+    if not available():
+        return None
+    try:
+        import cv2
+        import numpy as np
+        a = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        if a is None:
+            return None
+        k = FAST_SIDE / max(a.shape[:2])
+        if k < 1:
+            a = cv2.resize(a, None, fx=k, fy=k, interpolation=cv2.INTER_AREA)
+        with _lock:
+            eng = _get()
+            if eng is None:
+                return None
+            res, _ = eng(a, use_cls=False)
+        return sum(c.isalnum() for _b, t, _s in (res or []) for c in str(t))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def warm_up() -> None:
+    """Loads the models once in the background at startup, so the first customer does not wait for it."""
+    if available():
+        try:
+            import numpy as np
+            with _lock:
+                eng = _get()
+            if eng is not None:
+                with _lock:
+                    eng(np.full((64, 256, 3), 255, np.uint8), use_cls=False)
+        except Exception:  # noqa: BLE001  warm-up is best effort
+            import logging
+            logging.getLogger("freda").warning("OCR warm-up failed")

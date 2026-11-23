@@ -25,7 +25,7 @@ def check(image: bytes, need_text: bool = True) -> str | None:
     except Exception:  # noqa: BLE001  a failing check must never block a customer
         return None
     if need_text and paddle.available():
-        text = paddle.read_text(image)
-        if text is not None and sum(c.isalnum() for c in text) < MIN_TEXT_CHARS:
+        n = paddle.count_text_fast(image)                           # downscaled, no angle classifier: a few times faster than a full reading
+        if n is not None and n < MIN_TEXT_CHARS:
             return "no_text"
     return None

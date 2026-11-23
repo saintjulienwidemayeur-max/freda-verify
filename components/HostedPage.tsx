@@ -13,6 +13,38 @@ import { API_URL } from "@/lib/api";
 /** Documents come from the LIVE camera only (screenshots and edited files are not accepted). Gallery upload exists for tests: NEXT_PUBLIC_ALLOW_GALLERY=1. */
 const ALLOW_GALLERY = process.env.NEXT_PUBLIC_ALLOW_GALLERY === "1";
 
+/** Overlay shown while a document photo is sent and checked: a card being scanned + patience messages that change every 2.5 s. */
+function Checking({ msgs, color }: { msgs: string[]; color: string }) {
+  const [i, setI] = useState(0);
+  useEffect(() => { const id = setInterval(() => setI((n) => (n + 1) % msgs.length), 2500); return () => clearInterval(id); }, [msgs.length]);
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center rounded-2xl bg-black/70 px-6 text-center text-white" role="status" aria-live="polite">
+      <div>
+        <div className="relative mx-auto h-28 w-44 overflow-hidden rounded-xl border-2 border-white/80 bg-white/10">
+          <span className="absolute left-3 top-4 h-16 w-12 rounded-md bg-white/25" />
+          {[16, 30, 44, 58].map((y) => <span key={y} className="absolute right-4 h-2 rounded-full bg-white/30" style={{ top: y, left: 72 }} />)}
+          <span className="absolute inset-x-0 h-1 animate-[fv-scan_1.6s_ease-in-out_infinite] rounded-full" style={{ background: color, boxShadow: `0 0 14px 3px ${color}` }} />
+        </div>
+        <p key={i} className="mt-5 animate-[fv-fade_.4s_ease-out] text-base font-semibold">{msgs[i]}</p>
+        <div className="mt-3 flex justify-center gap-1.5">{msgs.map((_, k) => <span key={k} className={`h-1.5 w-1.5 rounded-full ${k === i ? "bg-white" : "bg-white/35"}`} />)}</div>
+      </div>
+      <style>{"@keyframes fv-scan{0%{top:0}50%{top:calc(100% - 4px)}100%{top:0}}@keyframes fv-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}@media (prefers-reduced-motion: reduce){[class*='fv-scan'],[class*='fv-fade']{animation:none!important}}"}</style>
+    </div>
+  );
+}
+
+/** Documents are sent at most 1280 px wide/high: much faster on a phone connection and on the server, still enough to read the text. */
+async function shrink(blob: Blob, max = 1280): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const k = max / Math.max(bmp.width, bmp.height);
+    if (k >= 1) { bmp.close(); return blob; }
+    const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
+    return await new Promise<Blob>((res) => c.toBlob((b) => res(b ?? blob), "image/jpeg", 0.9));
+  } catch { return blob; }
+}
+
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
 const DEFAULTS: Cfg = {
   name: "", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
@@ -167,6 +199,7 @@ export default function HostedPage() {
 
   const setShot = useCallback(async (key: "front" | "back" | "selfie", blob: Blob, extra?: Blob[], video?: Blob) => {
     setBusy(true); setSendErr(false);
+    if (key !== "selfie") blob = await shrink(blob);
     if (token) {   // real session: the photo is sent (encrypted at rest, reviewed by a person) BEFORE it is accepted on screen
       try {
         const q = key === "selfie" ? "" : `?doc_type=${kind ?? "id"}&country=${country}`;
@@ -273,7 +306,7 @@ export default function HostedPage() {
       <p className="mt-1 text-[15px]" style={{ color: mut }}>{sub}</p>
       {cam ? (
         <div className="relative mt-4 flex min-h-[380px] flex-1 flex-col">
-          {busy && <div className="absolute inset-0 z-10 grid place-items-center rounded-2xl bg-black/60 text-center text-sm font-semibold text-white" role="status">{t.scanGuide}</div>}   {/* the photo is being sent and checked */}
+          {busy && <Checking msgs={t.waitMsgs} color={c.color} />}   {/* the photo is being sent and checked */}
           {isSelfie
             ? <FaceScanner onShot={(b, extra, video) => setShot(key, b, extra, video)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} blink={blinkOn} />
             : <Scanner kind={kind ?? "id"} side={key === "back" ? "back" : "front"} onShot={(b) => setShot(key, b)} onCancel={() => setCam(false)} accent={c.color} radius={r} tx={scanTx} debug={debug} />}

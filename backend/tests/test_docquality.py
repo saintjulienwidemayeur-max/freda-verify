@@ -30,10 +30,10 @@ def test_dark_and_blurry_photos_are_refused_and_a_sharp_one_passes(monkeypatch):
 
 def test_no_text_is_refused_when_the_ocr_finds_nothing(monkeypatch):
     monkeypatch.setattr(docquality.paddle, "available", lambda: True)
-    monkeypatch.setattr(docquality.paddle, "read_text", lambda image: "a b")
+    monkeypatch.setattr(docquality.paddle, "count_text_fast", lambda image: 2)
     rng = np.random.default_rng(2)
     assert docquality.check(jpg(rng.integers(0, 255, (600, 900, 3), dtype=np.uint8))) == "no_text"
-    monkeypatch.setattr(docquality.paddle, "read_text", lambda image: "NOM DUPONT NAISSANCE 1990")
+    monkeypatch.setattr(docquality.paddle, "count_text_fast", lambda image: 21)
     assert docquality.check(jpg(rng.integers(0, 255, (600, 900, 3), dtype=np.uint8))) is None
 
 
