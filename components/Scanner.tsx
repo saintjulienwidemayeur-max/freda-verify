@@ -200,6 +200,11 @@ export default function Scanner({ kind, side, onShot, onCancel, tx, accent, radi
           {(["left-0 top-0 border-l-4 border-t-4 rounded-tl-2xl", "right-0 top-0 border-r-4 border-t-4 rounded-tr-2xl", "left-0 bottom-0 border-l-4 border-b-4 rounded-bl-2xl", "right-0 bottom-0 border-r-4 border-b-4 rounded-br-2xl"]).map((c) => (
             <i key={c} className={`absolute h-8 w-8 transition-colors ${c}`} style={{ borderColor: edge }} />
           ))}
+          {side === "front" && (
+            <span className={`absolute rounded-xl border-2 border-dashed border-white/80 ${kind === "passport" ? "left-[5%] top-[18%] h-[50%] w-[26%]" : "left-[5%] top-[24%] h-[52%] w-[27%]"}`} aria-hidden>
+              <svg viewBox="0 0 40 50" className="h-full w-full p-[14%] text-white/70" fill="currentColor"><circle cx="20" cy="17" r="9" /><path d="M3 50c0-12 8-19 17-19s17 7 17 19z" /></svg>
+            </span>
+          )}
           {!quad && engine === "ready" && <i className="absolute inset-x-2 h-0.5 animate-[scan-line_2.4s_ease-in-out_infinite] rounded-full" style={{ background: accent, boxShadow: `0 0 12px ${accent}` }} />}
         </span>
         {quad && (

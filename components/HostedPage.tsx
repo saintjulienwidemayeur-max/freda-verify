@@ -292,7 +292,20 @@ export default function HostedPage() {
             <div>
               {isSelfie
                 ? <span className="mx-auto block h-40 w-32 rounded-[50%] border-[3px] border-dashed" style={{ borderColor: c.color }} />
-                : <span className="mx-auto grid h-16 w-24 place-items-center rounded-xl border-[3px] border-dashed" style={{ borderColor: c.color, color: c.color }}><Ic d={DOC_ICON[kind ?? "id"]} className="h-7 w-7" /></span>}
+                : key === "front" || kind === "passport"
+                  ? (
+                    <span className="mx-auto block w-56" aria-hidden>
+                      <svg viewBox="0 0 160 100" className="w-full" fill="none">
+                        <rect x="2" y="2" width="156" height="96" rx="9" fill="#fff" stroke={c.color} strokeWidth="2.500" />
+                        <rect x="10" y="22" width="40" height="52" rx="5" fill={c.color} fillOpacity=".12" stroke={c.color} strokeWidth="2" strokeDasharray="5 3" />
+                        <circle cx="30" cy="40" r="9" fill={c.color} fillOpacity=".55" /><path d="M14 74c0-13 7-20 16-20s16 7 16 20z" fill={c.color} fillOpacity=".55" />
+                        {[22, 34, 46, 58].map((y) => <rect key={y} x="60" y={y} width={y % 24 === 10 ? 60 : 82} height="6" rx="3" fill={c.color} fillOpacity=".25" />)}
+                        {kind === "passport" && [82, 90].map((y) => <rect key={y} x="10" y={y} width="140" height="4" rx="2" fill={c.color} fillOpacity=".35" />)}
+                      </svg>
+                      <span className="mt-2 block text-xs font-bold" style={{ color: c.color }}>{t.photoArea}</span>
+                    </span>
+                  )
+                  : <span className="mx-auto grid h-16 w-24 place-items-center rounded-xl border-[3px] border-dashed" style={{ borderColor: c.color, color: c.color }}><Ic d={DOC_ICON[kind ?? "id"]} className="h-7 w-7" /></span>}
               {!isSelfie && kind !== "passport" && <span className="mt-4 inline-block rounded-full px-4 py-1.5 text-sm font-extrabold uppercase tracking-wide text-white" style={{ background: c.color }}>{key === "front" ? t.frontT : t.backT}</span>}
               <p className="mt-4 text-sm" style={{ color: mut }}>{isSelfie ? t.selfieTips : t.tips}</p>
             </div>
