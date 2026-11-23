@@ -126,7 +126,13 @@ HEADER_WORDS = {"REPUBLIQUE", "REPIBLIK", "AYITI", "HAITI", "CARTE", "KAT", "IDE
                 "AU", "DE", "DU", "LA", "LE", "ET", "SIGNATURE", "PERMIS", "CONDUIRE", "DRIVER", "LICENSE", "LICENCE", "NATIONALITE", "HAITIENNE", "HAITIEN", "M", "F",
                 # labels of the Haitian CIN (bilingual French / Kreyòl, from the ONI specimen): 'Prénom / Non', 'Nom / Siyati', 'Dat ou fèt', 'Kote ou fèt', 'Dat kat la fini'...
                 "NON", "DAT", "OU", "FET", "KOTE", "FINI", "NASYONALITE", "AYISYEN", "NIMEWO", "IDANTIFIKASYON", "INIK", "UNIQUE", "EMISSION", "TITULAIRE",
-                "DAYITI", "DEPARTEMENT", "COMMUNE", "TITILE"}
+                "DAYITI", "DEPARTEMENT", "COMMUNE", "TITILE",
+                # other countries (English / Spanish / Portuguese / German / Italian label words): never a person's name
+                "SURNAME", "LAST", "FAMILY", "GIVEN", "FIRST", "NAMES", "NAME", "BIRTH", "BORN", "OF", "SEX", "GENDER", "NATIONALITY", "CITIZEN", "EXPIRY", "EXPIRES", "ISSUE", "ISSUED",
+                "VALID", "UNTIL", "NUMBER", "NO", "DOCUMENT", "PASSPORT", "IDENTITY", "NATIONAL", "CARD", "STATE", "COUNTRY", "REPUBLIC", "KINGDOM", "UNITED", "DRIVING", "DRIVER", "LICENSE",
+                "LICENCE", "CLASS", "ADDRESS", "SIGNATURE", "HOLDER", "DATE", "PLACE", "AUTHORITY", "APELLIDOS", "NOMBRES", "NOMBRE", "FECHA", "NACIMIENTO", "SEXO", "NACIONALIDAD",
+                "DOCUMENTO", "CEDULA", "IDENTIDAD", "REPUBLICA", "SOBRENOME", "NASCIMENTO", "NOME", "VALIDADE", "NACIONALIDADE", "NACHNAME", "VORNAME", "GEBURTSDATUM", "STAATSANGEHORIGKEIT",
+                "PERSONALAUSWEIS", "BUNDESREPUBLIK", "DEUTSCHLAND", "COGNOME", "DATA", "NASCITA", "CITTADINANZA", "CARTA", "IDENTITA", "PATENTE", "GUIDA", "TIPO", "DNI"}
 _DATE = re.compile(r"(?<!\d)(\d{1,2})\s*[/.\- ]\s*(\d{1,2})\s*[/.\- ]\s*(\d{4}|\d{2})(?!\d)")
 _NUM = re.compile(r"(?<![A-Z0-9])((?:[A-Z]{0,3}\d[\dA-Z \-]{6,18}\d))(?![A-Z0-9])")
 
@@ -175,8 +181,8 @@ def extract(text: str, today: date | None = None) -> dict:
                 if words:
                     return " ".join(words)
         return None
-    last = after(r"\bNOM\b|\bSIYATI\b")
-    first = after(r"\bPRENOMS?\b|\bPRENM\b")
+    last = after(r"\bNOM\b|\bSIYATI\b|\bSURNAME\b|\bLAST NAME\b|\bFAMILY NAME\b|\bAPELLIDOS?\b|\bSOBRENOME\b|\bNACHNAME\b|\bCOGNOME\b")
+    first = after(r"\bPRENOMS?\b|\bPRENM\b|\bGIVEN NAMES?\b|\bFIRST NAMES?\b|\bFORENAMES?\b|\bNOMBRES?\b|\bVORNAME\b|\bNOME\b")
     if first or last:
         out["name"] = " ".join(x for x in (first, last) if x)
     else:
@@ -185,12 +191,12 @@ def extract(text: str, today: date | None = None) -> dict:
         if cand:
             out["name"] = max(cand, key=len)
     ds = _dates(text)
-    birth = [d for d, ln in ds if re.search(r"NAISS|NESANS|BORN|BIRTH|NE LE|NEE", _norm(ln)) and 1900 <= d.year <= today.year - 14]
+    birth = [d for d, ln in ds if re.search(r"NAISS|NESANS|BORN|BIRTH|DOB|NE LE|NEE|NACIMIENTO|NASCIMENTO|GEBURT|NASCITA", _norm(ln)) and 1900 <= d.year <= today.year - 14]
     if not birth:
         birth = [d for d, _ in ds if 1900 <= d.year <= today.year - 14 and d < today]
     if birth:
         out["birth_date"] = min(birth).isoformat() if len(birth) > 1 and not any(re.search(r"NAISS|NESANS", _norm(ln)) for _, ln in ds) else birth[0].isoformat()
-    exp = [d for d, ln in ds if re.search(r"EXPIR|VALABLE|VALID|JUSQU", _norm(ln))] or [d for d, _ in ds if d > today]
+    exp = [d for d, ln in ds if re.search(r"EXPIR|VALABLE|VALID|JUSQU|VENCE|VENCIMIENTO|VALIDADE|GULTIG|GUELTIG|SCADENZA|EXP\b", _norm(ln))] or [d for d, _ in ds if d > today]
     if exp:
         out["expiry_date"] = max(exp).isoformat()
     # labelled numbers on the Haitian CIN: 'Numéro de carte / Nimewo kat la' (alphanumeric, also the number of the MRZ on the back) and
@@ -217,7 +223,7 @@ def extract(text: str, today: date | None = None) -> dict:
         for m in _NUM.finditer(n):
             raw = re.sub(r"[ \-]", "", m.group(1))
             if len(raw) >= 8 and sum(c.isdigit() for c in raw) >= 6 and not _DATE.fullmatch(m.group(1).strip()):
-                nums.append((bool(re.search(r"NIF|NUMERO|CIN|N°|NO\b", n)), raw))
+                nums.append((bool(re.search(r"NIF|NUMERO|CIN|N°|NO\b|NUMBER|DOCUMENT|ID NO|DNI|LICENSE NO|LICENCE NO", n)), raw))
     if out.get("card_number"):
         out["document_number"] = out["card_number"]                      # the number that is also in the MRZ of the back
     elif nums:
@@ -394,4 +400,84 @@ def extract_boxes(boxes, today: date | None = None) -> dict:
         out["document_number"] = out["card_number"]
     elif out.get("national_id"):
         out["document_number"] = out["national_id"]
+    return out
+
+
+# ───────── generic layout (any country): a printed LABEL (in several languages) and its VALUE, found by position ─────────
+# Works for cards where the value sits to the right of its label or just below it. It only finds what has a recognisable label; anything else is left for the text rules,
+# and for a person. NOT measured on real cards of other countries (only synthetic boxes in the tests).
+_GENERIC_LABELS = {
+    "surname": (r"SURNAME|LAST NAME|FAMILY NAME|NOM\b|APELLIDOS?|SOBRENOME|NACHNAME|NAME\b(?! OF)|COGNOME|SIYATI",),
+    "given": (r"GIVEN NAMES?|FIRST NAMES?|FORENAMES?|PRENOMS?|NOMBRES?|VORNAME|PRENOM|NOME\b",),
+    "birth": (r"DATE OF BIRTH|\bDOB\b|DATE DE NAISSANCE|FECHA DE NACIMIENTO|NASCIMENTO|GEBURTSDATUM|DATA DI NASCITA|NAISSANCE|BIRTH|NACIMIENTO",),
+    "expiry": (r"EXPIR|DATE D EXPIRATION|VALID UNTIL|VALID THRU|VALABLE|VENCIMIENTO|VENCE|VALIDADE|GULTIG|GUELTIG|SCADENZA|\bEXP\b",),
+    "number": (r"DOCUMENT N|ID N|IDENTITY N|CARD N|LICEN[SC]E N|PASSPORT N|NUMERO|NUMBER|N DOCUMENT|\bDNI\b|CEDULA|\bNIF\b|\bNO\b",),
+}
+
+
+def _label_kind(t: str) -> str | None:
+    n = _norm(t)
+    for k in ("birth", "expiry", "given", "surname", "number"):               # most specific first ('date of birth' before 'name')
+        if any(re.search(rx, n) for rx in _GENERIC_LABELS[k]):
+            return k
+    return None
+
+
+def _date_in(t: str, today: date) -> date | None:
+    for d_, _ln in _dates(t):
+        return d_
+    return None
+
+
+def extract_boxes_generic(boxes, today: date | None = None) -> dict:
+    """Fields from PaddleOCR boxes (x0, y0, x1, y1, text) of ANY card: for each label box the value is the rest of the same box (after ':' or the label words), else the nearest box
+    to its right on the same row, else the box right below it. Returns {} when nothing was found. Unverified reading."""
+    today = today or date.today()
+    if not boxes:
+        return {}
+    bs = sorted(boxes, key=lambda b: (b[1], b[0]))
+    cy = lambda b: (b[1] + b[3]) / 2                                              # noqa: E731
+    out: dict = {}
+    found: dict[str, str] = {}
+    for b in bs:
+        kind = _label_kind(b[4])
+        if kind is None or kind in found:
+            continue
+        txt = b[4]
+        # value in the same box: text after ':' or after the label words
+        after = re.split(r"[:：]", txt, maxsplit=1)[1].strip() if re.search(r"[:：]", txt) else ""
+        cands = [after] if after else []
+        h = max(b[3] - b[1], 1.0)
+        right = sorted((o for o in bs if o is not b and o[0] >= b[2] - 0.2 * h and abs(cy(o) - cy(b)) < 0.7 * h), key=lambda o: o[0])
+        below = sorted((o for o in bs if o is not b and cy(o) > cy(b) + 0.4 * h and o[1] <= b[3] + 2.0 * h and abs(o[0] - b[0]) < 3.0 * h + 0.25 * (b[2] - b[0])), key=lambda o: o[1])
+        cands += [o[4] for o in right[:1]] + [o[4] for o in below[:1]]
+        for c in cands:
+            if not c or _label_kind(c) is not None and not after:
+                continue
+            if kind in ("birth", "expiry"):
+                d_ = _date_in(c, today)
+                if d_:
+                    found[kind] = d_.isoformat()
+                    break
+            elif kind in ("surname", "given"):
+                words = [w for w in _norm(c).split() if w.isalpha() and len(w) >= 2 and w not in HEADER_WORDS]
+                if words:
+                    found[kind] = " ".join(words)
+                    break
+            else:
+                raw = re.sub(r"[\s\-]", "", _norm(c))
+                if re.fullmatch(r"[A-Z0-9]{6,20}", raw) and sum(ch.isdigit() for ch in raw) >= 4:
+                    found[kind] = raw
+                    break
+    if found.get("surname") or found.get("given"):
+        out["name"] = " ".join(x for x in (found.get("given"), found.get("surname")) if x)
+        out["first_name"], out["surname"] = found.get("given"), found.get("surname")
+    if "birth" in found:
+        d_ = date.fromisoformat(found["birth"])
+        if 1900 <= d_.year and (today - d_).days / 365.25 >= 14:
+            out["birth_date"] = found["birth"]
+    if "expiry" in found:
+        out["expiry_date"] = found["expiry"]
+    if "number" in found:
+        out["document_number"] = found["number"]
     return out

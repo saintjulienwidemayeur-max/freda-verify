@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 1440         # default lifetime of a verification session link
     media_retention_days: int = 0           # 0 = photos are KEPT until a person deletes them (default). > 0 = auto-delete that many days after upload
     media_max_bytes: int = 2 * 1024 * 1024  # per photo
+    reject_non_camera_documents: bool = True  # refuse PNG/WebP and editor-tagged document photos (screenshots / edited files); weak heuristic, see services/provenance.py
     decision_default_mode: str = "auto"                 # decision mode of an organization that never saved a policy (manual | auto)
     vision_url: str = ""                              # internal Vision AI service (Qwen3-VL on our own GPU); empty = disabled
     vision_token: str = ""

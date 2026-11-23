@@ -10,6 +10,9 @@ import FaceScanner from "./FaceScanner";
 import qrcode from "qrcode-generator";
 import { API_URL } from "@/lib/api";
 
+/** Documents come from the LIVE camera only (screenshots and edited files are not accepted). Gallery upload exists for tests: NEXT_PUBLIC_ALLOW_GALLERY=1. */
+const ALLOW_GALLERY = process.env.NEXT_PUBLIC_ALLOW_GALLERY === "1";
+
 /* ───────────── config from URL (demo): every value is validated, text is rendered as text ───────────── */
 const DEFAULTS: Cfg = {
   name: "", logo: null, color: "#1E4FE0", theme: "light", shape: "rounded", lang: "en",
@@ -312,7 +315,7 @@ export default function HostedPage() {
           </div>
           <div className="space-y-2 pt-4">
             <Btn onClick={() => setCam(true)} disabled={busy}>{t.takeCam}</Btn>
-            {!isSelfie && (
+            {!isSelfie && ALLOW_GALLERY && (
               <label className="block w-full cursor-pointer py-3.5 text-center text-[15px] font-semibold" style={{ border: `1px solid ${line}`, borderRadius: r }}>
                 {busy ? "…" : t.upload}
                 <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy}

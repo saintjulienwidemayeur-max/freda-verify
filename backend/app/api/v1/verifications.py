@@ -27,7 +27,7 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, docquality, face, idtext, mailer, ocr, pad, paddle, vision, webhooks
+from app.services import audit, decision, docquality, face, provenance, idtext, mailer, ocr, pad, paddle, vision, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
@@ -360,7 +360,7 @@ def run_idtext_check(verification_id: uuid.UUID) -> None:
             front_img = decrypt_bytes(front.data)
             boxes = paddle.read_boxes(front_img)                              # ONE PaddleOCR pass gives both the layout (boxes) and the text
             ptext = paddle.boxes_to_text(boxes) if boxes is not None else None
-            layout = idtext.extract_boxes(boxes) if boxes else {}             # Haitian CIN layout (label -> value by position): measured far better than line text on real cards
+            layout = (idtext.extract_boxes(boxes) or idtext.extract_boxes_generic(boxes)) if boxes else {}             # Haitian CIN layout (label -> value by position): measured far better than line text on real cards
             pf = {**(idtext.extract(ptext) if ptext else {}), **layout}
             fast = bool(pf) and all(idtext.plausible(pf).get(k) for k in ("name", "birth_date", "document_number")) and not v.expected_enc
             ttext = None if fast else idtext.read_text(front_img)          # FAST PATH: PaddleOCR already gave a plausible name, birth date and number: skip the slow Tesseract pass (up to 25 s)
@@ -506,6 +506,10 @@ async def upload_media(kind: str, request: Request, doc_type: str | None = Query
         found = await run_in_threadpool(ocr.read_mrz, data, True)
         if found.status != "read":
             raise AppError(422, "mrz_not_found", "The two lines of characters at the bottom of the passport page could not be read")
+    if kind in ("document_front", "document_back") and s.reject_non_camera_documents:
+        bad = provenance.check(data, ctype)
+        if bad:
+            raise AppError(422, "not_camera_photo" if bad == "not_camera_photo" else "edited_image", "Use a photo taken with the camera: screenshots and edited images are not accepted", details=[{"reason": bad}])
     if kind in ("document_front", "document_back") and doc_type in ("id", "license"):
         why = await run_in_threadpool(docquality.check, data)
         if why:
