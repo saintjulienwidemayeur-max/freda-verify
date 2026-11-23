@@ -17,7 +17,7 @@ class Verdict:
 
 
 def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | None, agreeing: int, face: dict | None, pad: dict | None, doc_type: str | None,
-           id_cards: str = "face_and_extracted", idtext: dict | None = None, idfields: dict | None = None, duplicate: bool = False, forensics: dict | None = None, has_video: bool = True) -> Verdict:
+           id_cards: str = "face_and_extracted", idtext: dict | None = None, idfields: dict | None = None, duplicate: bool = False, forensics: dict | None = None, has_video: bool = True, crosscheck: dict | None = None) -> Verdict:
     hard: list[str] = []
     unc: list[str] = []
     is_card = doc_type in ("id", "license")
@@ -68,6 +68,8 @@ def decide(*, face_min: float, require_pad: bool, uncertain: str, mrz: dict | No
     # pixel hints (photo of a screen / local edit) and a missing challenge video can never approve by themselves: a person looks
     if forensics and forensics.get("flagged"):
         unc.append("doc_suspect")
+    if crosscheck and crosscheck.get("status") == "compared" and crosscheck.get("matched", 0) < crosscheck.get("fields", 0):
+        unc.append("printed_mrz_mismatch")        # the printed data page and the MRZ disagree: a person compares them with the photo
     if not has_video:
         unc.append("no_challenge_video")
     # `duplicate` (the same document number was submitted before) is INFORMATION only: a person may verify with the same document as many times as they want

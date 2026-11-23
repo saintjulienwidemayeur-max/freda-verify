@@ -429,10 +429,46 @@ def run_forensics_check(verification_id: uuid.UUID, db: Session | None = None) -
             db.close()
 
 
+def run_crosscheck(verification_id: uuid.UUID, db: Session | None = None) -> VerificationCheck | None:
+    """PASSPORTS: the PRINTED text of the data page must agree with the machine-readable zone (name, birth date, number). An edit of the printed fields that did not touch the MRZ (or the
+    other way round) shows up as a disagreement. Only when the MRZ was read with every check digit valid. Stores match results only (never the OCR text). Advisory: a mismatch sends the case
+    to a person (OCR errors on the printed text also cause mismatches). Does NOT detect a forgery that changes both consistently."""
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        v = db.get(Verification, verification_id)
+        front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front")) if v else None
+        mrz_row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz")) if v else None
+        if not v or not front or front.doc_type != "passport" or not mrz_row or mrz_row.status != "read":
+            return None
+        res = (_load(mrz_row) or {}).get("result") or {}
+        if not res.get("all_checks_passed"):
+            return None
+        img = decrypt_bytes(front.data)
+        text = paddle.read_text(img) or idtext.read_text(img) or ""
+        expected = {"name": f"{res.get('given_names', '')} {res.get('surname', '')}".strip(), "document_number": res.get("document_number"), "birth_date": res.get("birth_date")}
+        out = idtext.compare({k: x for k, x in expected.items() if x}, text) if text else {"fields": 0, "matched": 0}
+        status = "compared" if out.get("fields", 0) >= 2 else "unreadable"
+        row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "crosscheck")) or VerificationCheck(
+            verification_id=v.id, organization_id=v.organization_id, kind="crosscheck")
+        row.status, row.source, row.data, row.created_at = status, "printed_vs_mrz", encrypt_bytes(json.dumps(out).encode()), now()
+        db.add(row)
+        audit.record(db, None, "verification.crosschecked", org_id=v.organization_id, target_type="verification", target_id=v.id, meta={"status": status, "matched": out.get("matched"), "fields": out.get("fields")})
+        db.commit()
+        return row
+    except Exception:  # noqa: BLE001  never break the submission
+        db.rollback()
+        return None
+    finally:
+        if own:
+            db.close()
+
+
 def run_pipeline(verification_id: uuid.UUID) -> None:
     """After submission: MRZ reading, face comparison and the experimental PAD score, one after the other (one process, little RAM), then the automatic decision if the organization enabled it."""
     run_mrz_check(verification_id)
     run_idtext_check(verification_id)
+    run_crosscheck(verification_id)
     run_face_check(verification_id)
     run_pad_check(verification_id)
     run_forensics_check(verification_id)
@@ -467,6 +503,7 @@ def auto_decide(verification_id: uuid.UUID) -> str | None:
                                       agreeing=int(mrz_row.get("agreeing", 0)), face=({"status": rows["face"].status, **_load(rows["face"])} if rows.get("face") else None),
                                       pad=({"status": rows["liveness"].status, **_load(rows["liveness"])} if rows.get("liveness") else None), doc_type=front.doc_type if front else None,
                                       forensics=_load(rows["forensics"]) if rows.get("forensics") else None,
+                                      crosscheck=({"status": rows["crosscheck"].status, **_load(rows["crosscheck"])} if rows.get("crosscheck") else None),
                                       has_video=bool(db.scalar(select(func.count()).select_from(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == VIDEO_KIND))))
             reason = ("auto: " + ",".join(verdict.codes))[:200]
             hooks: list[uuid.UUID] = []

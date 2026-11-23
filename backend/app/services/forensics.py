@@ -16,7 +16,8 @@ SCREEN_PEAK_RATIO = 5.0      # log-spectrum contrast of the strongest isolated o
 ELA_BLOCK = 32
 ELA_OUTLIER_RATIO = 4.0      # a block whose unexplained error is this many times the median block
 ELA_MIN_RATIO = 7.5          # the strongest block must be at least this many times the median
-ELA_MIN_FRACTION = 0.02      # ...and at least this fraction of the blocks (a localised region, not one noisy pixel)
+ELA_MIN_CLUSTER = 4          # connected blocks
+ELA_MIN_FRACTION = 0.01      # ...and at least this fraction of the blocks (a localised region, not one noisy pixel)
 MAX_SIDE = 1024
 
 
@@ -66,8 +67,22 @@ def ela_score(bgr) -> tuple[float, float]:
         return 0.0, 0.0
     blk = lambda m: m[:hb * ELA_BLOCK, :wb * ELA_BLOCK].reshape(hb, ELA_BLOCK, wb, ELA_BLOCK).mean(axis=(1, 3)).ravel()   # noqa: E731
     rel = blk(d) / (blk(grad) + 8.0)                                         # error that the edges in the block do not explain
-    med = float(np.median(rel)) + 1e-3
-    return float(rel.max() / med), float((rel > ELA_OUTLIER_RATIO * med).mean())
+    # glare / reflections (clipped highlights) and very dark blocks are not evidence: leave them out of the statistics
+    clipped = blk((gray >= 250).astype(np.float32)) > 0.02
+    dark = blk(gray) < 25
+    keep = ~(clipped | dark)
+    if keep.sum() < 12:
+        return 0.0, 0.0
+    grid = rel.reshape(hb, wb)
+    med = float(np.median(grid[keep.reshape(hb, wb)])) + 1e-3
+    out = ((grid > ELA_OUTLIER_RATIO * med) & keep.reshape(hb, wb)).astype(np.uint8)
+    # an edit is one CONNECTED region; scratches and wear give scattered single blocks: keep only clusters of >= ELA_MIN_CLUSTER touching blocks
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(out, connectivity=8)
+    big = [i for i in range(1, n) if stats[i, cv2.CC_STAT_AREA] >= ELA_MIN_CLUSTER]
+    if not big:
+        return 0.0, 0.0
+    mask = np.isin(lab, big)
+    return float(grid[mask].max() / med), float(mask.sum() / max(int(keep.sum()), 1))
 
 
 def analyse(image: bytes) -> dict:

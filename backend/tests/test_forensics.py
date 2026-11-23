@@ -45,3 +45,11 @@ def test_flag_or_missing_video_never_approves():
     assert decision.decide(**ok).decision == "APPROVED"
     assert decision.decide(**ok, forensics={"flagged": True}).decision is None
     assert decision.decide(**ok, has_video=False).decision is None
+
+
+def test_printed_vs_mrz_mismatch_goes_to_a_person():
+    ok = dict(face_min=0.363, require_pad=False, uncertain="review", face={"status": "compared", "score": 0.6}, pad=None, doc_type="passport", agreeing=2,
+              mrz={"all_checks_passed": True, "checks": {}, "expired": False})
+    assert decision.decide(**ok, crosscheck={"status": "compared", "fields": 3, "matched": 3}).decision == "APPROVED"
+    v = decision.decide(**ok, crosscheck={"status": "compared", "fields": 3, "matched": 2})
+    assert v.decision is None and "printed_mrz_mismatch" in v.codes
