@@ -35,3 +35,10 @@ def test_provenance_refuses_png_and_editor_tags():
     adobe14 = b"\xff\xd8\xff\xee\x00\x0eAdobe\x00\x64\x00\x00\x00\x00\x01\xff\xda\x00\x02"      # APP14 'Adobe' marker from an ordinary encoder
     assert provenance.check(adobe14, "image/jpeg") is None
     assert provenance.check(b"\xff\xd8\xff\xe0 plain camera jpeg", "image/jpeg") is None
+
+
+def test_mrz_filler_read_as_k_is_repaired_without_touching_real_names():
+    from app.services.mrz import _filler_k, _names
+    assert _names(_filler_k("SAINT<JULIENK<WIAEMAYEURKK<<<")) == ("SAINT JULIEN", "WIAEMAYEUR")
+    assert _names(_filler_k("DUPONT<<ERIK<<<<<")) == ("DUPONT", "ERIK")
+    assert _names(_filler_k("ERIK<<JOHN<<<<")) == ("ERIK", "JOHN")

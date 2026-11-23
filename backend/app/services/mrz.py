@@ -4,6 +4,7 @@ Deterministic and dependency-free. It validates the *internal consistency* of th
 field layout). It does NOT prove that a document is genuine, and it does not read the text from an image (OCR).
 Check digits: weights 7-3-1 repeated; digits 0-9 keep their value, letters A-Z = 10..35, the filler '<' = 0.
 """
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 
@@ -93,6 +94,19 @@ def _date(yymmdd: str, birth: bool) -> date | None:
 NAME_NOISE = "names zone contained digits (OCR noise, dropped): names are unreliable"
 
 
+NAME_K_FIX = "names zone: '<' fillers read as 'K' were repaired (no check digit protects names: compare with the photo)"
+
+
+def _filler_k(nm: str) -> str:
+    """OCR often reads the '<' filler as 'K'. Repairs only patterns a real name cannot produce: 2+ K's touching the fillers ('KK<' or 'KK' at the end), and, when the
+    surname / given-names separator '<<' is missing altogether, the first 'K<' (e.g. 'SAINT<JULIENK<WIDEMAYEUR' -> 'SAINT<JULIEN<<WIDEMAYEUR')."""
+    out = re.sub(r"K{2,}(?=<|$)", lambda m: "<" * len(m.group()), nm)
+    body = out.rstrip("<")
+    if "<<" not in body and "K<" in body:
+        out = out.replace("K<", "<<", 1)
+    return out
+
+
 def _names(raw: str) -> tuple[str, str]:
     surname, _, given = raw.partition("<<")
     return " ".join(surname.replace("<", " ").split()), " ".join(given.replace("<", " ").split())
@@ -154,6 +168,11 @@ def parse_mrz(lines: list[str], fix_ocr: bool = True) -> MrzResult:
     if any(c.isdigit() for c in nm):
         warnings.append(NAME_NOISE)
         nm = "".join("<" if c.isdigit() else c for c in nm)
+    if fix_ocr:
+        k = _filler_k(nm)
+        if k != nm:
+            warnings.append(NAME_K_FIX)
+            nm = k
     surname, given = _names(nm)
     return MrzResult(
         format=fmt, document_type=dtype.replace("<", ""), issuing_country=country, surname=surname, given_names=given,

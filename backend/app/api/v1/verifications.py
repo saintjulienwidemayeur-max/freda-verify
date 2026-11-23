@@ -439,16 +439,29 @@ def run_crosscheck(verification_id: uuid.UUID, db: Session | None = None) -> Ver
         v = db.get(Verification, verification_id)
         front = db.scalar(select(VerificationMedia).where(VerificationMedia.verification_id == v.id, VerificationMedia.kind == "document_front")) if v else None
         mrz_row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz")) if v else None
-        if not v or not front or front.doc_type != "passport" or not mrz_row or mrz_row.status != "read":
+        if not v or not front or not mrz_row or mrz_row.status != "read":
             return None
         res = (_load(mrz_row) or {}).get("result") or {}
         if not res.get("all_checks_passed"):
             return None
-        img = decrypt_bytes(front.data)
-        text = paddle.read_text(img) or idtext.read_text(img) or ""
-        expected = {"name": f"{res.get('given_names', '')} {res.get('surname', '')}".strip(), "document_number": res.get("document_number"), "birth_date": res.get("birth_date")}
-        out = idtext.compare({k: x for k, x in expected.items() if x}, text) if text else {"fields": 0, "matched": 0}
-        status = "compared" if out.get("fields", 0) >= 2 else "unreadable"
+        mrz_name = f"{res.get('given_names', '')} {res.get('surname', '')}".strip()
+        if front.doc_type in ("id", "license"):
+            # ID CARDS: the name printed on the front must agree with the names of the MRZ on the back (no check digit protects names, so this is the only cross-check).
+            # Birth date and number are not compared here: they are already taken from the MRZ when its own check digit passes.
+            idf_row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "idfields"))
+            idf = _load(idf_row) if idf_row and idf_row.status == "extracted" else None
+            printed = ((idf or {}).get("fields") or {}).get("name")
+            if not printed or not mrz_name or ((idf or {}).get("sources") or {}).get("name", "").startswith("mrz"):
+                return None
+            sc = min(idtext.name_score(printed, mrz_name), idtext.name_score(mrz_name, printed))   # both ways: no extra or missing name word
+            out = {"fields": 1, "matched": 1 if sc >= 0.8 else 0, "name": round(sc, 2), "side": "card_front_vs_back_mrz"}
+            status = "compared"
+        else:
+            img = decrypt_bytes(front.data)
+            text = paddle.read_text(img) or idtext.read_text(img) or ""
+            expected = {"name": mrz_name, "document_number": res.get("document_number"), "birth_date": res.get("birth_date")}
+            out = idtext.compare({k: x for k, x in expected.items() if x}, text) if text else {"fields": 0, "matched": 0}
+            status = "compared" if out.get("fields", 0) >= 2 else "unreadable"
         row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "crosscheck")) or VerificationCheck(
             verification_id=v.id, organization_id=v.organization_id, kind="crosscheck")
         row.status, row.source, row.data, row.created_at = status, "printed_vs_mrz", encrypt_bytes(json.dumps(out).encode()), now()
