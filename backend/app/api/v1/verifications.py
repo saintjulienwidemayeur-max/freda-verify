@@ -28,14 +28,14 @@ from app.core.security import decrypt_bytes, encrypt_bytes, new_token, sha256
 from app.db.session import SessionLocal, get_db
 from app.models import Branding, BrandingLogo, DecisionPolicy, Membership, User, Verification, VerificationCheck, VerificationMedia, now
 from app.schemas import BrandingOut, DecisionIn, MediaOut, SessionBranding, SessionOut, VerificationCreatedOut, VerificationIn, VerificationOut
-from app.services import audit, decision, docquality, face, forensics, idtext, mailer, ocr, pad, paddle, provenance, vision, webhooks
+from app.services import audit, decision, docquality, face, forensics, idtext, jobs, mailer, ocr, pad, paddle, provenance, vision, webhooks
 from app.services.images import read_limited, sniff_ok, sniff_video
 
 router = APIRouter(tags=["verifications"])
 SESSION_PREFIX = "fvs_"
 
 
-PROCESSING_MAX = timedelta(minutes=10)        # automatic checks normally take < 2 min; background work is lost on a restart, so a stuck case must reach a person
+PROCESSING_MAX = timedelta(minutes=30)        # automatic checks normally take < 2 min; background work is lost on a restart, so a stuck case must reach a person
 
 
 def _stale(v: Verification) -> bool:
@@ -655,7 +655,7 @@ def complete_session(request: Request, background: BackgroundTasks, v: Verificat
     db.commit()
     for h in hooks:
         background.add_task(webhooks.deliver, h)
-    background.add_task(run_pipeline, v.id)                   # after the response: the end user never waits for OCR / face / PAD; then the automatic decision if enabled
+    jobs.submit(run_pipeline, v.id)                           # ONE worker thread processes submissions in turn (see services/jobs.py): the API stays responsive; then the automatic decision if enabled
     background.add_task(notify_submission, v.id)
     return Response(status_code=204)
 
@@ -740,8 +740,9 @@ def rerun_face(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depen
         raise AppError(409, "missing_photos", "The document front and the selfie are both needed")
     audit.record(db, request, "verification.face_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
-    row = run_face_check(v.id, db)
-    return {"face_available": face.available(), "face": _face_out(row)}
+    jobs.submit(run_face_check, v.id)
+    row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "face"))
+    return {"face_available": face.available(), "face": _face_out(row), "queued": True}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/pad")
@@ -752,7 +753,9 @@ def rerun_pad(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depend
         raise AppError(409, "missing_photos", "The selfie is needed")
     audit.record(db, request, "verification.pad_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
-    return {"pad_available": pad.available(), "pad": _face_out(run_pad_check(v.id, db))}
+    jobs.submit(run_pad_check, v.id)
+    row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "liveness"))
+    return {"pad_available": pad.available(), "pad": _face_out(row), "queued": True}
 
 
 @router.post("/organizations/{org_id}/verifications/{verification_id}/checks/vision")
@@ -788,7 +791,7 @@ def recheck(verification_id: uuid.UUID, request: Request, background: Background
         raise AppError(409, "not_reviewable", "Only verifications awaiting review can be re-checked")
     audit.record(db, request, "verification.rechecked", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
-    background.add_task(run_pipeline, v.id)
+    jobs.submit(run_pipeline, v.id)
     return {"started": True}
 
 
@@ -800,8 +803,9 @@ def rerun_mrz(verification_id: uuid.UUID, request: Request, ctx: OrgCtx = Depend
         raise AppError(409, "no_document", "There is no document photo to read")
     audit.record(db, request, "verification.mrz_rerun", org_id=ctx.org.id, user_id=ctx.user.id, target_type="verification", target_id=v.id)
     db.commit()
-    row = run_mrz_check(v.id, db)
-    return {"engine_available": ocr.available(), "mrz": _check_out(row)}
+    jobs.submit(run_mrz_check, v.id)                          # queued: the OCR can take minutes on a small instance, the request must not hold a thread
+    row = db.scalar(select(VerificationCheck).where(VerificationCheck.verification_id == v.id, VerificationCheck.kind == "mrz"))
+    return {"engine_available": ocr.available(), "mrz": _check_out(row), "queued": True}
 
 
 class PolicyIn(BaseModel):

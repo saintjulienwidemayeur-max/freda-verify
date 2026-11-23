@@ -28,6 +28,10 @@ async def lifespan(_: FastAPI):
 
         from app.services import paddle
         threading.Thread(target=paddle.warm_up, daemon=True).start()
+        from app.services import jobs
+        n = jobs.requeue_processing()                      # work lost in the previous restart: queue it again
+        if n:
+            logging.getLogger("freda").info("requeued %s verification(s) that were still PROCESSING", n)
     yield
 
 

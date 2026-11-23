@@ -63,6 +63,16 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
     return () => { live = false; made.forEach((u) => URL.revokeObjectURL(u)); };
   }, [base, admin, v.media_count]);
   // The readings run in the background a few seconds after the customer submits: poll (max ~2 min) until both results exist, so the reviewer does not see a stale "Not read yet".
+  const [pollUntil, setPollUntil] = useState(0);        // after "Read again" etc. the work is QUEUED on the server: poll for the new result (up to 5 min)
+  const queuedNow = pollUntil > Date.now();
+  useEffect(() => {
+    if (!pollUntil) return;
+    const t = setInterval(() => {
+      if (Date.now() > pollUntil) { clearInterval(t); setPollUntil(0); return; }
+      api<Checks>(`${base}/checks`).then((c) => setChecks(c)).catch(() => {});
+    }, 4000);
+    return () => clearInterval(t);
+  }, [pollUntil, base]);
   const waiting = admin && !!media && media.length > 0 && (v.status === "MANUAL_REVIEW" || v.status === "PROCESSING") && (!checks || !checks.mrz || (checks.face_available !== false && !checks.face) || (checks.pad_available !== false && !checks.pad));
   useEffect(() => {
     if (!waiting) return;
@@ -104,7 +114,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
         <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="MRZ reading">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-display text-sm font-bold">Machine-readable zone (automatic reading)</h3>
-            <button disabled={busy} onClick={() => void act(async () => setChecks(await api<Checks>(`${base}/checks/mrz`, { method: "POST" })))} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Read again</button>
+            <button disabled={busy} onClick={() => void act(async () => { await api(`${base}/checks/mrz`, { method: "POST" }); setPollUntil(Date.now() + 300000); })} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">{queuedNow ? "Queued… refreshing" : "Read again"}</button>
           </div>
           {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
           {checks && !checks.mrz && <p className="mt-2 text-sm text-navy/55">Not read yet. It runs a few seconds after the customer submits and this panel refreshes by itself; you can also use “Read again”.</p>}
@@ -156,7 +166,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
         <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="Face comparison">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-display text-sm font-bold">Face comparison: document photo vs selfie (advisory)</h3>
-            <button disabled={busy} onClick={() => void act(async () => { const r = await api<{ face: Face | null }>(`${base}/checks/face`, { method: "POST" }); setChecks((c) => (c ? { ...c, face: r.face } : c)); })} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Compare again</button>
+            <button disabled={busy} onClick={() => void act(async () => { await api(`${base}/checks/face`, { method: "POST" }); setPollUntil(Date.now() + 300000); })} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Compare again</button>
           </div>
           {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
           {checks && checks.face_available === false && <p className="mt-2 text-sm text-[#B54708]">The comparison engine is not installed on the server.</p>}
@@ -182,7 +192,7 @@ function Review({ v, orgId, onChange, onClose }: { v: V; orgId: string; onChange
         <div className="mt-4 rounded-xl border border-[#e3eaf8] p-4" aria-label="Presentation attack check">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-display text-sm font-bold">Live capture check (experimental, selfie only)</h3>
-            <button disabled={busy} onClick={() => void act(async () => { const r = await api<{ pad: Pad | null; pad_available: boolean }>(`${base}/checks/pad`, { method: "POST" }); setChecks((c) => (c ? { ...c, pad: r.pad, pad_available: r.pad_available } : c)); })} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Run again</button>
+            <button disabled={busy} onClick={() => void act(async () => { await api(`${base}/checks/pad`, { method: "POST" }); setPollUntil(Date.now() + 300000); })} className="rounded-full border border-[#d6e2ff] px-3 py-1 text-xs hover:bg-ice disabled:opacity-50">Run again</button>
           </div>
           {!checks && <p className="mt-2 text-sm text-navy/50">Loading…</p>}
           {checks && checks.pad_available === false && <p className="mt-2 text-sm text-[#B54708]">The model is not installed on the server.</p>}
